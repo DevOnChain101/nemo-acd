@@ -1,0 +1,14 @@
+diff --git b/tzparse.py a/tzparse.py
+index 55c0a44..da8e9d0 100644
+--- b/tzparse.py
++++ a/tzparse.py
+@@ -3,7 +3,8 @@ from datetime import datetime, timezone
+ 
+ def parse_ts(s):
+     """Parse an ISO-8601 timestamp. A missing offset means UTC."""
+-    return datetime.strptime(s[:19], "%Y-%m-%dT%H:%M:%S")
++    dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
++    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+ 
+ 
+ def to_epoch(s):

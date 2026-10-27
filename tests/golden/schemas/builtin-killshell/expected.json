@@ -1,0 +1,16 @@
+{
+  "description": "Stops a background Bash command by its id.",
+  "input_schema": {
+    "properties": {
+      "shell_id": {
+        "description": "The id returned when the background command was started.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "shell_id"
+    ],
+    "type": "object"
+  },
+  "name": "KillShell"
+}

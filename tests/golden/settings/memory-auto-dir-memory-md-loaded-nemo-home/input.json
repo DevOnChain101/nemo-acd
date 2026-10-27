@@ -1,0 +1,10 @@
+{
+  "auto_memory": {
+    "base": "<HOME>/.nemo",
+    "content": "auto memory from nemo"
+  },
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {},
+  "op": "workspace"
+}

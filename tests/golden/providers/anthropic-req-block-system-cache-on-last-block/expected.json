@@ -1,0 +1,58 @@
+{
+  "create_call_option_keys": [
+    "signal"
+  ],
+  "events": [
+    {
+      "message": {
+        "id": "msg_1",
+        "model": "m",
+        "usage": {
+          "input_tokens": 1,
+          "output_tokens": 0
+        }
+      },
+      "type": "message_start"
+    },
+    {
+      "type": "message_stop"
+    }
+  ],
+  "provider_type": "anthropic",
+  "wire_body": {
+    "max_tokens": 100,
+    "messages": [
+      {
+        "content": [
+          {
+            "text": "a",
+            "type": "text"
+          },
+          {
+            "cache_control": {
+              "type": "ephemeral"
+            },
+            "text": "b",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      }
+    ],
+    "model": "claude-sonnet-5",
+    "stream": true,
+    "system": [
+      {
+        "text": "one",
+        "type": "text"
+      },
+      {
+        "cache_control": {
+          "type": "ephemeral"
+        },
+        "text": "two",
+        "type": "text"
+      }
+    ]
+  }
+}

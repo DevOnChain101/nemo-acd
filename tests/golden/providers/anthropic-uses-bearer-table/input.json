@@ -1,0 +1,43 @@
+{
+  "cases": [
+    {},
+    {
+      "authHeader": "bearer"
+    },
+    {
+      "authHeader": "x-api-key",
+      "providerId": "gw"
+    },
+    {
+      "baseURL": "https://gw.test",
+      "providerId": "anthropic"
+    },
+    {
+      "baseURL": "https://api.anthropic.com",
+      "providerId": "gw"
+    },
+    {
+      "baseURL": "https://eu.anthropic.com/v1",
+      "providerId": "gw"
+    },
+    {
+      "baseURL": "https://gw.test",
+      "key": "sk-ant-1",
+      "providerId": "gw"
+    },
+    {
+      "baseURL": "https://gw.test",
+      "key": "sk-x",
+      "providerId": "gw"
+    },
+    {
+      "baseURL": "not a url",
+      "providerId": "gw"
+    },
+    {
+      "baseURL": "https://gw.test",
+      "providerId": "gw"
+    }
+  ],
+  "op": "bearer"
+}

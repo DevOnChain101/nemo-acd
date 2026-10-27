@@ -1,0 +1,52 @@
+{
+  "agents": [],
+  "autoMemoryDir": "<HOME>/.claude/projects/<SANITIZED_CWD>/memory",
+  "claudeDir": "<HOME>/.claude",
+  "commands": [],
+  "mcpServers": [
+    {
+      "args": [
+        "a.js"
+      ],
+      "command": "node",
+      "enabled": true,
+      "name": "alpha",
+      "scope": "project",
+      "source": "<TMP>/ws/.mcp.json",
+      "type": "stdio"
+    },
+    {
+      "enabled": true,
+      "name": "remote",
+      "scope": "project",
+      "source": "<TMP>/ws/.mcp.json",
+      "type": "http",
+      "url": "https://h.example.test/mcp"
+    }
+  ],
+  "memory": [],
+  "projectRoot": "<TMP>/ws",
+  "settings": {
+    "disableAllHooks": false,
+    "hooks": {},
+    "mcpApproval": {
+      "disabledMcpjsonServers": [],
+      "enableAllProjectMcpServers": true,
+      "enabledMcpjsonServers": []
+    },
+    "permissions": {
+      "additionalDirectories": [],
+      "allow": [],
+      "ask": [],
+      "defaultMode": "default",
+      "deny": []
+    }
+  },
+  "skills": [
+    {
+      "name": "nemocode-config",
+      "source": "built-in"
+    }
+  ],
+  "warnings": []
+}

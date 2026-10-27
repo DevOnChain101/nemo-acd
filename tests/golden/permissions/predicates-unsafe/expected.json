@@ -1,0 +1,122 @@
+[
+  {
+    "autoSafe": false,
+    "command": "rm x",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  },
+  {
+    "autoSafe": false,
+    "command": "ls > out",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  },
+  {
+    "autoSafe": false,
+    "command": "echo $(id)",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  },
+  {
+    "autoSafe": false,
+    "command": "find . -delete",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  },
+  {
+    "autoSafe": false,
+    "command": "git push",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  },
+  {
+    "autoSafe": false,
+    "command": "env FOO=1 ls",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  },
+  {
+    "autoSafe": false,
+    "command": "ls `id`",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  },
+  {
+    "autoSafe": false,
+    "command": "cat <(ls)",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  },
+  {
+    "autoSafe": false,
+    "command": "echo 'unbalanced",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  },
+  {
+    "autoSafe": false,
+    "command": "cat <<EOF\nx\nEOF",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  },
+  {
+    "autoSafe": false,
+    "command": "ls >> log",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  },
+  {
+    "autoSafe": false,
+    "command": "find . -exec rm {} ;",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  },
+  {
+    "autoSafe": false,
+    "command": "git branch -D x",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  },
+  {
+    "autoSafe": false,
+    "command": "npm run deploy",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  },
+  {
+    "autoSafe": false,
+    "command": "curl http://x",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  },
+  {
+    "autoSafe": false,
+    "command": "ls | xargs rm",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  },
+  {
+    "autoSafe": false,
+    "command": "sed -i s/a/b/ f",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  },
+  {
+    "autoSafe": false,
+    "command": "echo hi > /dev/null; rm x",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  },
+  {
+    "autoSafe": true,
+    "command": "ls &",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": true
+  },
+  {
+    "autoSafe": false,
+    "command": "",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  }
+]

@@ -1,0 +1,8 @@
+{
+  "description": "Lists every tracked task with its id, subject and status.",
+  "input_schema": {
+    "properties": {},
+    "type": "object"
+  },
+  "name": "TaskList"
+}

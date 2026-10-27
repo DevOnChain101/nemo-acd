@@ -1,0 +1,22 @@
+{
+  "entries": [
+    {
+      "message": {
+        "content": "[Request interrupted by user]",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:01.000Z",
+      "type": "user"
+    },
+    {
+      "message": {
+        "content": "  [Request interrupted by user for tool use]",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:02.000Z",
+      "type": "user"
+    }
+  ],
+  "now": 1790899800000,
+  "op": "replay"
+}

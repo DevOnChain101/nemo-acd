@@ -1,0 +1,11 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {
+    "ANTHROPIC_API_KEY": "x",
+    "ANTHROPIC_BASE_URL": "https://nope.example.test",
+    "OPENAI_API_KEY": "y"
+  },
+  "files": {},
+  "home": "<NEMO_HOME>",
+  "op": "loadConfig"
+}

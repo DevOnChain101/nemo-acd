@@ -1,0 +1,21 @@
+{
+  "steps": [
+    {
+      "content": "Created <TMP>/ws/e.txt (0 bytes).",
+      "isError": false,
+      "meta": {
+        "bytes": 0,
+        "created": true
+      },
+      "soft": false,
+      "tool": "Write"
+    }
+  ],
+  "tree_after": [
+    {
+      "content": "",
+      "path": "e.txt",
+      "type": "file"
+    }
+  ]
+}

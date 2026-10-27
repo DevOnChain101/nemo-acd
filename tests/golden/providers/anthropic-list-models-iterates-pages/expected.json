@@ -1,0 +1,16 @@
+[
+  {
+    "capabilities": {},
+    "contextWindow": null,
+    "displayName": "M1",
+    "id": "m1",
+    "maxOutput": null
+  },
+  {
+    "capabilities": {},
+    "contextWindow": null,
+    "displayName": "m2",
+    "id": "m2",
+    "maxOutput": null
+  }
+]

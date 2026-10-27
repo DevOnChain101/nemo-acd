@@ -1,0 +1,26 @@
+[
+  {
+    "out": "-Users-a-b",
+    "path": "/Users/a/b"
+  },
+  {
+    "out": "C--Users-a-b-proj",
+    "path": "C:\\Users\\a b\\proj"
+  },
+  {
+    "out": "-tmp-x-y-z",
+    "path": "/tmp/x.y_z"
+  },
+  {
+    "out": "",
+    "path": ""
+  },
+  {
+    "out": "----x",
+    "path": "日本語/x"
+  },
+  {
+    "out": "-a--b-",
+    "path": "/a//b/"
+  }
+]

@@ -1,0 +1,15 @@
+{
+  "chunks": [],
+  "op": "stream",
+  "provider": "anthropic",
+  "req": {
+    "maxTokens": 100,
+    "messages": [
+      {
+        "content": "hi",
+        "role": "user"
+      }
+    ],
+    "model": "claude-sonnet-5"
+  }
+}

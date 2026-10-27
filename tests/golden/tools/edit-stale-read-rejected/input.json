@@ -1,0 +1,30 @@
+{
+  "dirs": [],
+  "files": {
+    "<TMP>/ws/a.txt": "foo\n"
+  },
+  "steps": [
+    {
+      "input": {
+        "file_path": "a.txt"
+      },
+      "tool": "Read"
+    },
+    {
+      "input": {
+        "content": "foo changed\n",
+        "mtime": 1800000000,
+        "path": "a.txt"
+      },
+      "tool": "__write"
+    },
+    {
+      "input": {
+        "file_path": "a.txt",
+        "new_string": "bar",
+        "old_string": "foo"
+      },
+      "tool": "Edit"
+    }
+  ]
+}

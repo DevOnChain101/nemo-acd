@@ -1,0 +1,21 @@
+{
+  "entries": [
+    {
+      "message": {
+        "content": [
+          {
+            "text": "summary",
+            "type": "text"
+          }
+        ],
+        "id": "q1",
+        "model": "claude-opus-5.5"
+      },
+      "synthetic": "queue-summary",
+      "timestamp": "2026-10-02T00:00:01.000Z",
+      "type": "assistant"
+    }
+  ],
+  "now": 1790899800000,
+  "op": "replay"
+}

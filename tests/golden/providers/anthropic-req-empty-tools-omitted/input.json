@@ -1,0 +1,26 @@
+{
+  "chunks": [
+    {
+      "message": {
+        "id": "msg_1",
+        "model": "m",
+        "usage": {
+          "input_tokens": 1,
+          "output_tokens": 0
+        }
+      },
+      "type": "message_start"
+    },
+    {
+      "type": "message_stop"
+    }
+  ],
+  "op": "stream",
+  "provider": "anthropic",
+  "req": {
+    "maxTokens": 10,
+    "messages": [],
+    "model": "m",
+    "tools": []
+  }
+}

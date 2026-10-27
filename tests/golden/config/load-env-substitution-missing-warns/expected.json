@@ -1,0 +1,38 @@
+{
+  "value": {
+    "$schema": "config.json/v1",
+    "_explicitAliases": [],
+    "_modelExplicit": false,
+    "_warnings": [
+      "provider \"p\" apiKey: missing env var \"NOPE\" (referenced by {env:NOPE})",
+      "provider \"p\" authToken: missing env var \"NOPE2\" (referenced by {env:NOPE2})",
+      "provider \"p\" header \"A\": missing env var \"NOPE3\" (referenced by {env:NOPE3})"
+    ],
+    "aliases": {
+      "fable": null,
+      "haiku": null,
+      "opus": null,
+      "sonnet": null
+    },
+    "maxTokens": 32000,
+    "profiles": {},
+    "providers": {
+      "anthropic": {
+        "headers": {},
+        "models": [],
+        "type": "anthropic",
+        "typeSource": "id"
+      },
+      "openai": {
+        "models": [],
+        "type": "openai",
+        "typeSource": "id"
+      },
+      "p": {
+        "headers": {},
+        "type": "openai",
+        "typeSource": "explicit"
+      }
+    }
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<HOME>/.nemo/settings.json": {
+      "hooks": {
+        "PreToolUse": [
+          {
+            "hooks": [
+              {
+                "command": "echo user",
+                "type": "command"
+              }
+            ],
+            "matcher": "Bash"
+          }
+        ],
+        "Stop": [
+          {
+            "hooks": [
+              {
+                "command": "echo stop",
+                "type": "command"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "<TMP>/ws/.nemo/settings.json": {
+      "hooks": {
+        "PreToolUse": [
+          {
+            "hooks": [
+              {
+                "command": "echo project",
+                "type": "command"
+              }
+            ],
+            "matcher": "Bash"
+          }
+        ]
+      }
+    }
+  },
+  "op": "workspace"
+}

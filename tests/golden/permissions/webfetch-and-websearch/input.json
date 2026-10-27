@@ -1,0 +1,36 @@
+{
+  "autoMode": {},
+  "calls": [
+    {
+      "input": {
+        "url": "https://example.com/x"
+      },
+      "tool": "WebFetch"
+    },
+    {
+      "input": {
+        "query": "q"
+      },
+      "tool": "WebSearch"
+    }
+  ],
+  "cwd": "<TMP>/ws",
+  "flags": {},
+  "fs": {
+    "dirs": [
+      "<TMP>/ws/sub"
+    ]
+  },
+  "home": "<HOME>",
+  "modes": [
+    "default",
+    "acceptEdits",
+    "plan",
+    "auto",
+    "dontAsk",
+    "bypassPermissions"
+  ],
+  "op": "check",
+  "rules": {},
+  "suggestions": true
+}

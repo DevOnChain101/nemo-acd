@@ -1,0 +1,34 @@
+{
+  "autoMode": {},
+  "calls": [
+    {
+      "input": {
+        "a": 1
+      },
+      "tool": "mcp__srv__do"
+    },
+    {
+      "input": {},
+      "tool": "Bogus"
+    }
+  ],
+  "cwd": "<TMP>/ws",
+  "flags": {},
+  "fs": {
+    "dirs": [
+      "<TMP>/ws/sub"
+    ]
+  },
+  "home": "<HOME>",
+  "modes": [
+    "default",
+    "acceptEdits",
+    "plan",
+    "auto",
+    "dontAsk",
+    "bypassPermissions"
+  ],
+  "op": "check",
+  "rules": {},
+  "suggestions": true
+}

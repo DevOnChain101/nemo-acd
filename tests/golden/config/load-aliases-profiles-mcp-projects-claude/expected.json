@@ -1,0 +1,77 @@
+{
+  "value": {
+    "$schema": "config.json/v1",
+    "_explicitAliases": [
+      "fast"
+    ],
+    "_modelExplicit": false,
+    "_warnings": [],
+    "aliases": {
+      "fable": null,
+      "fast": "gateway/m-1",
+      "haiku": null,
+      "opus": null,
+      "sonnet": null
+    },
+    "claude": {
+      "readUserConfig": false
+    },
+    "maxTokens": 4096,
+    "mcp": {
+      "s1": {
+        "command": [
+          "node",
+          "x.js"
+        ],
+        "enabled": true,
+        "environment": {
+          "A": "b"
+        },
+        "type": "local"
+      }
+    },
+    "mcpServers": {
+      "s2": {
+        "headers": {
+          "A": "b"
+        },
+        "type": "http",
+        "url": "https://mcp.example.test"
+      }
+    },
+    "profiles": {
+      "deep": [
+        "gateway/m-2",
+        {
+          "model": "gateway/m-1"
+        }
+      ],
+      "fast": {
+        "candidates": [
+          "gateway/m-1"
+        ]
+      }
+    },
+    "projects": {
+      "/p": {
+        "enableAllProjectMcpServers": true,
+        "enabledMcpjsonServers": [
+          "a"
+        ]
+      }
+    },
+    "providers": {
+      "anthropic": {
+        "headers": {},
+        "models": [],
+        "type": "anthropic",
+        "typeSource": "id"
+      },
+      "openai": {
+        "models": [],
+        "type": "openai",
+        "typeSource": "id"
+      }
+    }
+  }
+}

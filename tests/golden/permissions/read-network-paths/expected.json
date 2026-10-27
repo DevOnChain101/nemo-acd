@@ -1,0 +1,66 @@
+[
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "read from a network path"
+      },
+      "auto": {
+        "decision": "ask",
+        "reason": "read from a network path"
+      },
+      "bypassPermissions": {
+        "decision": "ask",
+        "reason": "read from a network path"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "read from a network path"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "dontAsk mode: network path"
+      },
+      "plan": {
+        "decision": "ask",
+        "reason": "read from a network path"
+      }
+    },
+    "input": {
+      "file_path": "//server/share/x.txt"
+    },
+    "tool": "Read"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "read from a network path"
+      },
+      "auto": {
+        "decision": "ask",
+        "reason": "read from a network path"
+      },
+      "bypassPermissions": {
+        "decision": "ask",
+        "reason": "read from a network path"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "read from a network path"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "dontAsk mode: network path"
+      },
+      "plan": {
+        "decision": "ask",
+        "reason": "read from a network path"
+      }
+    },
+    "input": {
+      "file_path": "\\\\server\\share\\x.txt"
+    },
+    "tool": "Read"
+  }
+]

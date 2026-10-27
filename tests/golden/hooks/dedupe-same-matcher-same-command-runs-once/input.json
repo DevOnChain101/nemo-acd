@@ -1,0 +1,44 @@
+{
+  "config": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "printf '%s' 'x'",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "printf '%s' 'x'",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "printf '%s' 'x'",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      }
+    ]
+  },
+  "event": "PreToolUse",
+  "op": "run",
+  "opts": {},
+  "payload": {
+    "tool_input": {
+      "command": "ls"
+    },
+    "tool_name": "Bash"
+  },
+  "target": "Bash"
+}

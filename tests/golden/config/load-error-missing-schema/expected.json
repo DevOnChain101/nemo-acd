@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "NEMO_INVALID_CONFIG",
+    "message": "invalid config <NEMO_HOME>/nemo.json: missing required $schema (use \"config.json/v1\")",
+    "name": "ConfigValidationError"
+  }
+}

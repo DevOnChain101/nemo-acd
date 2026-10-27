@@ -1,0 +1,17 @@
+{
+  "steps": [
+    {
+      "content": "Edit: \"file_path\" is required.",
+      "isError": true,
+      "soft": false,
+      "tool": "Edit"
+    },
+    {
+      "content": "Edit: \"old_string\" and \"new_string\" are required.",
+      "isError": true,
+      "soft": false,
+      "tool": "Edit"
+    }
+  ],
+  "tree_after": []
+}

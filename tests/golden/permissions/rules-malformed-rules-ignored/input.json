@@ -1,0 +1,46 @@
+{
+  "autoMode": {},
+  "calls": [
+    {
+      "input": {
+        "command": "ls"
+      },
+      "tool": "Bash"
+    },
+    {
+      "input": {
+        "command": "touch a"
+      },
+      "tool": "Bash"
+    }
+  ],
+  "cwd": "<TMP>/ws",
+  "flags": {},
+  "fs": {
+    "dirs": [
+      "<TMP>/ws/sub"
+    ]
+  },
+  "home": "<HOME>",
+  "modes": [
+    "default",
+    "acceptEdits",
+    "plan",
+    "auto",
+    "dontAsk",
+    "bypassPermissions"
+  ],
+  "op": "check",
+  "rules": {
+    "allow": [
+      "",
+      "Bash(",
+      "(x)",
+      "Bash()"
+    ],
+    "deny": [
+      " "
+    ]
+  },
+  "suggestions": false
+}

@@ -1,0 +1,76 @@
+{
+  "chunks": [
+    {
+      "choices": [
+        {
+          "delta": {
+            "content": "ok"
+          }
+        }
+      ],
+      "id": "c1",
+      "model": "gpt-5"
+    },
+    {
+      "choices": [
+        {
+          "delta": {},
+          "finish_reason": "stop"
+        }
+      ],
+      "id": "c1",
+      "model": "gpt-5"
+    },
+    {
+      "choices": [],
+      "id": "c1",
+      "model": "gpt-5",
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 1
+      }
+    }
+  ],
+  "op": "stream",
+  "provider": "openai",
+  "req": {
+    "maxTokens": 10,
+    "messages": [
+      {
+        "content": [
+          {
+            "content": [
+              {
+                "text": "l1",
+                "type": "text"
+              },
+              {
+                "source": {
+                  "type": "url",
+                  "url": "u"
+                },
+                "type": "image"
+              }
+            ],
+            "tool_use_id": "a",
+            "type": "tool_result"
+          },
+          {
+            "content": {
+              "k": 1
+            },
+            "tool_use_id": "b",
+            "type": "tool_result"
+          },
+          {
+            "content": "plain",
+            "tool_use_id": "c",
+            "type": "tool_result"
+          }
+        ],
+        "role": "user"
+      }
+    ],
+    "model": "gpt-5"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "dirs": [],
+  "files": {
+    "<TMP>/ws/.git/config": "7",
+    "<TMP>/ws/README.md": "5",
+    "<TMP>/ws/lib/e.js": "8",
+    "<TMP>/ws/node_modules/p/i.js": "6",
+    "<TMP>/ws/src/a.js": "1",
+    "<TMP>/ws/src/b.js": "2",
+    "<TMP>/ws/src/d.ts": "4",
+    "<TMP>/ws/src/deep/c.js": "3"
+  },
+  "steps": [
+    {
+      "input": {
+        "pattern": "**/*.js"
+      },
+      "tool": "Glob"
+    }
+  ]
+}

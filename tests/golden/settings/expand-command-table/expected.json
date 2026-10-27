@@ -1,0 +1,32 @@
+[
+  {
+    "args": "foo.js bar",
+    "body": "Review $1 carefully. $ARGUMENTS",
+    "out": "Review foo.js carefully. foo.js bar"
+  },
+  {
+    "args": "extra text",
+    "body": "Commit.\nNo placeholder.",
+    "out": "Commit.\nNo placeholder.\n\nextra text"
+  },
+  {
+    "args": "",
+    "body": "Commit.",
+    "out": "Commit."
+  },
+  {
+    "args": "a",
+    "body": "$1 $2 $3",
+    "out": "a  "
+  },
+  {
+    "args": "x y",
+    "body": "$ARGUMENTS and $ARGUMENTS",
+    "out": "x y and x y"
+  },
+  {
+    "args": null,
+    "body": "Plain",
+    "out": "Plain"
+  }
+]

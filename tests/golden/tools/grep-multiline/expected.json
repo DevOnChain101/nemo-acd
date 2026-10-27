@@ -1,0 +1,23 @@
+{
+  "steps": [
+    {
+      "content": "<TMP>/ws/a.txt:1:start",
+      "isError": false,
+      "soft": false,
+      "tool": "Grep"
+    },
+    {
+      "content": "<TMP>/ws/a.txt:1",
+      "isError": false,
+      "soft": false,
+      "tool": "Grep"
+    }
+  ],
+  "tree_after": [
+    {
+      "content": "start\nmiddle\nend\nstart\nx\n",
+      "path": "a.txt",
+      "type": "file"
+    }
+  ]
+}

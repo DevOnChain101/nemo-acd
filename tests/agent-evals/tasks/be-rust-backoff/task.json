@@ -1,0 +1,45 @@
+{
+  "id": "be-rust-backoff",
+  "version": 1,
+  "category": "backend",
+  "fixture": "rust-backoff",
+  "requires": [
+    "cargo"
+  ],
+  "prompt": "backoff::backoff_ms panics (or wraps) for large retry attempts instead of returning the cap. Fix it so the delay is always at most cap_ms.",
+  "acceptance_criteria": [
+    {
+      "id": "c1",
+      "text": "large attempts return the cap",
+      "check": "cargo test --offline"
+    }
+  ],
+  "setup": [],
+  "hidden_checks": [
+    {
+      "id": "h1",
+      "command": "cargo test --offline --manifest-path hidden/Cargo.toml",
+      "timeout_ms": 120000
+    }
+  ],
+  "regression_checks": [
+    {
+      "id": "r1",
+      "command": "cargo test --offline",
+      "timeout_ms": 120000
+    }
+  ],
+  "permission_mode": "acceptEdits",
+  "network": "deny",
+  "budget": {
+    "max_turns": 40,
+    "max_tool_calls": 150,
+    "max_wall_ms": 900000
+  },
+  "forbidden_paths": [
+    "hidden/**",
+    ".git/**"
+  ],
+  "expected_status": "completed",
+  "runs": 3
+}

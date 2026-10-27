@@ -1,0 +1,13 @@
+{
+  "additionalContext": [],
+  "blocked": false,
+  "results": [
+    {
+      "command": "printf '%s' 'hit'",
+      "exitCode": 0,
+      "stderr": "",
+      "stdout": "hit"
+    }
+  ],
+  "stop": false
+}

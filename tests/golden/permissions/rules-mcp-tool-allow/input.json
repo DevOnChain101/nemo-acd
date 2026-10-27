@@ -1,0 +1,41 @@
+{
+  "autoMode": {},
+  "calls": [
+    {
+      "input": {},
+      "tool": "mcp__srv__do"
+    },
+    {
+      "input": {},
+      "tool": "mcp__srv__other"
+    },
+    {
+      "input": {},
+      "tool": "mcp__srv2__x"
+    }
+  ],
+  "cwd": "<TMP>/ws",
+  "flags": {},
+  "fs": {
+    "dirs": [
+      "<TMP>/ws/sub"
+    ]
+  },
+  "home": "<HOME>",
+  "modes": [
+    "default",
+    "acceptEdits",
+    "plan",
+    "auto",
+    "dontAsk",
+    "bypassPermissions"
+  ],
+  "op": "check",
+  "rules": {
+    "allow": [
+      "mcp__srv__do",
+      "mcp__srv2"
+    ]
+  },
+  "suggestions": false
+}

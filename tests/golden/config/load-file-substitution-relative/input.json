@@ -1,0 +1,18 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<NEMO_HOME>/nemo.json": {
+      "$schema": "config.json/v1",
+      "providers": {
+        "p": {
+          "apiKey": "{file:secret.txt}",
+          "type": "openai"
+        }
+      }
+    },
+    "<NEMO_HOME>/secret.txt": "  sk-file-key \n"
+  },
+  "home": "<NEMO_HOME>",
+  "op": "loadConfig"
+}

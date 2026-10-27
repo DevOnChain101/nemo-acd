@@ -1,0 +1,33 @@
+{
+  "config": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "printf '%s' '{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"a\"}}'",
+            "type": "command"
+          },
+          {
+            "command": "printf '%s' '{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"d\"}}'",
+            "type": "command"
+          },
+          {
+            "command": "printf '%s' '{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"k\"}}'",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ]
+  },
+  "event": "PreToolUse",
+  "op": "run",
+  "opts": {},
+  "payload": {
+    "tool_input": {
+      "command": "ls"
+    },
+    "tool_name": "Bash"
+  },
+  "target": "Bash"
+}

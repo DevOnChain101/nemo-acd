@@ -1,0 +1,16 @@
+{
+  "steps": [
+    {
+      "content": "Edit: <TMP>/ws/sub is a directory.",
+      "isError": true,
+      "soft": true,
+      "tool": "Edit"
+    }
+  ],
+  "tree_after": [
+    {
+      "path": "sub",
+      "type": "dir"
+    }
+  ]
+}

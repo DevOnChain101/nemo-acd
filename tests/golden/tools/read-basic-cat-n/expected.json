@@ -1,0 +1,17 @@
+{
+  "steps": [
+    {
+      "content": "     1\tone\n     2\ttwo\n     3\tthree",
+      "isError": false,
+      "soft": false,
+      "tool": "Read"
+    }
+  ],
+  "tree_after": [
+    {
+      "content": "one\ntwo\nthree\n",
+      "path": "a.txt",
+      "type": "file"
+    }
+  ]
+}

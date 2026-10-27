@@ -1,0 +1,108 @@
+{
+  "items": [
+    {
+      "end": 1790899202000,
+      "id": "t1",
+      "input": {
+        "description": "bg"
+      },
+      "kind": "tool",
+      "name": "Agent",
+      "result": "x",
+      "soft": false,
+      "start": 1790899201000,
+      "status": "done",
+      "ts": 1790899201000
+    }
+  ],
+  "phase": {
+    "phase": "agents",
+    "running": [],
+    "runningAgents": [
+      "t1"
+    ]
+  },
+  "session": {
+    "activity": [],
+    "agents": {
+      "t1": {
+        "agentId": "abc",
+        "background": true,
+        "contextUsed": 0,
+        "currentTool": null,
+        "description": "bg",
+        "end": null,
+        "lastActivity": 1790899201000,
+        "start": 1790899201000,
+        "status": "running",
+        "tokens": {
+          "cacheCreate": 0,
+          "cacheRead": 0,
+          "input": 0,
+          "output": 0
+        },
+        "toolCount": 0,
+        "toolUseId": "t1",
+        "type": "general-purpose",
+        "usageById": {}
+      }
+    },
+    "components": {},
+    "contextUsed": 0,
+    "cwd": "",
+    "errors": 0,
+    "feed": [
+      {
+        "kind": "agent",
+        "text": "Delegate → general-purpose: bg",
+        "ts": 1790899201000
+      }
+    ],
+    "gitBranch": "",
+    "hookCounts": {},
+    "id": "sess",
+    "lastActivity": 1790899202000,
+    "lastAssistantAt": 1790899201000,
+    "lastPrompt": "",
+    "lastPromptAt": null,
+    "lastStopReason": null,
+    "lastUserAt": 1790899202000,
+    "lastVerify": null,
+    "memoryWrites": 0,
+    "model": "claude-opus-5.5",
+    "prompts": 0,
+    "skills": {},
+    "startedAt": 1790899201000,
+    "timeline": [
+      {
+        "total": 0,
+        "ts": 1790899201000
+      }
+    ],
+    "todos": [],
+    "tokens": {
+      "cacheCreate": 0,
+      "cacheRead": 0,
+      "input": 0,
+      "output": 0
+    },
+    "toolCounts": {
+      "Agent": 1
+    },
+    "tools": {
+      "t1": {
+        "cat": "orchestrate",
+        "end": 1790899202000,
+        "id": "t1",
+        "isError": false,
+        "name": "Agent",
+        "start": 1790899201000,
+        "summary": "general-purpose: bg"
+      }
+    },
+    "turnReplied": false,
+    "usageById": {},
+    "version": ""
+  },
+  "total_tokens": 0
+}

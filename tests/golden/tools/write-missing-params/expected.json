@@ -1,0 +1,23 @@
+{
+  "steps": [
+    {
+      "content": "Write: \"file_path\" is required.",
+      "isError": true,
+      "soft": false,
+      "tool": "Write"
+    },
+    {
+      "content": "Write: \"content\" is required.",
+      "isError": true,
+      "soft": false,
+      "tool": "Write"
+    },
+    {
+      "content": "Write: \"content\" is required.",
+      "isError": true,
+      "soft": false,
+      "tool": "Write"
+    }
+  ],
+  "tree_after": []
+}

@@ -1,0 +1,6 @@
+# Spec workspace-context.md §4.1: no implicit process-global cwd. Only apps/cli may opt out
+# with #[allow(clippy::disallowed_methods)] plus a comment.
+disallowed-methods = [
+    { path = "std::env::current_dir", reason = "pass an explicit WorkspaceContext cwd" },
+    { path = "std::env::set_current_dir", reason = "pass an explicit WorkspaceContext cwd" },
+]

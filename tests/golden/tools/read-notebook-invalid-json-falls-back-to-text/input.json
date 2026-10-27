@@ -1,0 +1,14 @@
+{
+  "dirs": [],
+  "files": {
+    "<TMP>/ws/n.ipynb": "not json\n"
+  },
+  "steps": [
+    {
+      "input": {
+        "file_path": "n.ipynb"
+      },
+      "tool": "Read"
+    }
+  ]
+}

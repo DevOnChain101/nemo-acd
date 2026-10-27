@@ -1,0 +1,17 @@
+{
+  "aliases": {
+    "fable": null,
+    "haiku": "gateway/claude-haiku-4-5",
+    "opus": "gateway/claude-opus-5-5",
+    "sonnet": "gateway/claude-sonnet-5"
+  },
+  "model": "gateway/claude-sonnet-5",
+  "notes": [
+    {
+      "from": "claude-sonnet-4",
+      "providerId": "gateway",
+      "to": "claude-sonnet-5"
+    }
+  ],
+  "warnings": []
+}

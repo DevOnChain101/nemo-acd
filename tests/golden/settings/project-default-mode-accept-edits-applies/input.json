@@ -1,0 +1,17 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<HOME>/.nemo/settings.json": {
+      "permissions": {
+        "defaultMode": "plan"
+      }
+    },
+    "<TMP>/ws/.nemo/settings.json": {
+      "permissions": {
+        "defaultMode": "acceptEdits"
+      }
+    }
+  },
+  "op": "workspace"
+}

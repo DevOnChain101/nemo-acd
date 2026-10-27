@@ -1,0 +1,98 @@
+[
+  {
+    "autoSafe": true,
+    "command": "ls",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": true
+  },
+  {
+    "autoSafe": true,
+    "command": "cat a | head",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": true
+  },
+  {
+    "autoSafe": true,
+    "command": "cd src && ls",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": true
+  },
+  {
+    "autoSafe": true,
+    "command": "git status",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": true
+  },
+  {
+    "autoSafe": true,
+    "command": "git branch --list",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": true
+  },
+  {
+    "autoSafe": true,
+    "command": "node --version",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": true
+  },
+  {
+    "autoSafe": true,
+    "command": "npm ls",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": true
+  },
+  {
+    "autoSafe": true,
+    "command": "env",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": true
+  },
+  {
+    "autoSafe": true,
+    "command": "echo hi 2>&1",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": true
+  },
+  {
+    "autoSafe": true,
+    "command": "git log --oneline -n 5",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": true
+  },
+  {
+    "autoSafe": true,
+    "command": "git diff HEAD~1",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": true
+  },
+  {
+    "autoSafe": true,
+    "command": "find . -name \"*.js\"",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": true
+  },
+  {
+    "autoSafe": true,
+    "command": "grep -rn foo src | wc -l",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": true
+  },
+  {
+    "autoSafe": true,
+    "command": "echo a > /dev/null",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": true
+  },
+  {
+    "autoSafe": false,
+    "command": "pwd; whoami",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  },
+  {
+    "autoSafe": true,
+    "command": "cat a.txt &>/dev/null",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": true
+  }
+]

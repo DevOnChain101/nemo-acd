@@ -1,0 +1,47 @@
+[
+  {
+    "body": "body text here",
+    "data": {
+      "description": "quoted: yes",
+      "empty": "",
+      "flag": true,
+      "items": [
+        "one",
+        "two"
+      ],
+      "list": [
+        "a",
+        "b",
+        "c"
+      ],
+      "n": 5,
+      "name": "tester",
+      "tools": "Bash, Read"
+    }
+  },
+  {
+    "body": "body",
+    "data": {
+      "folded": "wrapped text",
+      "literal": "line one\nline two"
+    }
+  },
+  {
+    "body": "just a plain file\nwith no frontmatter",
+    "data": {}
+  },
+  {
+    "body": "---\nunterminated: yes\nbody",
+    "data": {}
+  },
+  {
+    "body": "body\n",
+    "data": {
+      "name": "crlf"
+    }
+  },
+  {
+    "body": "",
+    "data": {}
+  }
+]

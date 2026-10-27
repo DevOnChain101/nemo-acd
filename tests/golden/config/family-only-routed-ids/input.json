@@ -1,0 +1,8 @@
+{
+  "family": "haiku",
+  "ids": [
+    "kr/claude-haiku-4-8",
+    "agy/claude-haiku-4-9"
+  ],
+  "op": "bestModelForFamily"
+}

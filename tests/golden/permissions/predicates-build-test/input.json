@@ -1,0 +1,12 @@
+{
+  "commands": [
+    "npm test",
+    "npm run lint",
+    "node --test x",
+    "node --check x",
+    "npx tsc --noEmit",
+    "cargo test",
+    "cargo check"
+  ],
+  "op": "predicates"
+}

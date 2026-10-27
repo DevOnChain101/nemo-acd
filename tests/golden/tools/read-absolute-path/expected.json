@@ -1,0 +1,17 @@
+{
+  "steps": [
+    {
+      "content": "     1\tx",
+      "isError": false,
+      "soft": false,
+      "tool": "Read"
+    }
+  ],
+  "tree_after": [
+    {
+      "content": "x\n",
+      "path": "a.txt",
+      "type": "file"
+    }
+  ]
+}

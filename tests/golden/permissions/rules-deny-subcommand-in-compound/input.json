@@ -1,0 +1,40 @@
+{
+  "autoMode": {},
+  "calls": [
+    {
+      "input": {
+        "command": "ls && git push origin main"
+      },
+      "tool": "Bash"
+    },
+    {
+      "input": {
+        "command": "git status"
+      },
+      "tool": "Bash"
+    }
+  ],
+  "cwd": "<TMP>/ws",
+  "flags": {},
+  "fs": {
+    "dirs": [
+      "<TMP>/ws/sub"
+    ]
+  },
+  "home": "<HOME>",
+  "modes": [
+    "default",
+    "acceptEdits",
+    "plan",
+    "auto",
+    "dontAsk",
+    "bypassPermissions"
+  ],
+  "op": "check",
+  "rules": {
+    "deny": [
+      "Bash(git push:*)"
+    ]
+  },
+  "suggestions": false
+}

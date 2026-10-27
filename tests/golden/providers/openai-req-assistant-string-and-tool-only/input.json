@@ -1,0 +1,64 @@
+{
+  "chunks": [
+    {
+      "choices": [
+        {
+          "delta": {
+            "content": "ok"
+          }
+        }
+      ],
+      "id": "c1",
+      "model": "gpt-5"
+    },
+    {
+      "choices": [
+        {
+          "delta": {},
+          "finish_reason": "stop"
+        }
+      ],
+      "id": "c1",
+      "model": "gpt-5"
+    },
+    {
+      "choices": [],
+      "id": "c1",
+      "model": "gpt-5",
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 1
+      }
+    }
+  ],
+  "op": "stream",
+  "provider": "openai",
+  "req": {
+    "maxTokens": 10,
+    "messages": [
+      {
+        "content": "plain",
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "id": "t",
+            "name": "X",
+            "type": "tool_use"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": "ignored",
+        "role": "system"
+      },
+      {
+        "content": "u",
+        "role": "user"
+      }
+    ],
+    "model": "gpt-5"
+  }
+}

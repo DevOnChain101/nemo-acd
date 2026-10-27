@@ -1,0 +1,15 @@
+{
+  "description": "Gets one tracked task by id.",
+  "input_schema": {
+    "properties": {
+      "taskId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "taskId"
+    ],
+    "type": "object"
+  },
+  "name": "TaskGet"
+}

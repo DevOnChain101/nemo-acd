@@ -1,0 +1,25 @@
+{
+  "commands": [
+    "rm x",
+    "ls > out",
+    "echo $(id)",
+    "find . -delete",
+    "git push",
+    "env FOO=1 ls",
+    "ls `id`",
+    "cat <(ls)",
+    "echo 'unbalanced",
+    "cat <<EOF\nx\nEOF",
+    "ls >> log",
+    "find . -exec rm {} ;",
+    "git branch -D x",
+    "npm run deploy",
+    "curl http://x",
+    "ls | xargs rm",
+    "sed -i s/a/b/ f",
+    "echo hi > /dev/null; rm x",
+    "ls &",
+    ""
+  ],
+  "op": "predicates"
+}

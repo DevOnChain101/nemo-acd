@@ -1,0 +1,107 @@
+{
+  "items": [
+    {
+      "images": [],
+      "kind": "user",
+      "text": "no ts",
+      "ts": 0
+    },
+    {
+      "id": "t1",
+      "input": {},
+      "kind": "tool",
+      "name": "Bash",
+      "start": 0,
+      "status": "interrupted",
+      "ts": 0
+    }
+  ],
+  "phase": {
+    "phase": "tool",
+    "running": [
+      "t1"
+    ],
+    "runningAgents": []
+  },
+  "session": {
+    "activity": [
+      {
+        "kind": "prompt",
+        "text": "no ts",
+        "ts": null
+      }
+    ],
+    "agents": {},
+    "components": {
+      "tool:Bash": {
+        "count": 1,
+        "error": false,
+        "firstSeen": null,
+        "key": "tool:Bash",
+        "kind": "tool",
+        "lastEnd": null,
+        "lastStart": null,
+        "name": "Bash",
+        "open": 1,
+        "sub": ""
+      }
+    },
+    "contextUsed": 0,
+    "cwd": "",
+    "errors": 0,
+    "feed": [
+      {
+        "kind": "prompt",
+        "text": "no ts",
+        "ts": null
+      },
+      {
+        "kind": "tool",
+        "text": "Bash ",
+        "ts": null
+      }
+    ],
+    "gitBranch": "",
+    "hookCounts": {},
+    "id": "sess",
+    "lastActivity": null,
+    "lastAssistantAt": null,
+    "lastPrompt": "no ts",
+    "lastPromptAt": null,
+    "lastStopReason": null,
+    "lastUserAt": null,
+    "lastVerify": null,
+    "memoryWrites": 0,
+    "model": "",
+    "prompts": 1,
+    "skills": {},
+    "startedAt": null,
+    "timeline": [],
+    "todos": [],
+    "tokens": {
+      "cacheCreate": 0,
+      "cacheRead": 0,
+      "input": 0,
+      "output": 0
+    },
+    "toolCounts": {
+      "Bash": 1
+    },
+    "tools": {
+      "t1": {
+        "cat": "execute",
+        "compKey": "tool:Bash",
+        "end": null,
+        "id": "t1",
+        "isError": false,
+        "name": "Bash",
+        "start": null,
+        "summary": ""
+      }
+    },
+    "turnReplied": false,
+    "usageById": {},
+    "version": ""
+  },
+  "total_tokens": 0
+}

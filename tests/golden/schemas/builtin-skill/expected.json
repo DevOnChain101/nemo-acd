@@ -1,0 +1,20 @@
+{
+  "description": "Loads a skill: additional instructions and context for a specific kind of task. Pass the skill name exactly as listed in the available skills, and args if the skill expects arguments.",
+  "input_schema": {
+    "properties": {
+      "args": {
+        "description": "Arguments to pass to the skill, if any.",
+        "type": "string"
+      },
+      "skill": {
+        "description": "Name of the skill to load.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "skill"
+    ],
+    "type": "object"
+  },
+  "name": "Skill"
+}

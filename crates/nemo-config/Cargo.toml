@@ -1,0 +1,17 @@
+[package]
+name = "nemo-config"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+indexmap = "2.14.2"
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
+url = "2.5.8"
+
+[dev-dependencies]
+tempfile = "3.27.0"

@@ -1,0 +1,85 @@
+{
+  "items": [
+    {
+      "kind": "text",
+      "text": "x",
+      "ts": 1790899201000
+    },
+    {
+      "images": [],
+      "kind": "user",
+      "text": "p",
+      "ts": 1790899202000
+    }
+  ],
+  "phase": {
+    "phase": "idle",
+    "running": [],
+    "runningAgents": []
+  },
+  "session": {
+    "activity": [
+      {
+        "kind": "text",
+        "text": "x",
+        "ts": 1790899201000
+      },
+      {
+        "kind": "prompt",
+        "text": "p",
+        "ts": 1790899202000
+      }
+    ],
+    "agents": {},
+    "components": {},
+    "contextUsed": 0,
+    "cwd": "",
+    "errors": 0,
+    "feed": [
+      {
+        "kind": "text",
+        "text": "x",
+        "ts": 1790899201000
+      },
+      {
+        "kind": "prompt",
+        "text": "p",
+        "ts": 1790899202000
+      }
+    ],
+    "gitBranch": "",
+    "hookCounts": {},
+    "id": "sess",
+    "lastActivity": 1790899202000,
+    "lastAssistantAt": 1790899201000,
+    "lastPrompt": "p",
+    "lastPromptAt": 1790899202000,
+    "lastStopReason": "tool_use",
+    "lastUserAt": 1790899202000,
+    "lastVerify": null,
+    "memoryWrites": 0,
+    "model": "claude-opus-5.5",
+    "prompts": 1,
+    "skills": {},
+    "startedAt": 1790899201000,
+    "timeline": [
+      {
+        "total": 0,
+        "ts": 1790899201000
+      }
+    ],
+    "todos": [],
+    "tokens": {
+      "cacheCreate": 0,
+      "cacheRead": 0,
+      "input": 0,
+      "output": 0
+    },
+    "toolCounts": {},
+    "tools": {},
+    "turnReplied": false,
+    "usageById": {},
+    "version": ""
+  },
+  "total_tokens": 0
+}

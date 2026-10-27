@@ -1,0 +1,25 @@
+{
+  "additionalContext": [
+    "c1",
+    "c2"
+  ],
+  "blocked": false,
+  "results": [
+    {
+      "command": "printf '%s' '{\"hookSpecificOutput\":{\"updatedInput\":{\"command\":\"one\"},\"additionalContext\":\"c1\"},\"additionalContext\":\"c2\"}'",
+      "exitCode": 0,
+      "stderr": "",
+      "stdout": "{\"hookSpecificOutput\":{\"updatedInput\":{\"command\":\"one\"},\"additionalContext\":\"c1\"},\"additionalContext\":\"c2\"}"
+    },
+    {
+      "command": "printf '%s' '{\"hookSpecificOutput\":{\"updatedInput\":{\"command\":\"two\"}}}'",
+      "exitCode": 0,
+      "stderr": "",
+      "stdout": "{\"hookSpecificOutput\":{\"updatedInput\":{\"command\":\"two\"}}}"
+    }
+  ],
+  "stop": false,
+  "updatedInput": {
+    "command": "two"
+  }
+}

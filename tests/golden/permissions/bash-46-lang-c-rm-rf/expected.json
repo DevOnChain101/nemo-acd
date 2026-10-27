@@ -1,0 +1,36 @@
+[
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "removes a critical path (root, home, working directory or a parent)"
+      },
+      "auto": {
+        "critical": true,
+        "decision": "ask",
+        "reason": "removes a critical path (root, home, working directory or a parent)"
+      },
+      "bypassPermissions": {
+        "decision": "ask",
+        "reason": "removes a critical path (root, home, working directory or a parent)"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "removes a critical path (root, home, working directory or a parent)"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "dontAsk mode: critical path"
+      },
+      "plan": {
+        "critical": true,
+        "decision": "ask",
+        "reason": "removes a critical path (root, home, working directory or a parent)"
+      }
+    },
+    "input": {
+      "command": "LANG=C rm -rf ~"
+    },
+    "tool": "Bash"
+  }
+]

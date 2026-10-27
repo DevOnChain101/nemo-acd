@@ -1,0 +1,30 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<NEMO_HOME>/nemo.json": {
+      "$schema": "config.json/v1",
+      "providers": {
+        "p": {
+          "models": {
+            "m": {
+              "capabilities": {
+                "effort_tiers": [
+                  "low",
+                  "low"
+                ],
+                "x": "y"
+              },
+              "junk": 1,
+              "limit": {
+                "context": 0
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "home": "<NEMO_HOME>",
+  "op": "loadConfig"
+}

@@ -1,0 +1,21 @@
+# TEMPLATE for microsoft/winget-pkgs (manifests/o/@REPO_OWNER@/NemoACD/@VERSION@/). Three files are required there:
+# version, defaultLocale and installer manifests; this is the installer one. Validate with `winget validate`.
+PackageIdentifier: @REPO_OWNER@.NemoACD
+PackageVersion: @VERSION@
+InstallerType: zip
+NestedInstallerType: portable
+NestedInstallerFiles:
+  - RelativeFilePath: nemo-@VERSION@-x86_64-pc-windows-msvc\nemo.exe
+    PortableCommandAlias: nemo
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/@REPO@/releases/download/v@VERSION@/nemo-@VERSION@-x86_64-pc-windows-msvc.zip
+    InstallerSha256: @SHA256_X86_64_PC_WINDOWS_MSVC@
+  - Architecture: arm64
+    InstallerUrl: https://github.com/@REPO@/releases/download/v@VERSION@/nemo-@VERSION@-aarch64-pc-windows-msvc.zip
+    InstallerSha256: @SHA256_AARCH64_PC_WINDOWS_MSVC@
+    NestedInstallerFiles:
+      - RelativeFilePath: nemo-@VERSION@-aarch64-pc-windows-msvc\nemo.exe
+        PortableCommandAlias: nemo
+ManifestType: installer
+ManifestVersion: 1.6.0

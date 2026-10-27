@@ -1,0 +1,13 @@
+{
+  "models": [
+    {
+      "display_name": "M1",
+      "id": "m1"
+    },
+    {
+      "id": "m2"
+    }
+  ],
+  "op": "listModels",
+  "provider": "anthropic"
+}

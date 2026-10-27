@@ -1,0 +1,28 @@
+{
+  "config": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "printf '%s|%s|%s|%s' \"$CLAUDE_PROJECT_DIR\" \"$NEMO_PROJECT_DIR\" \"${NEMO_API_KEY:-absent}\" \"${NEMO_ANTHROPIC_API_KEY:-absent}\"",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ]
+  },
+  "event": "UserPromptSubmit",
+  "op": "run",
+  "opts": {
+    "cwd": "<TMP>/ws",
+    "env": {
+      "NEMO_ANTHROPIC_API_KEY": "secret",
+      "NEMO_API_KEY": "flat-secret"
+    }
+  },
+  "payload": {
+    "prompt": "x"
+  },
+  "target": null
+}

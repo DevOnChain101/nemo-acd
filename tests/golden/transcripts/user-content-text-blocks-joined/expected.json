@@ -1,0 +1,65 @@
+{
+  "items": [
+    {
+      "images": [],
+      "kind": "user",
+      "text": "ab",
+      "ts": 1790899201000
+    }
+  ],
+  "phase": {
+    "phase": "idle",
+    "running": [],
+    "runningAgents": []
+  },
+  "session": {
+    "activity": [
+      {
+        "kind": "prompt",
+        "text": "a b",
+        "ts": 1790899201000
+      }
+    ],
+    "agents": {},
+    "components": {},
+    "contextUsed": 0,
+    "cwd": "",
+    "errors": 0,
+    "feed": [
+      {
+        "kind": "prompt",
+        "text": "a b",
+        "ts": 1790899201000
+      }
+    ],
+    "gitBranch": "",
+    "hookCounts": {},
+    "id": "sess",
+    "lastActivity": 1790899201000,
+    "lastAssistantAt": null,
+    "lastPrompt": "a b",
+    "lastPromptAt": 1790899201000,
+    "lastStopReason": null,
+    "lastUserAt": 1790899201000,
+    "lastVerify": null,
+    "memoryWrites": 0,
+    "model": "",
+    "prompts": 1,
+    "skills": {},
+    "startedAt": 1790899201000,
+    "timeline": [],
+    "todos": [],
+    "tokens": {
+      "cacheCreate": 0,
+      "cacheRead": 0,
+      "input": 0,
+      "output": 0
+    },
+    "toolCounts": {},
+    "tools": {},
+    "turnReplied": false,
+    "usageById": {},
+    "version": ""
+  },
+  "total_tokens": 0
+}

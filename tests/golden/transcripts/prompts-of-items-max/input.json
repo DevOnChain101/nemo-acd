@@ -1,0 +1,22 @@
+{
+  "items": [
+    {
+      "kind": "user",
+      "text": "p1"
+    },
+    {
+      "kind": "user",
+      "text": "p2"
+    },
+    {
+      "kind": "user",
+      "text": "p3"
+    },
+    {
+      "kind": "user",
+      "text": "p4"
+    }
+  ],
+  "max": 2,
+  "op": "promptsOfItems"
+}

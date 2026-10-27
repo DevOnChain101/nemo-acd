@@ -1,0 +1,71 @@
+{
+  "chunks": [
+    {
+      "choices": [],
+      "id": "chatcmpl-1",
+      "model": "gpt-5"
+    },
+    {
+      "choices": [
+        {
+          "delta": null
+        }
+      ],
+      "id": "chatcmpl-1",
+      "model": "gpt-5"
+    },
+    {
+      "choices": [
+        {
+          "delta": {
+            "content": ""
+          }
+        }
+      ],
+      "id": "chatcmpl-1",
+      "model": "gpt-5"
+    },
+    {
+      "choices": [
+        {
+          "delta": {
+            "content": "z"
+          }
+        }
+      ],
+      "id": "chatcmpl-1",
+      "model": "gpt-5"
+    },
+    {
+      "choices": [
+        {
+          "delta": {},
+          "finish_reason": "stop"
+        }
+      ],
+      "id": "chatcmpl-1",
+      "model": "gpt-5"
+    },
+    {
+      "choices": [],
+      "id": "chatcmpl-1",
+      "model": "gpt-5",
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 1
+      }
+    }
+  ],
+  "op": "stream",
+  "provider": "openai",
+  "req": {
+    "maxTokens": 100,
+    "messages": [
+      {
+        "content": "hi",
+        "role": "user"
+      }
+    ],
+    "model": "gpt-5"
+  }
+}

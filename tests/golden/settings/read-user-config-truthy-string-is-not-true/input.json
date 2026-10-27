@@ -1,0 +1,19 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<HOME>/.claude/settings.json": {
+      "permissions": {
+        "allow": [
+          "ClaudeOnly"
+        ]
+      }
+    },
+    "<HOME>/.nemo/nemo.json": {
+      "claude": {
+        "readUserConfig": "true"
+      }
+    }
+  },
+  "op": "workspace"
+}

@@ -1,0 +1,16 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<NEMO_HOME>/nemo.json": {
+      "$schema": "config.json/v1",
+      "model": "a/b"
+    },
+    "<TMP>/ws/.nemo/config.json": {
+      "$schema": "config.json/v1",
+      "model": 5
+    }
+  },
+  "home": "<NEMO_HOME>",
+  "op": "loadConfig"
+}

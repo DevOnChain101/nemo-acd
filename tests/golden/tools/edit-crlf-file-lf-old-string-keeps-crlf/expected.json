@@ -1,0 +1,26 @@
+{
+  "steps": [
+    {
+      "content": "     1\ta\r\n     2\tb\r\n     3\tc\r",
+      "isError": false,
+      "soft": false,
+      "tool": "Read"
+    },
+    {
+      "content": "Edited <TMP>/ws/a.txt:\n     1\ta\n     2\tB1\n     3\tB2\n     4\tc\n     5\t",
+      "isError": false,
+      "meta": {
+        "replacements": 1
+      },
+      "soft": false,
+      "tool": "Edit"
+    }
+  ],
+  "tree_after": [
+    {
+      "content": "a\r\nB1\r\nB2\r\nc\r\n",
+      "path": "a.txt",
+      "type": "file"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "args": {
+    "baseURL": "https://api.openai.com",
+    "id": "x",
+    "type": "anthropic"
+  },
+  "op": "detectProtocol"
+}

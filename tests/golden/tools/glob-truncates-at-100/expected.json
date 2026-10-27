@@ -1,0 +1,541 @@
+{
+  "steps": [
+    {
+      "content": "<TMP>/ws/f/104.txt\n<TMP>/ws/f/103.txt\n<TMP>/ws/f/102.txt\n<TMP>/ws/f/101.txt\n<TMP>/ws/f/100.txt\n<TMP>/ws/f/099.txt\n<TMP>/ws/f/098.txt\n<TMP>/ws/f/097.txt\n<TMP>/ws/f/096.txt\n<TMP>/ws/f/095.txt\n<TMP>/ws/f/094.txt\n<TMP>/ws/f/093.txt\n<TMP>/ws/f/092.txt\n<TMP>/ws/f/091.txt\n<TMP>/ws/f/090.txt\n<TMP>/ws/f/089.txt\n<TMP>/ws/f/088.txt\n<TMP>/ws/f/087.txt\n<TMP>/ws/f/086.txt\n<TMP>/ws/f/085.txt\n<TMP>/ws/f/084.txt\n<TMP>/ws/f/083.txt\n<TMP>/ws/f/082.txt\n<TMP>/ws/f/081.txt\n<TMP>/ws/f/080.txt\n<TMP>/ws/f/079.txt\n<TMP>/ws/f/078.txt\n<TMP>/ws/f/077.txt\n<TMP>/ws/f/076.txt\n<TMP>/ws/f/075.txt\n<TMP>/ws/f/074.txt\n<TMP>/ws/f/073.txt\n<TMP>/ws/f/072.txt\n<TMP>/ws/f/071.txt\n<TMP>/ws/f/070.txt\n<TMP>/ws/f/069.txt\n<TMP>/ws/f/068.txt\n<TMP>/ws/f/067.txt\n<TMP>/ws/f/066.txt\n<TMP>/ws/f/065.txt\n<TMP>/ws/f/064.txt\n<TMP>/ws/f/063.txt\n<TMP>/ws/f/062.txt\n<TMP>/ws/f/061.txt\n<TMP>/ws/f/060.txt\n<TMP>/ws/f/059.txt\n<TMP>/ws/f/058.txt\n<TMP>/ws/f/057.txt\n<TMP>/ws/f/056.txt\n<TMP>/ws/f/055.txt\n<TMP>/ws/f/054.txt\n<TMP>/ws/f/053.txt\n<TMP>/ws/f/052.txt\n<TMP>/ws/f/051.txt\n<TMP>/ws/f/050.txt\n<TMP>/ws/f/049.txt\n<TMP>/ws/f/048.txt\n<TMP>/ws/f/047.txt\n<TMP>/ws/f/046.txt\n<TMP>/ws/f/045.txt\n<TMP>/ws/f/044.txt\n<TMP>/ws/f/043.txt\n<TMP>/ws/f/042.txt\n<TMP>/ws/f/041.txt\n<TMP>/ws/f/040.txt\n<TMP>/ws/f/039.txt\n<TMP>/ws/f/038.txt\n<TMP>/ws/f/037.txt\n<TMP>/ws/f/036.txt\n<TMP>/ws/f/035.txt\n<TMP>/ws/f/034.txt\n<TMP>/ws/f/033.txt\n<TMP>/ws/f/032.txt\n<TMP>/ws/f/031.txt\n<TMP>/ws/f/030.txt\n<TMP>/ws/f/029.txt\n<TMP>/ws/f/028.txt\n<TMP>/ws/f/027.txt\n<TMP>/ws/f/026.txt\n<TMP>/ws/f/025.txt\n<TMP>/ws/f/024.txt\n<TMP>/ws/f/023.txt\n<TMP>/ws/f/022.txt\n<TMP>/ws/f/021.txt\n<TMP>/ws/f/020.txt\n<TMP>/ws/f/019.txt\n<TMP>/ws/f/018.txt\n<TMP>/ws/f/017.txt\n<TMP>/ws/f/016.txt\n<TMP>/ws/f/015.txt\n<TMP>/ws/f/014.txt\n<TMP>/ws/f/013.txt\n<TMP>/ws/f/012.txt\n<TMP>/ws/f/011.txt\n<TMP>/ws/f/010.txt\n<TMP>/ws/f/009.txt\n<TMP>/ws/f/008.txt\n<TMP>/ws/f/007.txt\n<TMP>/ws/f/006.txt\n<TMP>/ws/f/005.txt\n\n… truncated to 100 of 105 matches.",
+      "isError": false,
+      "soft": false,
+      "tool": "Glob"
+    }
+  ],
+  "tree_after": [
+    {
+      "path": "f",
+      "type": "dir"
+    },
+    {
+      "content": "x",
+      "path": "f/000.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/001.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/002.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/003.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/004.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/005.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/006.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/007.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/008.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/009.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/010.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/011.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/012.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/013.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/014.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/015.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/016.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/017.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/018.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/019.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/020.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/021.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/022.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/023.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/024.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/025.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/026.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/027.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/028.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/029.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/030.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/031.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/032.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/033.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/034.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/035.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/036.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/037.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/038.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/039.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/040.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/041.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/042.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/043.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/044.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/045.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/046.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/047.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/048.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/049.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/050.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/051.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/052.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/053.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/054.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/055.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/056.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/057.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/058.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/059.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/060.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/061.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/062.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/063.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/064.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/065.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/066.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/067.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/068.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/069.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/070.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/071.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/072.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/073.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/074.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/075.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/076.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/077.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/078.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/079.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/080.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/081.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/082.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/083.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/084.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/085.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/086.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/087.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/088.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/089.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/090.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/091.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/092.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/093.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/094.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/095.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/096.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/097.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/098.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/099.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/100.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/101.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/102.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/103.txt",
+      "type": "file"
+    },
+    {
+      "content": "x",
+      "path": "f/104.txt",
+      "type": "file"
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "items": [
+    {
+      "kind": "text",
+      "text": "hi",
+      "ts": 1790899201000
+    },
+    {
+      "kind": "text",
+      "text": "syn",
+      "ts": 1790899202000
+    }
+  ],
+  "phase": {
+    "phase": "idle",
+    "running": [],
+    "runningAgents": []
+  },
+  "session": {
+    "activity": [
+      {
+        "kind": "text",
+        "text": "hi",
+        "ts": 1790899201000
+      }
+    ],
+    "agents": {},
+    "components": {},
+    "contextUsed": 0,
+    "cwd": "/work/proj",
+    "errors": 0,
+    "feed": [
+      {
+        "kind": "text",
+        "text": "hi",
+        "ts": 1790899201000
+      },
+      {
+        "kind": "text",
+        "text": "syn",
+        "ts": 1790899202000
+      }
+    ],
+    "gitBranch": "main",
+    "hookCounts": {},
+    "id": "sess",
+    "lastActivity": 1790899202000,
+    "lastAssistantAt": 1790899202000,
+    "lastPrompt": "",
+    "lastPromptAt": null,
+    "lastStopReason": null,
+    "lastUserAt": null,
+    "lastVerify": null,
+    "memoryWrites": 0,
+    "model": "claude-opus-5.5",
+    "prompts": 0,
+    "skills": {},
+    "startedAt": 1790899201000,
+    "timeline": [
+      {
+        "total": 0,
+        "ts": 1790899201000
+      }
+    ],
+    "todos": [],
+    "tokens": {
+      "cacheCreate": 0,
+      "cacheRead": 0,
+      "input": 0,
+      "output": 0
+    },
+    "toolCounts": {},
+    "tools": {},
+    "turnReplied": true,
+    "usageById": {},
+    "version": "1.2.3"
+  },
+  "total_tokens": 0
+}

@@ -1,0 +1,13 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<HOME>/.nemo/settings.json": {
+      "disableAllHooks": true
+    },
+    "<TMP>/ws/.nemo/settings.json": {
+      "disableAllHooks": false
+    }
+  },
+  "op": "workspace"
+}

@@ -1,0 +1,26 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {
+    "NEMO_BASE_URL": "https://gw2.example.test/v1",
+    "NEMO_PROVIDER": "gateway"
+  },
+  "files": {
+    "<NEMO_HOME>/nemo.json": {
+      "$schema": "config.json/v1",
+      "model": "anthropic/foo",
+      "providers": {
+        "gateway": {
+          "apiKey": "sk-test-inline",
+          "baseURL": "https://gw.example.test/v1",
+          "models": [
+            "m-1",
+            "m-2"
+          ],
+          "type": "openai"
+        }
+      }
+    }
+  },
+  "home": "<NEMO_HOME>",
+  "op": "loadConfig"
+}

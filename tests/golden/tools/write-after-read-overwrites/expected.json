@@ -1,0 +1,37 @@
+{
+  "steps": [
+    {
+      "content": "     1\told",
+      "isError": false,
+      "soft": false,
+      "tool": "Read"
+    },
+    {
+      "content": "Updated <TMP>/ws/a.txt (3 bytes).",
+      "isError": false,
+      "meta": {
+        "bytes": 3,
+        "created": false
+      },
+      "soft": false,
+      "tool": "Write"
+    },
+    {
+      "content": "Updated <TMP>/ws/a.txt (5 bytes).",
+      "isError": false,
+      "meta": {
+        "bytes": 5,
+        "created": false
+      },
+      "soft": false,
+      "tool": "Write"
+    }
+  ],
+  "tree_after": [
+    {
+      "content": "newer",
+      "path": "a.txt",
+      "type": "file"
+    }
+  ]
+}

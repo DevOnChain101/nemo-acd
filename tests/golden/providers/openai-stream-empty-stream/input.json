@@ -1,0 +1,15 @@
+{
+  "chunks": [],
+  "op": "stream",
+  "provider": "openai",
+  "req": {
+    "maxTokens": 100,
+    "messages": [
+      {
+        "content": "hi",
+        "role": "user"
+      }
+    ],
+    "model": "gpt-5"
+  }
+}

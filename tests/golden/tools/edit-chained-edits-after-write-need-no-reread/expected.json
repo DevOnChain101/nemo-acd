@@ -1,0 +1,35 @@
+{
+  "steps": [
+    {
+      "content": "     1\ta b",
+      "isError": false,
+      "soft": false,
+      "tool": "Read"
+    },
+    {
+      "content": "Edited <TMP>/ws/a.txt:\n     1\tA b\n     2\t",
+      "isError": false,
+      "meta": {
+        "replacements": 1
+      },
+      "soft": false,
+      "tool": "Edit"
+    },
+    {
+      "content": "Edited <TMP>/ws/a.txt:\n     1\tA B\n     2\t",
+      "isError": false,
+      "meta": {
+        "replacements": 1
+      },
+      "soft": false,
+      "tool": "Edit"
+    }
+  ],
+  "tree_after": [
+    {
+      "content": "A B\n",
+      "path": "a.txt",
+      "type": "file"
+    }
+  ]
+}

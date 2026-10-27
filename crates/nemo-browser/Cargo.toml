@@ -1,0 +1,24 @@
+[package]
+name = "nemo-browser"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+nemo-config = { path = "../nemo-config" }
+base64 = "0.22"
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
+process-wrap = { version = "10", default-features = false, features = ["tokio1", "process-group", "job-object", "kill-on-drop"] }
+regex = "1.13.1"
+serde_json = "1.0.154"
+tempfile = "3.27.0"
+tokio = { version = "1.54.1", default-features = false, features = ["rt", "time", "net", "io-util", "macros", "sync"] }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect"] }
+url = "2.5.8"
+
+[dev-dependencies]
+tokio = { version = "1.54.1", default-features = false, features = ["rt-multi-thread"] }

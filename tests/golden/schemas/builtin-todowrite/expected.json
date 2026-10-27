@@ -1,0 +1,39 @@
+{
+  "description": "Replaces the current todo list with the given list. Use this to plan multi-step work and track progress: keep exactly one task in_progress at a time, mark tasks completed as soon as they are done, and keep the list current rather than batching updates. Each todo needs a content (imperative form, e.g. \"Run tests\") and activeForm (present continuous form shown while in progress, e.g. \"Running tests\").",
+  "input_schema": {
+    "properties": {
+      "todos": {
+        "items": {
+          "properties": {
+            "activeForm": {
+              "type": "string"
+            },
+            "content": {
+              "type": "string"
+            },
+            "status": {
+              "enum": [
+                "pending",
+                "in_progress",
+                "completed"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "content",
+            "status",
+            "activeForm"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "todos"
+    ],
+    "type": "object"
+  },
+  "name": "TodoWrite"
+}

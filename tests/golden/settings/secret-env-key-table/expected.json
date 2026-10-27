@@ -1,0 +1,70 @@
+[
+  {
+    "key": "PATH",
+    "secret": false
+  },
+  {
+    "key": "HOME",
+    "secret": false
+  },
+  {
+    "key": "ANTHROPIC_API_KEY",
+    "secret": true
+  },
+  {
+    "key": "OPENAI_API_KEY",
+    "secret": true
+  },
+  {
+    "key": "NEMO_API_KEY",
+    "secret": true
+  },
+  {
+    "key": "NEMO_AUTH_TOKEN",
+    "secret": true
+  },
+  {
+    "key": "GITHUB_TOKEN",
+    "secret": true
+  },
+  {
+    "key": "MY_SECRET",
+    "secret": true
+  },
+  {
+    "key": "DB_PASSWORD",
+    "secret": true
+  },
+  {
+    "key": "AWS_SECRET_ACCESS_KEY",
+    "secret": true
+  },
+  {
+    "key": "api_key",
+    "secret": true
+  },
+  {
+    "key": "Token",
+    "secret": true
+  },
+  {
+    "key": "FOO",
+    "secret": false
+  },
+  {
+    "key": "EDITOR",
+    "secret": false
+  },
+  {
+    "key": "NODE_ENV",
+    "secret": false
+  },
+  {
+    "key": "KEYBOARD",
+    "secret": true
+  },
+  {
+    "key": "MONKEY",
+    "secret": true
+  }
+]

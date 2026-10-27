@@ -1,0 +1,66 @@
+[
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "plan": {
+        "decision": "deny",
+        "reason": "plan mode: read-only"
+      }
+    },
+    "input": {
+      "file_path": "<TMP>/outside/x"
+    },
+    "tool": "Write"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "plan": {
+        "decision": "deny",
+        "reason": "plan mode: read-only"
+      }
+    },
+    "input": {
+      "file_path": "<TMP>/ws/x"
+    },
+    "tool": "Edit"
+  }
+]

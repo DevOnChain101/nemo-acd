@@ -1,0 +1,23 @@
+{
+  "config": {
+    "aliases": {
+      "fable": null,
+      "haiku": null,
+      "opus": null,
+      "sonnet": null
+    },
+    "maxTokens": 32000,
+    "model": "b/m-2",
+    "profiles": {},
+    "providers": {
+      "a": {
+        "models": []
+      },
+      "b": {
+        "models": []
+      }
+    }
+  },
+  "op": "parseModel",
+  "str": "zzz"
+}

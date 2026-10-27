@@ -1,0 +1,116 @@
+{
+  "phase": "idle",
+  "session": {
+    "activity": [
+      {
+        "kind": "prompt",
+        "text": "first prompt",
+        "ts": 1790899201000
+      },
+      {
+        "kind": "text",
+        "text": "ok",
+        "ts": 1790899202000
+      },
+      {
+        "kind": "prompt",
+        "text": "é 日本 second",
+        "ts": 1790899203000
+      }
+    ],
+    "agents": {},
+    "components": {
+      "tool:Bash": {
+        "count": 1,
+        "error": false,
+        "firstSeen": 1790899202000,
+        "key": "tool:Bash",
+        "kind": "tool",
+        "lastEnd": null,
+        "lastStart": 1790899202000,
+        "name": "Bash",
+        "open": 0,
+        "sub": "sleep"
+      }
+    },
+    "contextUsed": 160,
+    "cwd": "/work/proj",
+    "errors": 0,
+    "feed": [
+      {
+        "kind": "prompt",
+        "text": "first prompt",
+        "ts": 1790899201000
+      },
+      {
+        "kind": "text",
+        "text": "ok",
+        "ts": 1790899202000
+      },
+      {
+        "kind": "tool",
+        "text": "Bash sleep",
+        "ts": 1790899202000
+      },
+      {
+        "kind": "prompt",
+        "text": "é 日本 second",
+        "ts": 1790899203000
+      }
+    ],
+    "gitBranch": "",
+    "hookCounts": {},
+    "id": "s1",
+    "lastActivity": 1790899203000,
+    "lastAssistantAt": 1790899203000,
+    "lastPrompt": "é 日本 second",
+    "lastPromptAt": 1790899203000,
+    "lastStopReason": "end_turn",
+    "lastUserAt": 1790899203000,
+    "lastVerify": null,
+    "memoryWrites": 0,
+    "model": "claude-opus-5.5",
+    "project": "proj",
+    "prompts": 2,
+    "skills": {},
+    "startedAt": 1790899201000,
+    "timeline": [
+      {
+        "total": 160,
+        "ts": 1790899202000
+      }
+    ],
+    "todos": [],
+    "tokens": {
+      "cacheCreate": 0,
+      "cacheRead": 50,
+      "input": 100,
+      "output": 10
+    },
+    "toolCounts": {
+      "Bash": 1
+    },
+    "tools": {
+      "t1": {
+        "cat": "execute",
+        "compKey": "tool:Bash",
+        "end": 1790899203000,
+        "id": "t1",
+        "isError": false,
+        "name": "Bash",
+        "start": 1790899202000,
+        "summary": "sleep"
+      }
+    },
+    "turnReplied": false,
+    "usageById": {
+      "m1": {
+        "cacheCreate": 0,
+        "cacheRead": 50,
+        "input": 100,
+        "output": 10
+      }
+    },
+    "version": ""
+  }
+}

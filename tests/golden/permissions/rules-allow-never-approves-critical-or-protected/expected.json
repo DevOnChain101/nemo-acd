@@ -1,0 +1,198 @@
+[
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "removes a critical path (root, home, working directory or a parent)"
+      },
+      "auto": {
+        "critical": true,
+        "decision": "ask",
+        "reason": "removes a critical path (root, home, working directory or a parent)"
+      },
+      "bypassPermissions": {
+        "decision": "ask",
+        "reason": "removes a critical path (root, home, working directory or a parent)"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "removes a critical path (root, home, working directory or a parent)"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "dontAsk mode: critical path"
+      },
+      "plan": {
+        "critical": true,
+        "decision": "ask",
+        "reason": "removes a critical path (root, home, working directory or a parent)"
+      }
+    },
+    "input": {
+      "command": "rm -rf ~"
+    },
+    "tool": "Bash"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "removes a critical path (root, home, working directory or a parent)"
+      },
+      "auto": {
+        "critical": true,
+        "decision": "ask",
+        "reason": "removes a critical path (root, home, working directory or a parent)"
+      },
+      "bypassPermissions": {
+        "decision": "ask",
+        "reason": "removes a critical path (root, home, working directory or a parent)"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "removes a critical path (root, home, working directory or a parent)"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "dontAsk mode: critical path"
+      },
+      "plan": {
+        "critical": true,
+        "decision": "ask",
+        "reason": "removes a critical path (root, home, working directory or a parent)"
+      }
+    },
+    "input": {
+      "command": "rm -rf <TMP>/ws"
+    },
+    "tool": "Bash"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "protected path requires confirmation"
+      },
+      "auto": {
+        "decision": "classify",
+        "reason": "protected path: classifier review"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "protected path requires confirmation"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "dontAsk mode: protected path"
+      },
+      "plan": {
+        "decision": "classify",
+        "reason": "protected path: classifier review"
+      }
+    },
+    "input": {
+      "command": "touch .git/x"
+    },
+    "tool": "Bash"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "plan": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      }
+    },
+    "input": {
+      "command": "rm x"
+    },
+    "tool": "Bash"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "protected path requires confirmation"
+      },
+      "auto": {
+        "decision": "classify",
+        "reason": "protected path: classifier review"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "protected path requires confirmation"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "dontAsk mode: protected path"
+      },
+      "plan": {
+        "decision": "deny",
+        "reason": "plan mode: read-only"
+      }
+    },
+    "input": {
+      "file_path": "<TMP>/ws/.git/config"
+    },
+    "tool": "Edit"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "protected path requires confirmation"
+      },
+      "auto": {
+        "decision": "classify",
+        "reason": "protected path: classifier review"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "protected path requires confirmation"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "dontAsk mode: protected path"
+      },
+      "plan": {
+        "decision": "deny",
+        "reason": "plan mode: read-only"
+      }
+    },
+    "input": {
+      "file_path": "<TMP>/ws/.git/config"
+    },
+    "tool": "Write"
+  }
+]

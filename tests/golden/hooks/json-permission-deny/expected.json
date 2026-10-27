@@ -1,0 +1,15 @@
+{
+  "additionalContext": [],
+  "blocked": false,
+  "decision": "deny",
+  "reason": "policy says no",
+  "results": [
+    {
+      "command": "printf '%s' '{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"policy says no\"}}'",
+      "exitCode": 0,
+      "stderr": "",
+      "stdout": "{\"hookSpecificOutput\":{\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"policy says no\"}}"
+    }
+  ],
+  "stop": false
+}

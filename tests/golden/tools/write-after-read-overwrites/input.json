@@ -1,0 +1,28 @@
+{
+  "dirs": [],
+  "files": {
+    "<TMP>/ws/a.txt": "old"
+  },
+  "steps": [
+    {
+      "input": {
+        "file_path": "a.txt"
+      },
+      "tool": "Read"
+    },
+    {
+      "input": {
+        "content": "new",
+        "file_path": "a.txt"
+      },
+      "tool": "Write"
+    },
+    {
+      "input": {
+        "content": "newer",
+        "file_path": "a.txt"
+      },
+      "tool": "Write"
+    }
+  ]
+}

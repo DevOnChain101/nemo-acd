@@ -1,0 +1,19 @@
+{
+  "dirs": [],
+  "files": {},
+  "steps": [
+    {
+      "input": {},
+      "tool": "Read"
+    },
+    {
+      "input": {
+        "file_path": ""
+      },
+      "tool": "Read"
+    },
+    {
+      "tool": "Read"
+    }
+  ]
+}

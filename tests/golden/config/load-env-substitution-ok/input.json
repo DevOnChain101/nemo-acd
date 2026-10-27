@@ -1,0 +1,23 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {
+    "MY_HDR": "h",
+    "MY_KEY": "sk-from-env"
+  },
+  "files": {
+    "<NEMO_HOME>/nemo.json": {
+      "$schema": "config.json/v1",
+      "providers": {
+        "p": {
+          "apiKey": "{env:MY_KEY}",
+          "headers": {
+            "Auth": "{env:MY_HDR}"
+          },
+          "type": "openai"
+        }
+      }
+    }
+  },
+  "home": "<NEMO_HOME>",
+  "op": "loadConfig"
+}

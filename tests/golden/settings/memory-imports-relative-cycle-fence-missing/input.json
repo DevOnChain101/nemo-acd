@@ -1,0 +1,10 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<TMP>/ws/AGENTS.md": "top\n@./a.md\n```\n@./skipped.md\n```\n@./missing.md",
+    "<TMP>/ws/a.md": "A text\n@./AGENTS.md",
+    "<TMP>/ws/skipped.md": "SKIPPED"
+  },
+  "op": "workspace"
+}

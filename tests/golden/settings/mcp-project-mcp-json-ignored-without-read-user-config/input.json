@@ -1,0 +1,27 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<TMP>/ws/.mcp.json": {
+      "mcpServers": {
+        "alpha": {
+          "args": [
+            "a.js"
+          ],
+          "command": "node",
+          "env": {
+            "SECRET": "x"
+          }
+        },
+        "remote": {
+          "headers": {
+            "Authorization": "Bearer z"
+          },
+          "type": "http",
+          "url": "https://user:pw@h.example.test/mcp?token=abc"
+        }
+      }
+    }
+  },
+  "op": "workspace"
+}

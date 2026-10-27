@@ -1,0 +1,110 @@
+{
+  "items": [
+    {
+      "images": [],
+      "kind": "user",
+      "text": "real one",
+      "ts": 1790899201000
+    },
+    {
+      "kind": "note",
+      "text": "interrupted",
+      "tone": "warn",
+      "ts": 1790899203000
+    },
+    {
+      "kind": "user",
+      "text": "/x",
+      "ts": 1790899205000
+    },
+    {
+      "images": [],
+      "kind": "user",
+      "text": "second",
+      "ts": 1790899206000
+    }
+  ],
+  "phase": {
+    "phase": "idle",
+    "running": [],
+    "runningAgents": []
+  },
+  "session": {
+    "activity": [
+      {
+        "kind": "prompt",
+        "text": "real one",
+        "ts": 1790899201000
+      },
+      {
+        "kind": "prompt",
+        "text": "second",
+        "ts": 1790899206000
+      }
+    ],
+    "agents": {},
+    "components": {
+      "cmd:/x": {
+        "count": 1,
+        "error": false,
+        "firstSeen": 1790899205000,
+        "key": "cmd:/x",
+        "kind": "cmd",
+        "lastEnd": 1790899205000,
+        "lastStart": 1790899205000,
+        "name": "/x",
+        "open": 0,
+        "sub": "slash command"
+      }
+    },
+    "contextUsed": 0,
+    "cwd": "",
+    "errors": 0,
+    "feed": [
+      {
+        "kind": "prompt",
+        "text": "real one",
+        "ts": 1790899201000
+      },
+      {
+        "kind": "cmd",
+        "text": "Command /x",
+        "ts": 1790899205000
+      },
+      {
+        "kind": "prompt",
+        "text": "second",
+        "ts": 1790899206000
+      }
+    ],
+    "gitBranch": "",
+    "hookCounts": {},
+    "id": "sess",
+    "lastActivity": 1790899208000,
+    "lastAssistantAt": null,
+    "lastPrompt": "second",
+    "lastPromptAt": 1790899206000,
+    "lastStopReason": null,
+    "lastUserAt": 1790899208000,
+    "lastVerify": null,
+    "memoryWrites": 0,
+    "model": "",
+    "prompts": 2,
+    "skills": {},
+    "startedAt": 1790899201000,
+    "timeline": [],
+    "todos": [],
+    "tokens": {
+      "cacheCreate": 0,
+      "cacheRead": 0,
+      "input": 0,
+      "output": 0
+    },
+    "toolCounts": {},
+    "tools": {},
+    "turnReplied": false,
+    "usageById": {},
+    "version": ""
+  },
+  "total_tokens": 0
+}

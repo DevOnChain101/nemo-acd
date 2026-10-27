@@ -1,0 +1,9 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<TMP>/ws/.nemo/config.json": "not json"
+  },
+  "home": "<NEMO_HOME>",
+  "op": "loadConfig"
+}

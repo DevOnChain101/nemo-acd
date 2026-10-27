@@ -1,0 +1,28 @@
+{
+  "config": {
+    "aliases": {
+      "fable": null,
+      "haiku": null,
+      "opus": null,
+      "sonnet": null
+    },
+    "maxTokens": 32000,
+    "profiles": {},
+    "providers": {
+      "a": {
+        "models": [
+          "1"
+        ]
+      },
+      "b": {
+        "models": [
+          "2"
+        ]
+      }
+    }
+  },
+  "op": "listModels",
+  "providerIds": [
+    "b"
+  ]
+}

@@ -1,0 +1,39 @@
+[
+  {
+    "capabilities": {
+      "vision": true
+    },
+    "contextWindow": 128000,
+    "displayName": "gw/a",
+    "id": "gw/a",
+    "maxOutput": 8192
+  },
+  {
+    "capabilities": {},
+    "contextWindow": 1000,
+    "displayName": "b",
+    "id": "b",
+    "maxOutput": null
+  },
+  {
+    "capabilities": {},
+    "contextWindow": 5,
+    "displayName": "C!",
+    "id": "c",
+    "maxOutput": null
+  },
+  {
+    "capabilities": {},
+    "contextWindow": 0,
+    "displayName": "d",
+    "id": "d",
+    "maxOutput": null
+  },
+  {
+    "capabilities": {},
+    "contextWindow": 7,
+    "displayName": "e",
+    "id": "e",
+    "maxOutput": null
+  }
+]

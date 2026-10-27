@@ -1,0 +1,29 @@
+{
+  "cases": [
+    {
+      "args": "foo.js bar",
+      "body": "Review $1 carefully. $ARGUMENTS"
+    },
+    {
+      "args": "extra text",
+      "body": "Commit.\nNo placeholder."
+    },
+    {
+      "args": "",
+      "body": "Commit."
+    },
+    {
+      "args": "a",
+      "body": "$1 $2 $3"
+    },
+    {
+      "args": "x y",
+      "body": "$ARGUMENTS and $ARGUMENTS"
+    },
+    {
+      "args": null,
+      "body": "Plain"
+    }
+  ],
+  "op": "expandCommand"
+}

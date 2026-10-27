@@ -1,0 +1,49 @@
+{
+  "chunks": [
+    {
+      "message": {
+        "id": "msg_1",
+        "model": "m",
+        "usage": {
+          "input_tokens": 1,
+          "output_tokens": 0
+        }
+      },
+      "type": "message_start"
+    },
+    {
+      "type": "message_stop"
+    }
+  ],
+  "op": "stream",
+  "provider": "anthropic",
+  "req": {
+    "maxTokens": 100,
+    "messages": [
+      {
+        "content": [
+          {
+            "text": "a",
+            "type": "text"
+          },
+          {
+            "text": "b",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      }
+    ],
+    "model": "claude-sonnet-5",
+    "system": [
+      {
+        "text": "one",
+        "type": "text"
+      },
+      {
+        "text": "two",
+        "type": "text"
+      }
+    ]
+  }
+}

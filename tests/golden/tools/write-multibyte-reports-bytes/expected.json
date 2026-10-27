@@ -1,0 +1,21 @@
+{
+  "steps": [
+    {
+      "content": "Created <TMP>/ws/u.txt (13 bytes).",
+      "isError": false,
+      "meta": {
+        "bytes": 13,
+        "created": true
+      },
+      "soft": false,
+      "tool": "Write"
+    }
+  ],
+  "tree_after": [
+    {
+      "content": "héllo 日本",
+      "path": "u.txt",
+      "type": "file"
+    }
+  ]
+}

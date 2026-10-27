@@ -1,0 +1,5 @@
+{
+  "predicates-read-only": "F4/L2: bare `env` is no longer read-only (it prints every secret in the environment); `env` also drops out of auto-safe",
+  "rules-deny-wins-everywhere": "W2: the bare `Bash` allow rule now applies, so `ls` is allowed by the rule (was: rule ignored, allowed as read-only); the deny cases are unchanged",
+  "suggestions-bash-subcommand-tools": "L5: `python3 -m pytest` is suggested as the exact command, not `python3 -m:*` (an interpreter prefix rule allows arbitrary code)"
+}

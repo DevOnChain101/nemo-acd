@@ -1,0 +1,37 @@
+{
+  "entries": [
+    {
+      "cwd": "/work/proj",
+      "gitBranch": "main",
+      "message": {
+        "content": [
+          {
+            "text": "hi",
+            "type": "text"
+          }
+        ],
+        "id": "m1",
+        "model": "claude-opus-5.5"
+      },
+      "timestamp": "2026-10-02T00:00:01.000Z",
+      "type": "assistant",
+      "version": "1.2.3"
+    },
+    {
+      "message": {
+        "content": [
+          {
+            "text": "syn",
+            "type": "text"
+          }
+        ],
+        "id": "m2",
+        "model": "<synthetic>"
+      },
+      "timestamp": "2026-10-02T00:00:02.000Z",
+      "type": "assistant"
+    }
+  ],
+  "now": 1790899800000,
+  "op": "replay"
+}

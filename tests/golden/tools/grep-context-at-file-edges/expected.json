@@ -1,0 +1,17 @@
+{
+  "steps": [
+    {
+      "content": "<TMP>/ws/a.txt:1:line 1\n<TMP>/ws/a.txt:2-line 2\n<TMP>/ws/a.txt:3-line 3\n<TMP>/ws/a.txt:4-\n--",
+      "isError": false,
+      "soft": false,
+      "tool": "Grep"
+    }
+  ],
+  "tree_after": [
+    {
+      "content": "line 1\nline 2\nline 3\n",
+      "path": "a.txt",
+      "type": "file"
+    }
+  ]
+}

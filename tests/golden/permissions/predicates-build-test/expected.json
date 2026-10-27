@@ -1,0 +1,44 @@
+[
+  {
+    "autoSafe": true,
+    "command": "npm test",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  },
+  {
+    "autoSafe": true,
+    "command": "npm run lint",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  },
+  {
+    "autoSafe": true,
+    "command": "node --test x",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  },
+  {
+    "autoSafe": true,
+    "command": "node --check x",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  },
+  {
+    "autoSafe": true,
+    "command": "npx tsc --noEmit",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  },
+  {
+    "autoSafe": false,
+    "command": "cargo test",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  },
+  {
+    "autoSafe": false,
+    "command": "cargo check",
+    "isSafeBashCommandIsAutoSafe": true,
+    "readOnly": false
+  }
+]

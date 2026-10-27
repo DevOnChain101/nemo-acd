@@ -1,0 +1,7 @@
+{
+  "args": {
+    "credential": "sk-proj-1",
+    "id": "x"
+  },
+  "op": "detectProtocol"
+}

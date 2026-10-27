@@ -1,0 +1,53 @@
+{
+  "value": {
+    "$schema": "config.json/v1",
+    "_explicitAliases": [],
+    "_modelExplicit": false,
+    "_warnings": [],
+    "aliases": {
+      "fable": null,
+      "haiku": null,
+      "opus": null,
+      "sonnet": null
+    },
+    "maxTokens": 32000,
+    "profiles": {},
+    "providers": {
+      "a1": {
+        "baseURL": "https://api.anthropic.com",
+        "type": "anthropic",
+        "typeSource": "url"
+      },
+      "a2": {
+        "baseURL": "https://x.example.test/anthropic/v1",
+        "type": "anthropic",
+        "typeSource": "url"
+      },
+      "a3": {
+        "baseURL": "https://api.openai.com/v1",
+        "type": "openai",
+        "typeSource": "url"
+      },
+      "a4": {
+        "npm": "@ai-sdk/openai-compatible",
+        "type": "openai",
+        "typeSource": "npm"
+      },
+      "a5": {
+        "type": "openai",
+        "typeSource": "default"
+      },
+      "anthropic": {
+        "headers": {},
+        "models": [],
+        "type": "anthropic",
+        "typeSource": "id"
+      },
+      "openai": {
+        "models": [],
+        "type": "openai",
+        "typeSource": "id"
+      }
+    }
+  }
+}

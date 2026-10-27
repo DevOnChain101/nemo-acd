@@ -1,0 +1,25 @@
+{
+  "config": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "printf '%s' 'mcp'",
+            "type": "command"
+          }
+        ],
+        "matcher": "mcp__.*__read"
+      }
+    ]
+  },
+  "event": "PreToolUse",
+  "op": "run",
+  "opts": {},
+  "payload": {
+    "tool_input": {
+      "command": "ls"
+    },
+    "tool_name": "Bash"
+  },
+  "target": "mcp__srv__read"
+}

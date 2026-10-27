@@ -1,0 +1,16 @@
+{
+  "auto_memory": {
+    "base": "<HOME>/.claude",
+    "content": "auto memory from claude"
+  },
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<HOME>/.nemo/nemo.json": {
+      "claude": {
+        "readUserConfig": true
+      }
+    }
+  },
+  "op": "workspace"
+}

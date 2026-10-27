@@ -1,0 +1,29 @@
+{
+  "steps": [
+    {
+      "content": "Created <TMP>/ws/deep/er/new.txt (5 bytes).",
+      "isError": false,
+      "meta": {
+        "bytes": 5,
+        "created": true
+      },
+      "soft": false,
+      "tool": "Write"
+    }
+  ],
+  "tree_after": [
+    {
+      "path": "deep",
+      "type": "dir"
+    },
+    {
+      "path": "deep/er",
+      "type": "dir"
+    },
+    {
+      "content": "hello",
+      "path": "deep/er/new.txt",
+      "type": "file"
+    }
+  ]
+}

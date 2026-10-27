@@ -1,0 +1,68 @@
+[
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      },
+      "auto": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      },
+      "bypassPermissions": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      },
+      "default": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      },
+      "plan": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      }
+    },
+    "input": {
+      "file_path": "<HOME>/.ssh/id_rsa"
+    },
+    "tool": "Read"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "auto": {
+        "decision": "ask",
+        "outsideRead": "<HOME>/.bashrc",
+        "reason": "read outside the working directories"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "plan": {
+        "decision": "ask",
+        "outsideRead": "<HOME>/.bashrc",
+        "reason": "read outside the working directories"
+      }
+    },
+    "input": {
+      "file_path": "<HOME>/.bashrc"
+    },
+    "tool": "Read"
+  }
+]

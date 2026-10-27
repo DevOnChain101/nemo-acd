@@ -1,0 +1,32 @@
+{
+  "create_call_option_keys": [
+    "signal"
+  ],
+  "events": [
+    {
+      "message": {
+        "id": "msg_1",
+        "model": "m",
+        "usage": {
+          "input_tokens": 1,
+          "output_tokens": 0
+        }
+      },
+      "type": "message_start"
+    },
+    {
+      "type": "message_stop"
+    }
+  ],
+  "provider_type": "anthropic",
+  "wire_body": {
+    "max_tokens": 10,
+    "messages": [],
+    "model": "m",
+    "stream": true,
+    "thinking": {
+      "budget_tokens": 2048,
+      "type": "enabled"
+    }
+  }
+}

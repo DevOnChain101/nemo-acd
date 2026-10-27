@@ -1,0 +1,41 @@
+{
+  "description": "Edits one cell of a Jupyter notebook (.ipynb). edit_mode \"replace\" (default) swaps the cell's source, \"insert\" adds a new cell after the cell with cell_id (or at the top when cell_id is omitted), \"delete\" removes the cell. The notebook must have been Read in this conversation first. Cells are identified by their id as shown by Read, or \"cell-<n>\" (0-based).",
+  "input_schema": {
+    "properties": {
+      "cell_id": {
+        "description": "Id of the cell to edit; for insert, the new cell goes after it.",
+        "type": "string"
+      },
+      "cell_type": {
+        "description": "Cell type; required for insert.",
+        "enum": [
+          "code",
+          "markdown"
+        ],
+        "type": "string"
+      },
+      "edit_mode": {
+        "description": "Defaults to replace.",
+        "enum": [
+          "replace",
+          "insert",
+          "delete"
+        ],
+        "type": "string"
+      },
+      "new_source": {
+        "description": "The new source of the cell (not needed for delete).",
+        "type": "string"
+      },
+      "notebook_path": {
+        "description": "Absolute or cwd-relative path to the .ipynb file.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "notebook_path"
+    ],
+    "type": "object"
+  },
+  "name": "NotebookEdit"
+}

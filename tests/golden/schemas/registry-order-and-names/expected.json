@@ -1,0 +1,31 @@
+{
+  "agent": [
+    "Task",
+    "AskUserQuestion",
+    "ExitPlanMode"
+  ],
+  "builtin": [
+    "Bash",
+    "BashOutput",
+    "KillShell",
+    "Read",
+    "Write",
+    "Edit",
+    "NotebookEdit",
+    "Glob",
+    "Grep",
+    "TodoWrite",
+    "WebFetch",
+    "WebSearch",
+    "Skill",
+    "TaskCreate",
+    "TaskUpdate",
+    "TaskList",
+    "TaskGet"
+  ],
+  "schema_keys": [
+    "description",
+    "input_schema",
+    "name"
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "value": {
+    "$schema": "config.json/v1",
+    "_explicitAliases": [],
+    "_modelExplicit": true,
+    "_warnings": [],
+    "aliases": {
+      "fable": null,
+      "haiku": null,
+      "opus": null,
+      "sonnet": null
+    },
+    "maxTokens": 32000,
+    "model": "gateway/foo",
+    "profiles": {},
+    "providers": {
+      "anthropic": {
+        "headers": {},
+        "models": [],
+        "type": "anthropic",
+        "typeSource": "id"
+      },
+      "gateway": {
+        "baseURL": "https://gw2.example.test/v1",
+        "models": [],
+        "type": "openai",
+        "typeSource": "default"
+      },
+      "openai": {
+        "models": [],
+        "type": "openai",
+        "typeSource": "id"
+      }
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "agents": [],
+  "autoMemoryDir": "<HOME>/.claude/projects/<SANITIZED_CWD>/memory",
+  "claudeDir": "<HOME>/.claude",
+  "commands": [],
+  "mcpServers": [
+    {
+      "command": "nemo-project",
+      "enabled": true,
+      "name": "dup",
+      "scope": "nemo",
+      "source": "<TMP>/ws/.nemo/config.json",
+      "type": "stdio"
+    }
+  ],
+  "memory": [],
+  "projectRoot": "<TMP>/ws",
+  "settings": {
+    "disableAllHooks": false,
+    "hooks": {},
+    "mcpApproval": {
+      "disabledMcpjsonServers": [],
+      "enableAllProjectMcpServers": false,
+      "enabledMcpjsonServers": []
+    },
+    "permissions": {
+      "additionalDirectories": [],
+      "allow": [],
+      "ask": [],
+      "defaultMode": "default",
+      "deny": []
+    }
+  },
+  "skills": [
+    {
+      "name": "nemocode-config",
+      "source": "built-in"
+    }
+  ],
+  "warnings": []
+}

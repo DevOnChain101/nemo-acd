@@ -1,0 +1,19 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<NEMO_HOME>/nemo.json": {
+      "$schema": "config.json/v1",
+      "providers": {
+        "local": {
+          "apiKey": false,
+          "authToken": "ignored",
+          "baseURL": "http://localhost:11434/v1",
+          "type": "openai"
+        }
+      }
+    }
+  },
+  "home": "<NEMO_HOME>",
+  "op": "loadConfig"
+}

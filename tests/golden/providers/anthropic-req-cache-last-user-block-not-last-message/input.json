@@ -1,0 +1,79 @@
+{
+  "chunks": [
+    {
+      "message": {
+        "id": "msg_1",
+        "model": "m",
+        "usage": {
+          "input_tokens": 1,
+          "output_tokens": 0
+        }
+      },
+      "type": "message_start"
+    },
+    {
+      "type": "message_stop"
+    }
+  ],
+  "op": "stream",
+  "provider": "anthropic",
+  "req": {
+    "maxTokens": 10,
+    "messages": [
+      {
+        "content": [
+          {
+            "text": "run ls",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "thinking": "secret reasoning",
+            "type": "thinking"
+          },
+          {
+            "text": "Sure. ",
+            "type": "text"
+          },
+          {
+            "id": "call_1",
+            "input": {
+              "command": "ls"
+            },
+            "name": "Bash",
+            "type": "tool_use"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "content": "file.txt",
+            "tool_use_id": "call_1",
+            "type": "tool_result"
+          },
+          {
+            "text": "now what?",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "text": "tail",
+            "type": "text"
+          }
+        ],
+        "role": "assistant"
+      }
+    ],
+    "model": "m"
+  }
+}

@@ -1,0 +1,34 @@
+[
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "plan": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      }
+    },
+    "input": {
+      "file_path": "<TMP>/outside/f.txt"
+    },
+    "tool": "Read"
+  }
+]

@@ -1,0 +1,14 @@
+{
+  "dirs": [],
+  "files": {
+    "<TMP>/ws/a.txt": "héllo\n日本語\n😀\n"
+  },
+  "steps": [
+    {
+      "input": {
+        "file_path": "a.txt"
+      },
+      "tool": "Read"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "env": {
+    "A": "user",
+    "B": "real",
+    "KEEP": "k"
+  },
+  "files": {
+    "<NEMO_HOME>/settings.json": {
+      "env": {
+        "A": "user",
+        "B": "user"
+      }
+    },
+    "<TMP>/ws/.nemo/settings.json": {
+      "env": {
+        "A": "proj",
+        "B": "proj",
+        "C": "proj"
+      }
+    }
+  },
+  "op": "agentEnv"
+}

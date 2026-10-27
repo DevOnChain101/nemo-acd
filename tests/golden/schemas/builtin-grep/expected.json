@@ -1,0 +1,65 @@
+{
+  "description": "Searches file contents using regular expressions (ripgrep syntax). Prefer this over `grep`/`find` in Bash. Supports filtering by glob or file type, and \"files_with_matches\" (default), \"content\" or \"count\" output modes with optional -A/-B/-C context lines. Use multiline: true for patterns that span multiple lines.",
+  "input_schema": {
+    "properties": {
+      "-A": {
+        "description": "Lines of context to show after each match (content mode).",
+        "type": "number"
+      },
+      "-B": {
+        "description": "Lines of context to show before each match (content mode).",
+        "type": "number"
+      },
+      "-C": {
+        "description": "Lines of context to show before and after each match (content mode).",
+        "type": "number"
+      },
+      "-i": {
+        "description": "Case insensitive search.",
+        "type": "boolean"
+      },
+      "-n": {
+        "description": "Show line numbers (content mode only; on by default).",
+        "type": "boolean"
+      },
+      "glob": {
+        "description": "Glob to filter files searched, e.g. \"*.js\".",
+        "type": "string"
+      },
+      "head_limit": {
+        "description": "Limit output to the first N lines/entries.",
+        "type": "number"
+      },
+      "multiline": {
+        "description": "Allow the pattern to match across multiple lines.",
+        "type": "boolean"
+      },
+      "output_mode": {
+        "description": "What to return. Defaults to files_with_matches.",
+        "enum": [
+          "files_with_matches",
+          "content",
+          "count"
+        ],
+        "type": "string"
+      },
+      "path": {
+        "description": "File or directory to search in. Defaults to the current working directory.",
+        "type": "string"
+      },
+      "pattern": {
+        "description": "Regular expression to search for.",
+        "type": "string"
+      },
+      "type": {
+        "description": "File type to search, e.g. \"js\", \"py\", \"rust\".",
+        "type": "string"
+      }
+    },
+    "required": [
+      "pattern"
+    ],
+    "type": "object"
+  },
+  "name": "Grep"
+}

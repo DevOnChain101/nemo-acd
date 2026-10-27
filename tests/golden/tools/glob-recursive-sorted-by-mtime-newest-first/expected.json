@@ -1,0 +1,76 @@
+{
+  "steps": [
+    {
+      "content": "<TMP>/ws/lib/e.js\n<TMP>/ws/src/deep/c.js\n<TMP>/ws/src/b.js\n<TMP>/ws/src/a.js",
+      "isError": false,
+      "soft": false,
+      "tool": "Glob"
+    }
+  ],
+  "tree_after": [
+    {
+      "path": ".git",
+      "type": "dir"
+    },
+    {
+      "content": "7",
+      "path": ".git/config",
+      "type": "file"
+    },
+    {
+      "content": "5",
+      "path": "README.md",
+      "type": "file"
+    },
+    {
+      "path": "lib",
+      "type": "dir"
+    },
+    {
+      "content": "8",
+      "path": "lib/e.js",
+      "type": "file"
+    },
+    {
+      "path": "node_modules",
+      "type": "dir"
+    },
+    {
+      "path": "node_modules/p",
+      "type": "dir"
+    },
+    {
+      "content": "6",
+      "path": "node_modules/p/i.js",
+      "type": "file"
+    },
+    {
+      "path": "src",
+      "type": "dir"
+    },
+    {
+      "content": "1",
+      "path": "src/a.js",
+      "type": "file"
+    },
+    {
+      "content": "2",
+      "path": "src/b.js",
+      "type": "file"
+    },
+    {
+      "content": "4",
+      "path": "src/d.ts",
+      "type": "file"
+    },
+    {
+      "path": "src/deep",
+      "type": "dir"
+    },
+    {
+      "content": "3",
+      "path": "src/deep/c.js",
+      "type": "file"
+    }
+  ]
+}

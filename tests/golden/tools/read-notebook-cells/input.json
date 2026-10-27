@@ -1,0 +1,43 @@
+{
+  "dirs": [],
+  "files": {
+    "<TMP>/ws/n.ipynb": {
+      "cells": [
+        {
+          "cell_type": "markdown",
+          "id": "c1",
+          "source": [
+            "# Title"
+          ]
+        },
+        {
+          "cell_type": "code",
+          "execution_count": 1,
+          "id": "c2",
+          "outputs": [
+            {
+              "name": "stdout",
+              "output_type": "stream",
+              "text": [
+                "1\n"
+              ]
+            }
+          ],
+          "source": [
+            "print(1)\n"
+          ]
+        }
+      ],
+      "metadata": {},
+      "nbformat": 4
+    }
+  },
+  "steps": [
+    {
+      "input": {
+        "file_path": "n.ipynb"
+      },
+      "tool": "Read"
+    }
+  ]
+}

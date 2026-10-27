@@ -1,0 +1,66 @@
+[
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "read-only command"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "read-only command"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "read-only command"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "read-only command"
+      },
+      "plan": {
+        "decision": "allow",
+        "reason": "plan mode: read-only command"
+      }
+    },
+    "input": {
+      "command": "ls"
+    },
+    "tool": "Bash"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "acceptEdits mode: file commands inside workspace"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "auto mode: file commands inside workspace"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "Bash requires confirmation"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "dontAsk mode"
+      },
+      "plan": {
+        "decision": "classify",
+        "reason": "plan mode: classifier review"
+      }
+    },
+    "input": {
+      "command": "touch a"
+    },
+    "tool": "Bash"
+  }
+]

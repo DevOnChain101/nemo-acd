@@ -1,0 +1,36 @@
+{
+  "autoMode": {},
+  "calls": [
+    {
+      "input": {
+        "file_path": "rel/new.txt"
+      },
+      "tool": "Write"
+    },
+    {
+      "input": {
+        "file_path": "rel/new.txt"
+      },
+      "tool": "Edit"
+    }
+  ],
+  "cwd": "<TMP>/ws",
+  "flags": {},
+  "fs": {
+    "dirs": [
+      "<TMP>/ws/sub"
+    ]
+  },
+  "home": "<HOME>",
+  "modes": [
+    "default",
+    "acceptEdits",
+    "plan",
+    "auto",
+    "dontAsk",
+    "bypassPermissions"
+  ],
+  "op": "check",
+  "rules": {},
+  "suggestions": true
+}

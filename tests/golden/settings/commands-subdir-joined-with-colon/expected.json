@@ -1,0 +1,51 @@
+{
+  "agents": [],
+  "autoMemoryDir": "<HOME>/.nemo/projects/<SANITIZED_CWD>/memory",
+  "claudeDir": "<HOME>/.claude",
+  "commands": [
+    {
+      "allowedTools": null,
+      "argumentHint": "",
+      "body": "Commit everything.\nNo placeholder here.",
+      "description": "Commit everything.",
+      "model": null,
+      "name": "git:commit",
+      "path": "<TMP>/ws/.nemo/commands/git/commit.md"
+    },
+    {
+      "allowedTools": null,
+      "argumentHint": "[file]",
+      "body": "Review $1 carefully. $ARGUMENTS",
+      "description": "Reviews code",
+      "model": null,
+      "name": "review",
+      "path": "<TMP>/ws/.nemo/commands/review.md"
+    }
+  ],
+  "mcpServers": [],
+  "memory": [],
+  "projectRoot": "<TMP>/ws",
+  "settings": {
+    "disableAllHooks": false,
+    "hooks": {},
+    "mcpApproval": {
+      "disabledMcpjsonServers": [],
+      "enableAllProjectMcpServers": false,
+      "enabledMcpjsonServers": []
+    },
+    "permissions": {
+      "additionalDirectories": [],
+      "allow": [],
+      "ask": [],
+      "defaultMode": "default",
+      "deny": []
+    }
+  },
+  "skills": [
+    {
+      "name": "nemocode-config",
+      "source": "built-in"
+    }
+  ],
+  "warnings": []
+}

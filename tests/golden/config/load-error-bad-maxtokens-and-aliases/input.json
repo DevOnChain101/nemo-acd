@@ -1,0 +1,15 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<NEMO_HOME>/nemo.json": {
+      "$schema": "config.json/v1",
+      "aliases": {
+        "a": ""
+      },
+      "maxTokens": -5
+    }
+  },
+  "home": "<NEMO_HOME>",
+  "op": "loadConfig"
+}

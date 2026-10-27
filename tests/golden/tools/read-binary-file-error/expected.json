@@ -1,0 +1,17 @@
+{
+  "steps": [
+    {
+      "content": "Read: <TMP>/ws/b.bin appears to be a binary file and cannot be displayed as text.",
+      "isError": true,
+      "soft": false,
+      "tool": "Read"
+    }
+  ],
+  "tree_after": [
+    {
+      "base64": "AAECAwQ=",
+      "path": "b.bin",
+      "type": "file"
+    }
+  ]
+}

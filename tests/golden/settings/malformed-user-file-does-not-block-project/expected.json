@@ -1,0 +1,36 @@
+{
+  "agents": [],
+  "autoMemoryDir": "<HOME>/.nemo/projects/<SANITIZED_CWD>/memory",
+  "claudeDir": "<HOME>/.claude",
+  "commands": [],
+  "mcpServers": [],
+  "memory": [],
+  "projectRoot": "<TMP>/ws",
+  "settings": {
+    "disableAllHooks": false,
+    "hooks": {},
+    "mcpApproval": {
+      "disabledMcpjsonServers": [],
+      "enableAllProjectMcpServers": false,
+      "enabledMcpjsonServers": []
+    },
+    "permissions": {
+      "additionalDirectories": [],
+      "allow": [
+        "Read"
+      ],
+      "ask": [],
+      "defaultMode": "default",
+      "deny": []
+    }
+  },
+  "skills": [
+    {
+      "name": "nemocode-config",
+      "source": "built-in"
+    }
+  ],
+  "warnings": [
+    "malformed JSON in <HOME>/.nemo/settings.json: Expected property name or '}' in JSON at position 1 (line 1 column 2)"
+  ]
+}

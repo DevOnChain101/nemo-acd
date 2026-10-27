@@ -1,0 +1,18 @@
+{
+  "create_call_option_keys": [
+    "signal"
+  ],
+  "events": [],
+  "provider_type": "anthropic",
+  "wire_body": {
+    "max_tokens": 100,
+    "messages": [
+      {
+        "content": "hi",
+        "role": "user"
+      }
+    ],
+    "model": "claude-sonnet-5",
+    "stream": true
+  }
+}

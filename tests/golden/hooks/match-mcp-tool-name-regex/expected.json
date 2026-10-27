@@ -1,0 +1,13 @@
+{
+  "additionalContext": [],
+  "blocked": false,
+  "results": [
+    {
+      "command": "printf '%s' 'mcp'",
+      "exitCode": 0,
+      "stderr": "",
+      "stdout": "mcp"
+    }
+  ],
+  "stop": false
+}

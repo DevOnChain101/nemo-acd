@@ -1,0 +1,45 @@
+{
+  "id": "fe-cart-total",
+  "version": 1,
+  "category": "frontend",
+  "fixture": "cart-total",
+  "requires": [
+    "node>=20"
+  ],
+  "prompt": "The cart shows \"Total: $0.30000000000000004\" for a 0.10 item plus a 0.20 item. It must show a properly formatted money amount. Fix it.",
+  "acceptance_criteria": [
+    {
+      "id": "c1",
+      "text": "totals render with two decimals",
+      "check": "node --test test/"
+    }
+  ],
+  "setup": [],
+  "hidden_checks": [
+    {
+      "id": "h1",
+      "command": "node --test hidden/",
+      "timeout_ms": 120000
+    }
+  ],
+  "regression_checks": [
+    {
+      "id": "r1",
+      "command": "node --test test/",
+      "timeout_ms": 120000
+    }
+  ],
+  "permission_mode": "acceptEdits",
+  "network": "deny",
+  "budget": {
+    "max_turns": 40,
+    "max_tool_calls": 150,
+    "max_wall_ms": 900000
+  },
+  "forbidden_paths": [
+    "hidden/**",
+    ".git/**"
+  ],
+  "expected_status": "completed",
+  "runs": 3
+}

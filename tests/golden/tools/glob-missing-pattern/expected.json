@@ -1,0 +1,11 @@
+{
+  "steps": [
+    {
+      "content": "Glob: \"pattern\" is required.",
+      "isError": true,
+      "soft": false,
+      "tool": "Glob"
+    }
+  ],
+  "tree_after": []
+}

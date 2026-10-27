@@ -1,0 +1,6 @@
+{
+  "args": {
+    "id": "openai"
+  },
+  "op": "detectProtocol"
+}

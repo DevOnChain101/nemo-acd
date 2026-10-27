@@ -1,0 +1,29 @@
+{
+  "entries": [
+    {
+      "message": {
+        "content": "hi",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:00.000Z",
+      "type": "user"
+    },
+    {
+      "message": {
+        "content": [
+          {
+            "text": "done",
+            "type": "text"
+          }
+        ],
+        "id": "m1",
+        "model": "claude-opus-5.5",
+        "stop_reason": "end_turn"
+      },
+      "timestamp": "2026-10-02T00:00:01.000Z",
+      "type": "assistant"
+    }
+  ],
+  "now": 1790899230000,
+  "op": "replay"
+}

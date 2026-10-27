@@ -1,0 +1,15 @@
+{
+  "additionalContext": [],
+  "blocked": true,
+  "decision": "deny",
+  "reason": "nope, blocked",
+  "results": [
+    {
+      "command": "printf 'nope, blocked' >&2; exit 2",
+      "exitCode": 2,
+      "stderr": "nope, blocked",
+      "stdout": ""
+    }
+  ],
+  "stop": false
+}

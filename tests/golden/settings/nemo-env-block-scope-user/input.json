@@ -1,0 +1,16 @@
+{
+  "files": {
+    "<NEMO_HOME>/settings.json": {
+      "env": {
+        "A": "1"
+      }
+    },
+    "<TMP>/ws/.nemo/settings.json": {
+      "env": {
+        "B": "2"
+      }
+    }
+  },
+  "op": "nemoEnv",
+  "scope": "user"
+}

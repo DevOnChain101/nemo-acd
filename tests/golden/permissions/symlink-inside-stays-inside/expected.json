@@ -1,0 +1,34 @@
+[
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "acceptEdits mode: file commands inside workspace"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "auto mode: file commands inside workspace"
+      }
+    },
+    "input": {
+      "command": "touch inlink/new.txt"
+    },
+    "tool": "Bash"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "acceptEdits mode: path inside workspace"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "auto mode: path inside workspace"
+      }
+    },
+    "input": {
+      "file_path": "<TMP>/ws/inlink/new.txt"
+    },
+    "tool": "Write"
+  }
+]

@@ -1,0 +1,123 @@
+[
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "Bash requires confirmation"
+      },
+      "auto": {
+        "decision": "ask",
+        "reason": "path resolves outside the workspace (link)"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "Bash requires confirmation"
+      }
+    },
+    "input": {
+      "command": "touch escape/new.txt"
+    },
+    "tool": "Bash"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "Bash requires confirmation"
+      },
+      "auto": {
+        "decision": "ask",
+        "reason": "path resolves outside the workspace (link)"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "Bash requires confirmation"
+      }
+    },
+    "input": {
+      "command": "rm escape/victim.txt"
+    },
+    "tool": "Bash"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "Bash requires confirmation"
+      },
+      "auto": {
+        "decision": "ask",
+        "reason": "path resolves outside the workspace (link)"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "Bash requires confirmation"
+      }
+    },
+    "input": {
+      "command": "mv a.txt escape/a.txt"
+    },
+    "tool": "Bash"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "Bash requires confirmation"
+      },
+      "auto": {
+        "decision": "ask",
+        "reason": "path resolves outside the workspace (link)"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "Bash requires confirmation"
+      }
+    },
+    "input": {
+      "command": "sed -i s/x/y/ escape/victim.txt"
+    },
+    "tool": "Bash"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "edit tool requires confirmation"
+      },
+      "auto": {
+        "decision": "ask",
+        "reason": "path resolves outside the workspace (link)"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "edit tool requires confirmation"
+      }
+    },
+    "input": {
+      "file_path": "<TMP>/ws/escape/new.txt"
+    },
+    "tool": "Write"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "auto": {
+        "decision": "ask",
+        "outsideRead": "<TMP>/ws/escape/victim.txt",
+        "reason": "read outside the working directories"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      }
+    },
+    "input": {
+      "file_path": "<TMP>/ws/escape/victim.txt"
+    },
+    "tool": "Read"
+  }
+]

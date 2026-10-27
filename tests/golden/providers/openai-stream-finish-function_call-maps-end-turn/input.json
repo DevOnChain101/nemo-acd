@@ -1,0 +1,43 @@
+{
+  "chunks": [
+    {
+      "choices": [
+        {
+          "delta": {
+            "content": "hi"
+          }
+        }
+      ],
+      "id": "chatcmpl-1",
+      "model": "gpt-5"
+    },
+    {
+      "choices": [
+        {
+          "delta": {},
+          "finish_reason": "function_call"
+        }
+      ],
+      "id": "chatcmpl-1",
+      "model": "gpt-5"
+    },
+    {
+      "choices": [],
+      "id": "chatcmpl-1",
+      "model": "gpt-5",
+      "usage": {}
+    }
+  ],
+  "op": "stream",
+  "provider": "openai",
+  "req": {
+    "maxTokens": 100,
+    "messages": [
+      {
+        "content": "hi",
+        "role": "user"
+      }
+    ],
+    "model": "gpt-5"
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "id": "be-py-tz-parse",
+  "version": 1,
+  "category": "backend",
+  "fixture": "py-tz",
+  "requires": [
+    "python3"
+  ],
+  "prompt": "tzparse.parse_ts ignores the UTC offset in ISO timestamps, so 2023-11-14T22:13:20+05:30 is read as local time. Fix it.",
+  "acceptance_criteria": [
+    {
+      "id": "c1",
+      "text": "offsets are honoured",
+      "check": "python3 -m unittest discover -s tests"
+    }
+  ],
+  "setup": [],
+  "hidden_checks": [
+    {
+      "id": "h1",
+      "command": "python3 -m unittest discover -s hidden",
+      "timeout_ms": 120000
+    }
+  ],
+  "regression_checks": [
+    {
+      "id": "r1",
+      "command": "python3 -m unittest discover -s tests",
+      "timeout_ms": 120000
+    }
+  ],
+  "permission_mode": "acceptEdits",
+  "network": "deny",
+  "budget": {
+    "max_turns": 40,
+    "max_tool_calls": 150,
+    "max_wall_ms": 900000
+  },
+  "forbidden_paths": [
+    "hidden/**",
+    ".git/**"
+  ],
+  "expected_status": "completed",
+  "runs": 3
+}

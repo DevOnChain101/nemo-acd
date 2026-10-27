@@ -1,0 +1,25 @@
+{
+  "dirs": [],
+  "files": {},
+  "steps": [
+    {
+      "input": {
+        "content": "x"
+      },
+      "tool": "Write"
+    },
+    {
+      "input": {
+        "file_path": "a.txt"
+      },
+      "tool": "Write"
+    },
+    {
+      "input": {
+        "content": 5,
+        "file_path": "a.txt"
+      },
+      "tool": "Write"
+    }
+  ]
+}

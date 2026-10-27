@@ -1,0 +1,8 @@
+{
+  "file": "we\u0007ird.json",
+  "op": "validate",
+  "raw": {
+    "$schema": "config.json/v1",
+    "bad\u0001key": 1
+  }
+}

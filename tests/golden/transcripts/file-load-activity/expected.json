@@ -1,0 +1,20 @@
+{
+  "activity": [
+    {
+      "kind": "prompt",
+      "text": "q",
+      "ts": 1790899201000
+    },
+    {
+      "kind": "text",
+      "text": "reply",
+      "ts": 1790899202000
+    },
+    {
+      "kind": "prompt",
+      "text": "q2",
+      "ts": 1790899203000
+    }
+  ],
+  "turnReplied": false
+}

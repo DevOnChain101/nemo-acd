@@ -1,0 +1,11 @@
+{
+  "models": [
+    {
+      "created_at": "2026-01-01T00:00:00Z",
+      "display_name": "Claude X",
+      "id": "claude-x",
+      "type": "model"
+    }
+  ],
+  "op": "normalizeModels"
+}

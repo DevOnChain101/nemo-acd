@@ -1,0 +1,21 @@
+{
+  "additionalContext": [],
+  "blocked": false,
+  "decision": "ask",
+  "reason": "one",
+  "results": [
+    {
+      "command": "printf '%s' '{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"one\"}}'",
+      "exitCode": 0,
+      "stderr": "",
+      "stdout": "{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"one\"}}"
+    },
+    {
+      "command": "printf '%s' '{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"two\"}}'",
+      "exitCode": 0,
+      "stderr": "",
+      "stdout": "{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"two\"}}"
+    }
+  ],
+  "stop": false
+}

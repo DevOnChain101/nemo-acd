@@ -1,0 +1,7 @@
+{
+  "args": {
+    "credential": "sk-ant-1",
+    "id": "x"
+  },
+  "op": "detectProtocol"
+}

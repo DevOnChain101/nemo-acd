@@ -1,0 +1,12 @@
+{
+  "allow": [
+    "a"
+  ],
+  "classifyAllShell": true,
+  "environment": [
+    "e"
+  ],
+  "hard_deny": [
+    "h"
+  ]
+}

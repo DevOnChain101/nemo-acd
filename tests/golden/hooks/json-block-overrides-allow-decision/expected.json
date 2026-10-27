@@ -1,0 +1,21 @@
+{
+  "additionalContext": [],
+  "blocked": true,
+  "decision": "deny",
+  "reason": "stop it",
+  "results": [
+    {
+      "command": "printf '%s' '{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\"}}'",
+      "exitCode": 0,
+      "stderr": "",
+      "stdout": "{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\"}}"
+    },
+    {
+      "command": "printf '%s' '{\"decision\":\"block\",\"reason\":\"stop it\"}'",
+      "exitCode": 0,
+      "stderr": "",
+      "stdout": "{\"decision\":\"block\",\"reason\":\"stop it\"}"
+    }
+  ],
+  "stop": false
+}

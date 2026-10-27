@@ -1,0 +1,164 @@
+{
+  "items": [
+    {
+      "id": "t1",
+      "input": {
+        "file_path": "/p/CLAUDE.md"
+      },
+      "kind": "tool",
+      "name": "Edit",
+      "start": 1790899201000,
+      "status": "interrupted",
+      "ts": 1790899201000
+    },
+    {
+      "id": "t2",
+      "input": {
+        "file_path": "/p/memory/notes.md"
+      },
+      "kind": "tool",
+      "name": "Write",
+      "start": 1790899201000,
+      "status": "interrupted",
+      "ts": 1790899201000
+    },
+    {
+      "id": "t3",
+      "input": {
+        "file_path": "/p/src/a.js"
+      },
+      "kind": "tool",
+      "name": "Write",
+      "start": 1790899201000,
+      "status": "interrupted",
+      "ts": 1790899201000
+    }
+  ],
+  "phase": {
+    "phase": "tool",
+    "running": [
+      "t1",
+      "t2",
+      "t3"
+    ],
+    "runningAgents": []
+  },
+  "session": {
+    "activity": [],
+    "agents": {},
+    "components": {
+      "tool:Edit": {
+        "count": 1,
+        "error": false,
+        "firstSeen": 1790899201000,
+        "key": "tool:Edit",
+        "kind": "tool",
+        "lastEnd": null,
+        "lastStart": 1790899201000,
+        "name": "Edit",
+        "open": 1,
+        "sub": "CLAUDE.md"
+      },
+      "tool:Write": {
+        "count": 2,
+        "error": false,
+        "firstSeen": 1790899201000,
+        "key": "tool:Write",
+        "kind": "tool",
+        "lastEnd": null,
+        "lastStart": 1790899201000,
+        "name": "Write",
+        "open": 2,
+        "sub": "a.js"
+      }
+    },
+    "contextUsed": 0,
+    "cwd": "",
+    "errors": 0,
+    "feed": [
+      {
+        "kind": "tool",
+        "text": "Edit CLAUDE.md",
+        "ts": 1790899201000
+      },
+      {
+        "kind": "tool",
+        "text": "Write notes.md",
+        "ts": 1790899201000
+      },
+      {
+        "kind": "tool",
+        "text": "Write a.js",
+        "ts": 1790899201000
+      }
+    ],
+    "gitBranch": "",
+    "hookCounts": {},
+    "id": "sess",
+    "lastActivity": 1790899201000,
+    "lastAssistantAt": 1790899201000,
+    "lastPrompt": "",
+    "lastPromptAt": null,
+    "lastStopReason": null,
+    "lastUserAt": null,
+    "lastVerify": null,
+    "memoryWrites": 2,
+    "model": "claude-opus-5.5",
+    "prompts": 0,
+    "skills": {},
+    "startedAt": 1790899201000,
+    "timeline": [
+      {
+        "total": 0,
+        "ts": 1790899201000
+      }
+    ],
+    "todos": [],
+    "tokens": {
+      "cacheCreate": 0,
+      "cacheRead": 0,
+      "input": 0,
+      "output": 0
+    },
+    "toolCounts": {
+      "Edit": 1,
+      "Write": 2
+    },
+    "tools": {
+      "t1": {
+        "cat": "learn",
+        "compKey": "tool:Edit",
+        "end": null,
+        "id": "t1",
+        "isError": false,
+        "name": "Edit",
+        "start": 1790899201000,
+        "summary": "CLAUDE.md"
+      },
+      "t2": {
+        "cat": "learn",
+        "compKey": "tool:Write",
+        "end": null,
+        "id": "t2",
+        "isError": false,
+        "name": "Write",
+        "start": 1790899201000,
+        "summary": "notes.md"
+      },
+      "t3": {
+        "cat": "execute",
+        "compKey": "tool:Write",
+        "end": null,
+        "id": "t3",
+        "isError": false,
+        "name": "Write",
+        "start": 1790899201000,
+        "summary": "a.js"
+      }
+    },
+    "turnReplied": false,
+    "usageById": {},
+    "version": ""
+  },
+  "total_tokens": 0
+}

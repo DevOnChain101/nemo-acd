@@ -1,0 +1,172 @@
+[
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "auto": {
+        "decision": "ask",
+        "outsideRead": "<TMP>/outside/f.txt",
+        "reason": "read outside the working directories"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "plan": {
+        "decision": "ask",
+        "outsideRead": "<TMP>/outside/f.txt",
+        "reason": "read outside the working directories"
+      }
+    },
+    "input": {
+      "file_path": "<TMP>/outside/f.txt"
+    },
+    "tool": "Read"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "auto": {
+        "decision": "ask",
+        "outsideRead": "<TMP>/outside",
+        "reason": "read outside the working directories"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "plan": {
+        "decision": "ask",
+        "outsideRead": "<TMP>/outside",
+        "reason": "read outside the working directories"
+      }
+    },
+    "input": {
+      "path": "<TMP>/outside",
+      "pattern": "x"
+    },
+    "tool": "Grep"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "auto": {
+        "decision": "ask",
+        "outsideRead": "<TMP>/outside",
+        "reason": "read outside the working directories"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "plan": {
+        "decision": "ask",
+        "outsideRead": "<TMP>/outside",
+        "reason": "read outside the working directories"
+      }
+    },
+    "input": {
+      "path": "<TMP>/outside",
+      "pattern": "*.txt"
+    },
+    "tool": "Glob"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "auto": {
+        "decision": "ask",
+        "outsideRead": "<TMP>/outside",
+        "reason": "read outside the working directories"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "plan": {
+        "decision": "ask",
+        "outsideRead": "<TMP>/outside",
+        "reason": "read outside the working directories"
+      }
+    },
+    "input": {
+      "pattern": "<TMP>/outside/*.txt"
+    },
+    "tool": "Glob"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "plan": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      }
+    },
+    "input": {
+      "file_path": "<TMP>/ws/in.txt"
+    },
+    "tool": "Read"
+  }
+]

@@ -1,0 +1,21 @@
+{
+  "additionalContext": [],
+  "blocked": true,
+  "decision": "deny",
+  "reason": "first",
+  "results": [
+    {
+      "command": "printf 'first' >&2; exit 2",
+      "exitCode": 2,
+      "stderr": "first",
+      "stdout": ""
+    },
+    {
+      "command": "printf 'second' >&2; exit 2",
+      "exitCode": 2,
+      "stderr": "second",
+      "stdout": ""
+    }
+  ],
+  "stop": false
+}

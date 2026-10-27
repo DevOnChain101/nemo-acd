@@ -1,0 +1,20 @@
+{
+  "description": "Finds files matching a glob pattern (e.g. \"**/*.ts\", \"src/**/*.test.js\"). Fast for any codebase size. Results are sorted by modification time, most recent first, and capped. Prefer this over `find` or `ls -R` in Bash. For open-ended exploration across many rounds, combine with Grep instead of broad shell pipelines.",
+  "input_schema": {
+    "properties": {
+      "path": {
+        "description": "Directory to search in. Defaults to the current working directory.",
+        "type": "string"
+      },
+      "pattern": {
+        "description": "Glob pattern to match, relative to `path` (or the current working directory).",
+        "type": "string"
+      }
+    },
+    "required": [
+      "pattern"
+    ],
+    "type": "object"
+  },
+  "name": "Glob"
+}

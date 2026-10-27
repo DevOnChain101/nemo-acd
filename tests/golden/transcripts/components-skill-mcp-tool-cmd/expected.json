@@ -1,0 +1,211 @@
+{
+  "items": [
+    {
+      "kind": "user",
+      "text": "/review",
+      "ts": 1790899201000
+    },
+    {
+      "end": 1790899203000,
+      "id": "t1",
+      "input": {
+        "title": "x"
+      },
+      "kind": "tool",
+      "name": "mcp__github__create_issue",
+      "result": "ok",
+      "soft": false,
+      "start": 1790899202000,
+      "status": "done",
+      "ts": 1790899202000
+    },
+    {
+      "end": 1790899203000,
+      "id": "t2",
+      "input": {
+        "args": "full",
+        "skill": "ponytail"
+      },
+      "kind": "tool",
+      "name": "Skill",
+      "result": "e",
+      "soft": false,
+      "start": 1790899202000,
+      "status": "error",
+      "ts": 1790899202000
+    },
+    {
+      "id": "t3",
+      "input": {
+        "pattern": "foo"
+      },
+      "kind": "tool",
+      "name": "Grep",
+      "start": 1790899202000,
+      "status": "interrupted",
+      "ts": 1790899202000
+    }
+  ],
+  "phase": {
+    "phase": "tool",
+    "running": [
+      "t3"
+    ],
+    "runningAgents": []
+  },
+  "session": {
+    "activity": [],
+    "agents": {},
+    "components": {
+      "cmd:/review": {
+        "count": 1,
+        "error": false,
+        "firstSeen": 1790899201000,
+        "key": "cmd:/review",
+        "kind": "cmd",
+        "lastEnd": 1790899201000,
+        "lastStart": 1790899201000,
+        "name": "/review",
+        "open": 0,
+        "sub": "slash command"
+      },
+      "mcp:github": {
+        "count": 1,
+        "error": false,
+        "firstSeen": 1790899202000,
+        "key": "mcp:github",
+        "kind": "mcp",
+        "lastEnd": 1790899203000,
+        "lastStart": 1790899202000,
+        "name": "github",
+        "open": 0,
+        "sub": "create_issue x"
+      },
+      "skill:ponytail": {
+        "count": 1,
+        "error": true,
+        "firstSeen": 1790899202000,
+        "key": "skill:ponytail",
+        "kind": "skill",
+        "lastEnd": 1790899203000,
+        "lastStart": 1790899202000,
+        "name": "ponytail",
+        "open": 0,
+        "sub": "ponytail full"
+      },
+      "tool:Grep": {
+        "count": 1,
+        "error": false,
+        "firstSeen": 1790899202000,
+        "key": "tool:Grep",
+        "kind": "tool",
+        "lastEnd": null,
+        "lastStart": 1790899202000,
+        "name": "Grep",
+        "open": 1,
+        "sub": "foo"
+      }
+    },
+    "contextUsed": 0,
+    "cwd": "",
+    "errors": 1,
+    "feed": [
+      {
+        "kind": "cmd",
+        "text": "Command /review",
+        "ts": 1790899201000
+      },
+      {
+        "kind": "tool",
+        "text": "mcp__github__create_issue x",
+        "ts": 1790899202000
+      },
+      {
+        "kind": "skill",
+        "text": "Skill ponytail",
+        "ts": 1790899202000
+      },
+      {
+        "kind": "tool",
+        "text": "Grep foo",
+        "ts": 1790899202000
+      },
+      {
+        "kind": "error",
+        "text": "Skill failed: e",
+        "ts": 1790899203000
+      }
+    ],
+    "gitBranch": "",
+    "hookCounts": {},
+    "id": "sess",
+    "lastActivity": 1790899203000,
+    "lastAssistantAt": 1790899202000,
+    "lastPrompt": "",
+    "lastPromptAt": null,
+    "lastStopReason": null,
+    "lastUserAt": 1790899203000,
+    "lastVerify": null,
+    "memoryWrites": 0,
+    "model": "claude-opus-5.5",
+    "prompts": 0,
+    "skills": {
+      "ponytail": 1
+    },
+    "startedAt": 1790899201000,
+    "timeline": [
+      {
+        "total": 0,
+        "ts": 1790899202000
+      }
+    ],
+    "todos": [],
+    "tokens": {
+      "cacheCreate": 0,
+      "cacheRead": 0,
+      "input": 0,
+      "output": 0
+    },
+    "toolCounts": {
+      "Grep": 1,
+      "Skill": 1,
+      "mcp__github__create_issue": 1
+    },
+    "tools": {
+      "t1": {
+        "cat": "execute",
+        "compKey": "mcp:github",
+        "end": 1790899203000,
+        "id": "t1",
+        "isError": false,
+        "name": "mcp__github__create_issue",
+        "start": 1790899202000,
+        "summary": "x"
+      },
+      "t2": {
+        "cat": "orchestrate",
+        "compKey": "skill:ponytail",
+        "end": 1790899203000,
+        "id": "t2",
+        "isError": true,
+        "name": "Skill",
+        "start": 1790899202000,
+        "summary": "ponytail full"
+      },
+      "t3": {
+        "cat": "plan",
+        "compKey": "tool:Grep",
+        "end": null,
+        "id": "t3",
+        "isError": false,
+        "name": "Grep",
+        "start": 1790899202000,
+        "summary": "foo"
+      }
+    },
+    "turnReplied": false,
+    "usageById": {},
+    "version": ""
+  },
+  "total_tokens": 0
+}

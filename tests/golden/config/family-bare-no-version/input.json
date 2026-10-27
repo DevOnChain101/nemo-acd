@@ -1,0 +1,8 @@
+{
+  "family": "sonnet",
+  "ids": [
+    "claude-sonnet",
+    "claude-sonnet-1"
+  ],
+  "op": "bestModelForFamily"
+}

@@ -1,0 +1,16 @@
+{
+  "steps": [
+    {
+      "content": "Read: <TMP>/ws/sub is a directory. Use Glob or Bash `ls` to list its contents.",
+      "isError": true,
+      "soft": true,
+      "tool": "Read"
+    }
+  ],
+  "tree_after": [
+    {
+      "path": "sub",
+      "type": "dir"
+    }
+  ]
+}

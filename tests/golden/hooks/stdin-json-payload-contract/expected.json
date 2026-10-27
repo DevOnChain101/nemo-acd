@@ -1,0 +1,13 @@
+{
+  "additionalContext": [],
+  "blocked": false,
+  "results": [
+    {
+      "command": "cat >&2",
+      "exitCode": 0,
+      "stderr": "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls\"},\"session_id\":\"s1\",\"transcript_path\":\"x.jsonl\",\"cwd\":\"<TMP>/ws\",\"hook_event_name\":\"PreToolUse\"}",
+      "stdout": ""
+    }
+  ],
+  "stop": false
+}

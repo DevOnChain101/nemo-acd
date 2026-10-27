@@ -1,0 +1,64 @@
+{
+  "entries": [
+    {
+      "message": {
+        "content": "q1",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:01.000Z",
+      "type": "user"
+    },
+    {
+      "message": {
+        "content": [
+          {
+            "text": "r1",
+            "type": "text"
+          }
+        ],
+        "id": "a",
+        "model": "claude-opus-5.5"
+      },
+      "timestamp": "2026-10-02T00:00:02.000Z",
+      "type": "assistant"
+    },
+    {
+      "message": {
+        "content": [
+          {
+            "text": "r1b",
+            "type": "text"
+          }
+        ],
+        "id": "b",
+        "model": "claude-opus-5.5"
+      },
+      "timestamp": "2026-10-02T00:00:03.000Z",
+      "type": "assistant"
+    },
+    {
+      "message": {
+        "content": "q2",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:04.000Z",
+      "type": "user"
+    },
+    {
+      "message": {
+        "content": [
+          {
+            "text": "r2",
+            "type": "text"
+          }
+        ],
+        "id": "c",
+        "model": "claude-opus-5.5"
+      },
+      "timestamp": "2026-10-02T00:00:05.000Z",
+      "type": "assistant"
+    }
+  ],
+  "now": 1790899800000,
+  "op": "replay"
+}

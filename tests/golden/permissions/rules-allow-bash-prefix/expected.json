@@ -1,0 +1,130 @@
+[
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "plan": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      }
+    },
+    "input": {
+      "command": "npm test -- --watch"
+    },
+    "tool": "Bash"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "Bash requires confirmation"
+      },
+      "auto": {
+        "decision": "classify",
+        "reason": "Bash: classifier review"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "Bash requires confirmation"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "dontAsk mode"
+      },
+      "plan": {
+        "decision": "classify",
+        "reason": "plan mode: classifier review"
+      }
+    },
+    "input": {
+      "command": "npm install"
+    },
+    "tool": "Bash"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "plan": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      }
+    },
+    "input": {
+      "command": "git commit -m x"
+    },
+    "tool": "Bash"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "Bash requires confirmation"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "auto mode: file commands inside workspace"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "Bash requires confirmation"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "dontAsk mode"
+      },
+      "plan": {
+        "decision": "classify",
+        "reason": "plan mode: classifier review"
+      }
+    },
+    "input": {
+      "command": "npm test && rm -rf x"
+    },
+    "tool": "Bash"
+  }
+]

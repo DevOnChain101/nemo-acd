@@ -1,0 +1,38 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<HOME>/.nemo/settings.json": {
+      "apiKeyHelper": "should-not-appear-either",
+      "env": {
+        "ANTHROPIC_API_KEY": "should-not-appear"
+      },
+      "permissions": {
+        "allow": [
+          "Read"
+        ],
+        "defaultMode": "default",
+        "deny": []
+      }
+    },
+    "<TMP>/ws/.claude/settings.json": {
+      "permissions": {
+        "allow": [
+          "Write"
+        ]
+      }
+    },
+    "<TMP>/ws/.nemo/settings.json": {
+      "permissions": {
+        "allow": [
+          "Bash(git:*)"
+        ],
+        "defaultMode": "acceptEdits",
+        "deny": [
+          "Bash(rm:*)"
+        ]
+      }
+    }
+  },
+  "op": "workspace"
+}

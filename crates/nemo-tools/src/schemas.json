@@ -1,0 +1,561 @@
+[
+ {
+  "description": "Executes a shell command (Git Bash on Windows, /bin/bash or /bin/sh elsewhere). Prefer the Read, Edit, Write, Glob and Grep tools over shell equivalents like cat, sed, find or grep for file operations: they are faster and give the user better visibility into what changed. Use the description field to say what the command does. stdout and stderr are combined and truncated if very large. Set run_in_background for long-running commands such as dev servers or watchers: the call returns an id at once, then use BashOutput to read new output and KillShell to stop it.",
+  "input_schema": {
+   "properties": {
+    "command": {
+     "description": "The shell command to execute.",
+     "type": "string"
+    },
+    "description": {
+     "description": "Short description of what the command does, for display.",
+     "type": "string"
+    },
+    "run_in_background": {
+     "description": "Run the command in the background and return an id (see BashOutput, KillShell).",
+     "type": "boolean"
+    },
+    "timeout": {
+     "description": "Timeout in milliseconds (max 600000, default 120000). Ignored for background commands.",
+     "type": "number"
+    }
+   },
+   "required": [
+    "command"
+   ],
+   "type": "object"
+  },
+  "name": "Bash"
+ },
+ {
+  "description": "Reads the output a background Bash command (started with run_in_background) has printed since the last BashOutput call, and says whether it is still running. Optionally keep only the lines matching a regular expression.",
+  "input_schema": {
+   "properties": {
+    "bash_id": {
+     "description": "The id returned when the background command was started.",
+     "type": "string"
+    },
+    "filter": {
+     "description": "Optional regular expression: only matching lines are returned.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "bash_id"
+   ],
+   "type": "object"
+  },
+  "name": "BashOutput"
+ },
+ {
+  "description": "Stops a background Bash command by its id.",
+  "input_schema": {
+   "properties": {
+    "shell_id": {
+     "description": "The id returned when the background command was started.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "shell_id"
+   ],
+   "type": "object"
+  },
+  "name": "KillShell"
+ },
+ {
+  "description": "Reads a file from the filesystem and returns its contents with line numbers (like `cat -n`), as an image for png/jpg/jpeg/gif/webp files, as text for PDF files (use `pages` for a range), and cell by cell for .ipynb notebooks. Always Read a file before using Edit or Write on it. Defaults to the first 2000 lines; pass offset and limit to read a specific range of a large file. Use Glob or Bash `ls` to list a directory instead of pointing Read at it.",
+  "input_schema": {
+   "properties": {
+    "file_path": {
+     "description": "Absolute or cwd-relative path to the file to read.",
+     "type": "string"
+    },
+    "limit": {
+     "description": "The number of lines to read (default 2000).",
+     "type": "number"
+    },
+    "offset": {
+     "description": "The line number to start reading from (1-based).",
+     "type": "number"
+    },
+    "pages": {
+     "description": "For PDF files: the pages to read, e.g. \"3\" or \"2-5\" (1-based). Reads the whole file when omitted.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "file_path"
+   ],
+   "type": "object"
+  },
+  "name": "Read"
+ },
+ {
+  "description": "Writes content to a file, creating it (and any parent directories) if needed, or overwriting it if it already exists. If the file already exists you must Read it first in this conversation, so you never overwrite changes you have not seen.",
+  "input_schema": {
+   "properties": {
+    "content": {
+     "description": "The full content to write to the file.",
+     "type": "string"
+    },
+    "file_path": {
+     "description": "Absolute or cwd-relative path to the file to write.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "file_path",
+    "content"
+   ],
+   "type": "object"
+  },
+  "name": "Write"
+ },
+ {
+  "description": "Performs an exact string replacement in a file. The file must have been Read in this conversation first (and not changed on disk since). `old_string` must match exactly once unless `replace_all` is set, and must be different from `new_string`. Include enough surrounding context in `old_string` to make it unique rather than reaching for `replace_all` for a targeted change.",
+  "input_schema": {
+   "properties": {
+    "file_path": {
+     "description": "Absolute or cwd-relative path to the file to edit.",
+     "type": "string"
+    },
+    "new_string": {
+     "description": "The text to replace it with.",
+     "type": "string"
+    },
+    "old_string": {
+     "description": "The exact text to replace.",
+     "type": "string"
+    },
+    "replace_all": {
+     "description": "Replace every occurrence of old_string instead of requiring a single match.",
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "file_path",
+    "old_string",
+    "new_string"
+   ],
+   "type": "object"
+  },
+  "name": "Edit"
+ },
+ {
+  "description": "Edits one cell of a Jupyter notebook (.ipynb). edit_mode \"replace\" (default) swaps the cell's source, \"insert\" adds a new cell after the cell with cell_id (or at the top when cell_id is omitted), \"delete\" removes the cell. The notebook must have been Read in this conversation first. Cells are identified by their id as shown by Read, or \"cell-<n>\" (0-based).",
+  "input_schema": {
+   "properties": {
+    "cell_id": {
+     "description": "Id of the cell to edit; for insert, the new cell goes after it.",
+     "type": "string"
+    },
+    "cell_type": {
+     "description": "Cell type; required for insert.",
+     "enum": [
+      "code",
+      "markdown"
+     ],
+     "type": "string"
+    },
+    "edit_mode": {
+     "description": "Defaults to replace.",
+     "enum": [
+      "replace",
+      "insert",
+      "delete"
+     ],
+     "type": "string"
+    },
+    "new_source": {
+     "description": "The new source of the cell (not needed for delete).",
+     "type": "string"
+    },
+    "notebook_path": {
+     "description": "Absolute or cwd-relative path to the .ipynb file.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "notebook_path"
+   ],
+   "type": "object"
+  },
+  "name": "NotebookEdit"
+ },
+ {
+  "description": "Finds files matching a glob pattern (e.g. \"**/*.ts\", \"src/**/*.test.js\"). Fast for any codebase size. Results are sorted by modification time, most recent first, and capped. Prefer this over `find` or `ls -R` in Bash. For open-ended exploration across many rounds, combine with Grep instead of broad shell pipelines.",
+  "input_schema": {
+   "properties": {
+    "path": {
+     "description": "Directory to search in. Defaults to the current working directory.",
+     "type": "string"
+    },
+    "pattern": {
+     "description": "Glob pattern to match, relative to `path` (or the current working directory).",
+     "type": "string"
+    }
+   },
+   "required": [
+    "pattern"
+   ],
+   "type": "object"
+  },
+  "name": "Glob"
+ },
+ {
+  "description": "Searches file contents using regular expressions (ripgrep syntax). Prefer this over `grep`/`find` in Bash. Supports filtering by glob or file type, and \"files_with_matches\" (default), \"content\" or \"count\" output modes with optional -A/-B/-C context lines. Use multiline: true for patterns that span multiple lines.",
+  "input_schema": {
+   "properties": {
+    "-A": {
+     "description": "Lines of context to show after each match (content mode).",
+     "type": "number"
+    },
+    "-B": {
+     "description": "Lines of context to show before each match (content mode).",
+     "type": "number"
+    },
+    "-C": {
+     "description": "Lines of context to show before and after each match (content mode).",
+     "type": "number"
+    },
+    "-i": {
+     "description": "Case insensitive search.",
+     "type": "boolean"
+    },
+    "-n": {
+     "description": "Show line numbers (content mode only; on by default).",
+     "type": "boolean"
+    },
+    "glob": {
+     "description": "Glob to filter files searched, e.g. \"*.js\".",
+     "type": "string"
+    },
+    "head_limit": {
+     "description": "Limit output to the first N lines/entries.",
+     "type": "number"
+    },
+    "multiline": {
+     "description": "Allow the pattern to match across multiple lines.",
+     "type": "boolean"
+    },
+    "output_mode": {
+     "description": "What to return. Defaults to files_with_matches.",
+     "enum": [
+      "files_with_matches",
+      "content",
+      "count"
+     ],
+     "type": "string"
+    },
+    "path": {
+     "description": "File or directory to search in. Defaults to the current working directory.",
+     "type": "string"
+    },
+    "pattern": {
+     "description": "Regular expression to search for.",
+     "type": "string"
+    },
+    "type": {
+     "description": "File type to search, e.g. \"js\", \"py\", \"rust\".",
+     "type": "string"
+    }
+   },
+   "required": [
+    "pattern"
+   ],
+   "type": "object"
+  },
+  "name": "Grep"
+ },
+ {
+  "description": "Replaces the current todo list with the given list. Use this to plan multi-step work and track progress: keep exactly one task in_progress at a time, mark tasks completed as soon as they are done, and keep the list current rather than batching updates. Each todo needs a content (imperative form, e.g. \"Run tests\") and activeForm (present continuous form shown while in progress, e.g. \"Running tests\").",
+  "input_schema": {
+   "properties": {
+    "todos": {
+     "items": {
+      "properties": {
+       "activeForm": {
+        "type": "string"
+       },
+       "content": {
+        "type": "string"
+       },
+       "status": {
+        "enum": [
+         "pending",
+         "in_progress",
+         "completed"
+        ],
+        "type": "string"
+       }
+      },
+      "required": [
+       "content",
+       "status",
+       "activeForm"
+      ],
+      "type": "object"
+     },
+     "type": "array"
+    }
+   },
+   "required": [
+    "todos"
+   ],
+   "type": "object"
+  },
+  "name": "TodoWrite"
+ },
+ {
+  "description": "Fetches a URL and returns its content as text. HTML is stripped down to readable text (this tool does not summarize it, so read the result for what the prompt asks about). Upgrades http:// to https://. Limited to 5MB and 30 seconds.",
+  "input_schema": {
+   "properties": {
+    "prompt": {
+     "description": "What you are looking for on this page (echoed back in the result as a reminder).",
+     "type": "string"
+    },
+    "url": {
+     "description": "The URL to fetch.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "url",
+    "prompt"
+   ],
+   "type": "object"
+  },
+  "name": "WebFetch"
+ },
+ {
+  "description": "Searches the web and returns the top results (title, URL, snippet). Use it for current information the conversation does not have; follow up with WebFetch on a result to read the page. Optionally restrict results to allowed_domains or drop blocked_domains.",
+  "input_schema": {
+   "properties": {
+    "allowed_domains": {
+     "description": "Only return results from these domains (subdomains included).",
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "blocked_domains": {
+     "description": "Never return results from these domains.",
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "query": {
+     "description": "The search query.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "query"
+   ],
+   "type": "object"
+  },
+  "name": "WebSearch"
+ },
+ {
+  "description": "Loads a skill: additional instructions and context for a specific kind of task. Pass the skill name exactly as listed in the available skills, and args if the skill expects arguments.",
+  "input_schema": {
+   "properties": {
+    "args": {
+     "description": "Arguments to pass to the skill, if any.",
+     "type": "string"
+    },
+    "skill": {
+     "description": "Name of the skill to load.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "skill"
+   ],
+   "type": "object"
+  },
+  "name": "Skill"
+ },
+ {
+  "description": "Creates a new tracked task (shows up in the Tasks panel). Use subject in imperative form (e.g. \"Run tests\") and activeForm in present continuous form (e.g. \"Running tests\").",
+  "input_schema": {
+   "properties": {
+    "activeForm": {
+     "type": "string"
+    },
+    "description": {
+     "type": "string"
+    },
+    "subject": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "subject"
+   ],
+   "type": "object"
+  },
+  "name": "TaskCreate"
+ },
+ {
+  "description": "Updates a tracked task by id: status, subject, activeForm and/or description.",
+  "input_schema": {
+   "properties": {
+    "activeForm": {
+     "type": "string"
+    },
+    "description": {
+     "type": "string"
+    },
+    "status": {
+     "enum": [
+      "pending",
+      "in_progress",
+      "completed"
+     ],
+     "type": "string"
+    },
+    "subject": {
+     "type": "string"
+    },
+    "taskId": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "taskId"
+   ],
+   "type": "object"
+  },
+  "name": "TaskUpdate"
+ },
+ {
+  "description": "Lists every tracked task with its id, subject and status.",
+  "input_schema": {
+   "properties": {},
+   "type": "object"
+  },
+  "name": "TaskList"
+ },
+ {
+  "description": "Gets one tracked task by id.",
+  "input_schema": {
+   "properties": {
+    "taskId": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "taskId"
+   ],
+   "type": "object"
+  },
+  "name": "TaskGet"
+ },
+ {
+  "description": "Launches a subagent to autonomously handle a complex, multi-step task and report back a single result. Use this to delegate self-contained work and keep the main conversation focused.",
+  "input_schema": {
+   "properties": {
+    "description": {
+     "description": "Short description of the task for display.",
+     "type": "string"
+    },
+    "effort": {
+     "description": "Optional reasoning effort override.",
+     "type": "string"
+    },
+    "model": {
+     "description": "Optional provider/model override for this call.",
+     "type": "string"
+    },
+    "profile": {
+     "description": "Optional routing profile such as fast, balanced, or deep.",
+     "type": "string"
+    },
+    "prompt": {
+     "description": "The full task for the subagent to perform.",
+     "type": "string"
+    },
+    "subagent_type": {
+     "description": "Which subagent type to launch.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "description",
+    "prompt",
+    "subagent_type"
+   ],
+   "type": "object"
+  },
+  "name": "Task"
+ },
+ {
+  "description": "Asks the user one or more multiple-choice questions when a decision needs their input before proceeding.",
+  "input_schema": {
+   "properties": {
+    "questions": {
+     "items": {
+      "properties": {
+       "header": {
+        "type": "string"
+       },
+       "multiSelect": {
+        "type": "boolean"
+       },
+       "options": {
+        "items": {
+         "properties": {
+          "description": {
+           "type": "string"
+          },
+          "label": {
+           "type": "string"
+          }
+         },
+         "required": [
+          "label"
+         ],
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "question": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "question",
+       "options"
+      ],
+      "type": "object"
+     },
+     "type": "array"
+    }
+   },
+   "required": [
+    "questions"
+   ],
+   "type": "object"
+  },
+  "name": "AskUserQuestion"
+ },
+ {
+  "description": "Exits planning mode and presents the plan to the user for approval before starting implementation.",
+  "input_schema": {
+   "properties": {
+    "plan": {
+     "description": "The plan to present, in markdown.",
+     "type": "string"
+    }
+   },
+   "required": [
+    "plan"
+   ],
+   "type": "object"
+  },
+  "name": "ExitPlanMode"
+ }
+]

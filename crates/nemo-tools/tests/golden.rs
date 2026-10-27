@@ -1,0 +1,387 @@
+//! Runs every case in tests/golden/{tools,schemas} against the Rust tools.
+//! Intentional differences are listed (with reasons) in tests/golden-divergences.json; nothing
+//! is skipped silently. Run with `--nocapture` for the per-case report.
+
+use std::collections::{BTreeMap, HashMap};
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, UNIX_EPOCH};
+
+use base64::Engine;
+use nemo_core::{PermissionMode, ToolContext, WorkspaceContext};
+use nemo_tools::{Registry, ToolRuntime};
+use serde_json::{Value, json};
+
+fn golden_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden")
+}
+
+fn read_json(p: &Path) -> Value {
+    serde_json::from_slice(&fs::read(p).unwrap_or_else(|e| panic!("{}: {e}", p.display()))).unwrap()
+}
+
+fn cases(area: &str) -> Vec<(String, PathBuf)> {
+    let mut v: Vec<_> = fs::read_dir(golden_dir().join(area))
+        .unwrap()
+        .map(|e| e.unwrap())
+        .filter(|e| e.path().join("input.json").exists())
+        .map(|e| (e.file_name().to_string_lossy().into_owned(), e.path()))
+        .collect();
+    v.sort();
+    v
+}
+
+fn divergences() -> Value {
+    read_json(&Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden-divergences.json"))
+}
+
+struct Sandbox {
+    _dir: tempfile::TempDir,
+    tmp: String,
+    home: String,
+    nemo_home: String,
+    ws: PathBuf,
+}
+
+fn set_mtime(p: &Path, secs: u64) {
+    // Directories cannot be opened this way on Windows; unverified there.
+    let _ = fs::File::open(p).and_then(|f| f.set_modified(UNIX_EPOCH + Duration::from_secs(secs)));
+}
+
+impl Sandbox {
+    fn new() -> Self {
+        let dir = tempfile::tempdir().unwrap();
+        let tmp = fs::canonicalize(dir.path()).unwrap();
+        for d in ["home", "nemo_home", "ws", "outside"] {
+            fs::create_dir_all(tmp.join(d)).unwrap();
+        }
+        let s = |p: PathBuf| p.to_string_lossy().into_owned();
+        Self {
+            home: s(tmp.join("home")),
+            nemo_home: s(tmp.join("nemo_home")),
+            ws: tmp.join("ws"),
+            tmp: s(tmp),
+            _dir: dir,
+        }
+    }
+    fn expand_str(&self, s: &str) -> String {
+        s.replace("<NEMO_HOME>", &self.nemo_home)
+            .replace("<HOME>", &self.home)
+            .replace("<TMP>", &self.tmp)
+    }
+    /// Longest root first, as the README prescribes.
+    fn normalize_str(&self, s: &str) -> String {
+        s.replace(&self.nemo_home, "<NEMO_HOME>")
+            .replace(&self.home, "<HOME>")
+            .replace(&self.tmp, "<TMP>")
+    }
+    fn map(&self, v: &Value, f: &dyn Fn(&Self, &str) -> String) -> Value {
+        match v {
+            Value::String(s) => Value::String(f(self, s)),
+            Value::Array(a) => Value::Array(a.iter().map(|x| self.map(x, f)).collect()),
+            Value::Object(o) => Value::Object(
+                o.iter()
+                    .map(|(k, x)| (f(self, k), self.map(x, f)))
+                    .collect(),
+            ),
+            other => other.clone(),
+        }
+    }
+    /// Files get mtime 1700000000+i in order (oldest first); directories are pinned newer than
+    /// every file, newest = the one holding the latest file (stable on coarse-clock filesystems).
+    fn setup(&self, input: &Value, order: Option<&Vec<String>>) {
+        for d in input["dirs"].as_array().unwrap() {
+            fs::create_dir_all(d.as_str().unwrap()).unwrap();
+        }
+        let mut files: Vec<(&String, &Value)> =
+            input["files"].as_object().unwrap().iter().collect();
+        if let Some(order) = order {
+            let pos = |k: &String| {
+                let rel = k.strip_prefix(&format!("{}/ws/", self.tmp)).unwrap_or(k);
+                order.iter().position(|o| o == rel).unwrap_or(usize::MAX)
+            };
+            files.sort_by_key(|(k, _)| pos(k));
+        }
+        let mut dir_rank: HashMap<PathBuf, u64> = HashMap::new();
+        for (i, (k, c)) in files.into_iter().enumerate() {
+            let p = PathBuf::from(k);
+            fs::create_dir_all(p.parent().unwrap()).unwrap();
+            let bytes = match c {
+                Value::String(s) => s.clone().into_bytes(),
+                Value::Object(o) if o.contains_key("base64") => {
+                    base64::engine::general_purpose::STANDARD
+                        .decode(o["base64"].as_str().unwrap())
+                        .unwrap()
+                }
+                other => serde_json::to_string_pretty(other).unwrap().into_bytes(),
+            };
+            fs::write(&p, bytes).unwrap();
+            set_mtime(&p, 1_700_000_000 + i as u64);
+            for a in p.ancestors().skip(1).take_while(|a| *a != self.ws) {
+                dir_rank.insert(a.to_path_buf(), 1_800_000_000 + i as u64);
+            }
+        }
+        for (d, t) in dir_rank {
+            set_mtime(&d, t);
+        }
+    }
+    fn tree(&self, root: &Path) -> Vec<Value> {
+        let mut out = vec![];
+        let mut names: Vec<_> = fs::read_dir(root)
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .collect();
+        names.sort();
+        for p in names {
+            let rel = p
+                .strip_prefix(&self.ws)
+                .unwrap()
+                .to_string_lossy()
+                .replace('\\', "/");
+            if p.is_dir() {
+                out.push(json!({"path": rel, "type": "dir"}));
+                out.extend(self.tree(&p));
+            } else {
+                let b = fs::read(&p).unwrap();
+                if b.contains(&0) {
+                    let d = base64::engine::general_purpose::STANDARD.encode(&b);
+                    out.push(json!({"path": rel, "type": "file", "base64": d}));
+                } else {
+                    let s = String::from_utf8_lossy(&b).into_owned();
+                    out.push(json!({"path": rel, "type": "file", "content": s}));
+                }
+            }
+        }
+        out
+    }
+}
+
+fn tool_ctx(sb: &Sandbox) -> ToolContext {
+    let ws =
+        WorkspaceContext::open("w", &sb.ws, &sb.ws, &[], sb.ws.join("../artifacts"), "pg").unwrap();
+    ToolContext {
+        session_id: "s".into(),
+        task_id: "t".into(),
+        turn_id: "u".into(),
+        tool_call_id: "c".into(),
+        workspace: Arc::new(ws),
+        env: Arc::new(BTreeMap::new()),
+        read_ledger: Arc::new(Mutex::new(HashMap::new())),
+        permission_mode: PermissionMode::Default,
+        approval_token: None,
+        deadline: None,
+        cancel: tokio_util::sync::CancellationToken::new(),
+    }
+}
+
+fn sorted_lines(v: &Value) -> Value {
+    match v.as_str() {
+        Some(s) => {
+            let mut l: Vec<&str> = s.split('\n').collect();
+            l.sort();
+            Value::String(l.join("\n"))
+        }
+        None => v.clone(),
+    }
+}
+
+/// Returns mismatch descriptions (empty = pass). Calls `Tool::execute` directly, so the tools'
+/// own required-field checks are exercised; schema validation is covered by `registry_*` tests.
+fn run_tools_case(
+    reg: &Registry,
+    rt: &tokio::runtime::Runtime,
+    id: &str,
+    dir: &Path,
+    div: &Value,
+) -> Vec<String> {
+    let sb = Sandbox::new();
+    let input = sb.map(&read_json(&dir.join("input.json")), &Sandbox::expand_str);
+    let expected = read_json(&dir.join("expected.json"));
+    let order = div["mtime_order"][id].as_array().map(|a| {
+        a.iter()
+            .map(|x| x.as_str().unwrap().to_string())
+            .collect::<Vec<_>>()
+    });
+    sb.setup(&input, order.as_ref());
+    let ctx = tool_ctx(&sb);
+    let over = &div["cases"][id]["steps"];
+    let mut bad = vec![];
+    let exp_steps = expected["steps"].as_array().unwrap();
+    for (n, step) in input["steps"].as_array().unwrap().iter().enumerate() {
+        let tool = step["tool"].as_str().unwrap();
+        let exp = &exp_steps[n];
+        if tool == "__write" {
+            let i = &step["input"];
+            let p = sb.ws.join(i["path"].as_str().unwrap());
+            fs::write(&p, i["content"].as_str().unwrap()).unwrap();
+            fs::OpenOptions::new()
+                .write(true)
+                .open(&p)
+                .unwrap()
+                .set_modified(UNIX_EPOCH + Duration::from_secs(i["mtime"].as_u64().unwrap()))
+                .unwrap();
+            continue;
+        }
+        let t = reg
+            .get(tool)
+            .unwrap_or_else(|| panic!("{id}: no tool {tool}"));
+        let out = rt.block_on(t.execute(step.get("input").cloned().unwrap_or(Value::Null), &ctx));
+        let mut content = sb.map(
+            &serde_json::to_value(&out.content).unwrap(),
+            &Sandbox::normalize_str,
+        );
+        let mut want = exp["content"].clone();
+        if step.get("sort_lines").is_some() {
+            content = sorted_lines(&content);
+            want = sorted_lines(&want);
+        }
+        let o = &over[n.to_string()];
+        let ok = if let Some(p) = o["content_prefix"].as_str() {
+            content.as_str().is_some_and(|c| c.starts_with(p))
+        } else if let Some(c) = o.get("content") {
+            &content == c
+        } else {
+            content == want
+        };
+        if !ok {
+            bad.push(format!(
+                "step {n} ({tool}) content:\n  got:  {content}\n  want: {want}"
+            ));
+        }
+        if exp["isError"] != json!(out.is_error) || exp["soft"] != json!(out.soft) {
+            bad.push(format!(
+                "step {n} ({tool}) flags: got isError={} soft={}, want {} {}",
+                out.is_error, out.soft, exp["isError"], exp["soft"]
+            ));
+        }
+        let meta = (!out.meta.is_null()).then(|| out.meta.clone());
+        if exp.get("meta").cloned() != meta {
+            bad.push(format!(
+                "step {n} ({tool}) meta: got {meta:?}, want {:?}",
+                exp.get("meta")
+            ));
+        }
+    }
+    // Files given as JSON objects are compared as parsed JSON: input.json sorted their keys,
+    // so the byte layout differs from the capture.
+    let tree = sb.tree(&sb.ws);
+    let want_tree = expected["tree_after"].as_array().unwrap();
+    let same = |a: &Value, b: &Value| {
+        a == b || {
+            let parse = |v: &Value| {
+                v["content"]
+                    .as_str()
+                    .and_then(|s| serde_json::from_str::<Value>(s).ok())
+            };
+            a["path"] == b["path"] && parse(a).is_some() && parse(a) == parse(b)
+        }
+    };
+    if tree.len() != want_tree.len() || !tree.iter().zip(want_tree).all(|(a, b)| same(a, b)) {
+        bad.push(format!(
+            "tree_after:\n  got:  {}\n  want: {}",
+            Value::Array(tree),
+            Value::Array(want_tree.clone())
+        ));
+    }
+    bad
+}
+
+fn run_schema_case(reg: &Registry, dir: &Path) -> Vec<String> {
+    let input = read_json(&dir.join("input.json"));
+    let expected = read_json(&dir.join("expected.json"));
+    match input["op"].as_str().unwrap() {
+        "names" => {
+            let by = |rt: ToolRuntime| -> Vec<String> {
+                reg.specs()
+                    .filter(|s| s.runtime == rt)
+                    .map(|s| s.name.clone())
+                    .collect()
+            };
+            let got = json!({
+                "builtin": by(ToolRuntime::Builtin),
+                "agent": by(ToolRuntime::Harness),
+                "schema_keys": ["description", "input_schema", "name"],
+            });
+            if got == expected {
+                vec![]
+            } else {
+                vec![format!("got {got}\nwant {expected}")]
+            }
+        }
+        _ => {
+            let name = input["name"].as_str().unwrap();
+            let got = reg.specs().find(|s| s.name == name).map(|s| {
+                json!({"name": s.name, "description": s.description, "input_schema": s.input_schema})
+            });
+            if got.as_ref() == Some(&expected) {
+                vec![]
+            } else {
+                vec![format!("schema for {name} differs")]
+            }
+        }
+    }
+}
+
+#[test]
+fn golden_cases() {
+    let reg = Registry::unsandboxed_for_tests();
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .unwrap();
+    let div = divergences();
+    let mut failures = vec![];
+    for area in ["schemas", "tools"] {
+        let (mut pass, mut total, mut diverged) = (0, 0, 0);
+        for (id, dir) in cases(area) {
+            total += 1;
+            let bad = if area == "schemas" {
+                run_schema_case(&reg, &dir)
+            } else {
+                run_tools_case(&reg, &rt, &id, &dir, &div)
+            };
+            let is_div = !div["cases"][&id].is_null();
+            diverged += usize::from(is_div);
+            println!(
+                "{} {area}/{id}{}",
+                if bad.is_empty() { "PASS" } else { "FAIL" },
+                if is_div {
+                    "  [documented divergence]"
+                } else {
+                    ""
+                }
+            );
+            if bad.is_empty() {
+                pass += 1;
+            } else {
+                failures.push(format!("{area}/{id}:\n{}", bad.join("\n")));
+            }
+        }
+        println!(
+            "== {area}: {pass}/{total} pass ({diverged} with documented divergence overrides)"
+        );
+    }
+    assert!(
+        failures.is_empty(),
+        "{} golden case(s) failed:\n{}",
+        failures.len(),
+        failures.join("\n\n")
+    );
+}
+
+#[test]
+fn every_divergence_names_an_existing_case() {
+    let div = divergences();
+    for key in ["cases", "mtime_order"] {
+        for id in div[key].as_object().unwrap().keys() {
+            assert!(
+                golden_dir()
+                    .join("tools")
+                    .join(id)
+                    .join("input.json")
+                    .exists(),
+                "{key}: unknown case {id}"
+            );
+        }
+    }
+}

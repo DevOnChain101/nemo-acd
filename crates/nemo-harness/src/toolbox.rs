@@ -1,0 +1,101 @@
+//! Tool set seen by the loop: the shared `Registry` plus extra tools (MCP adapters, tests).
+//! Schema validation happens here, before policy (tools.md §3 step 1); `Registry::execute`
+//! validates again, which is harmless.
+
+use std::sync::Arc;
+
+use nemo_core::ToolContext;
+use nemo_tools::{Registry, Tool, ToolOutput, ToolSpec};
+use serde_json::{Value, json};
+
+#[derive(Default)]
+pub struct ToolBox {
+    registry: Option<Arc<Registry>>,
+    extra: Vec<Arc<dyn Tool>>,
+}
+
+impl ToolBox {
+    pub fn new(registry: Registry) -> Self {
+        Self {
+            registry: Some(Arc::new(registry)),
+            extra: vec![],
+        }
+    }
+
+    pub fn empty() -> Self {
+        Self::default()
+    }
+
+    /// Extra tools win over registry tools of the same name.
+    pub fn with_tool(mut self, tool: Arc<dyn Tool>) -> Self {
+        self.extra.push(tool);
+        self
+    }
+
+    pub fn specs(&self) -> Vec<ToolSpec> {
+        let mut out: Vec<ToolSpec> = self
+            .registry
+            .iter()
+            .flat_map(|r| r.specs().cloned().collect::<Vec<_>>())
+            .filter(|s| !self.extra.iter().any(|t| t.spec().name == s.name))
+            .collect();
+        out.extend(self.extra.iter().map(|t| t.spec().clone()));
+        out
+    }
+
+    pub fn spec(&self, name: &str) -> Option<ToolSpec> {
+        self.specs().into_iter().find(|s| s.name == name)
+    }
+
+    pub async fn execute(&self, name: &str, input: Value, ctx: &ToolContext) -> ToolOutput {
+        if let Some(t) = self.extra.iter().rev().find(|t| t.spec().name == name) {
+            return t.execute(input, ctx).await;
+        }
+        match &self.registry {
+            Some(r) => r.execute(name, input, ctx).await,
+            None => ToolOutput::error(format!("Unknown tool \"{name}\""))
+                .with_meta(json!({"error": "unknown_tool"})),
+        }
+    }
+}
+
+impl ToolBox {
+    /// Input safe for events, hooks, approval prompts and history (secrets removed). Uses the
+    /// registry's rule; without a registry the shared `nemo_tools::redact_input` applies.
+    pub fn redact_input(&self, name: &str, input: &Value) -> Value {
+        match &self.registry {
+            Some(r) => r.redact_input(name, input),
+            None => nemo_tools::redact_input(name, input),
+        }
+    }
+
+    /// True when `redact_input` changes this particular input (a sensitive call).
+    pub fn is_sensitive(&self, name: &str, input: &Value) -> bool {
+        self.redact_input(name, input) != *input
+    }
+
+    /// True when the tool can mask its input at all, so streamed argument fragments (which
+    /// cannot be redacted before they are complete) must not be emitted. Probed with a
+    /// sensitive-looking input: shortcut, tools whose masking keys off other fields need
+    /// `nemo_tools` to expose that, then switch this to the real predicate.
+    pub fn masks_input(&self, name: &str) -> bool {
+        let probe = json!({"sensitive": true, "value": "x", "text": "x", "password": "x"});
+        self.is_sensitive(name, &probe)
+    }
+}
+
+/// First five violations of `input` against the tool's schema.
+pub fn validate(spec: &ToolSpec, input: &Value) -> Result<(), String> {
+    let v = jsonschema::validator_for(&spec.input_schema)
+        .map_err(|e| format!("{}: tool schema is invalid: {e}", spec.name))?;
+    let list: Vec<String> = v
+        .iter_errors(input)
+        .take(5)
+        .map(|e| format!("{} ({})", e, e.instance_path()))
+        .collect();
+    if list.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("{}: invalid input: {}", spec.name, list.join("; ")))
+    }
+}

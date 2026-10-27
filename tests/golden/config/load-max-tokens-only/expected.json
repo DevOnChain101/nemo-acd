@@ -1,0 +1,29 @@
+{
+  "value": {
+    "$schema": "config.json/v1",
+    "_explicitAliases": [],
+    "_modelExplicit": false,
+    "_warnings": [],
+    "aliases": {
+      "fable": null,
+      "haiku": null,
+      "opus": null,
+      "sonnet": null
+    },
+    "maxTokens": 123,
+    "profiles": {},
+    "providers": {
+      "anthropic": {
+        "headers": {},
+        "models": [],
+        "type": "anthropic",
+        "typeSource": "id"
+      },
+      "openai": {
+        "models": [],
+        "type": "openai",
+        "typeSource": "id"
+      }
+    }
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "agents": [
+    {
+      "description": "",
+      "model": null,
+      "name": "other",
+      "path": "<TMP>/ws/.nemo/agents/other.md",
+      "profile": "inherit",
+      "prompt": "no frontmatter body",
+      "reasoning": "inherit",
+      "requiredCapabilities": [],
+      "source": "project",
+      "tools": null
+    },
+    {
+      "description": "project tester",
+      "model": "opus",
+      "name": "tester",
+      "path": "<TMP>/ws/.nemo/agents/tester.md",
+      "profile": "inherit",
+      "prompt": "Project prompt body",
+      "reasoning": "inherit",
+      "requiredCapabilities": [],
+      "source": "project",
+      "tools": [
+        "Read",
+        "Write"
+      ]
+    }
+  ],
+  "autoMemoryDir": "<HOME>/.nemo/projects/<SANITIZED_CWD>/memory",
+  "claudeDir": "<HOME>/.claude",
+  "commands": [],
+  "mcpServers": [],
+  "memory": [],
+  "projectRoot": "<TMP>/ws",
+  "settings": {
+    "disableAllHooks": false,
+    "hooks": {},
+    "mcpApproval": {
+      "disabledMcpjsonServers": [],
+      "enableAllProjectMcpServers": false,
+      "enabledMcpjsonServers": []
+    },
+    "permissions": {
+      "additionalDirectories": [],
+      "allow": [],
+      "ask": [],
+      "defaultMode": "default",
+      "deny": []
+    }
+  },
+  "skills": [
+    {
+      "name": "nemocode-config",
+      "source": "built-in"
+    }
+  ],
+  "warnings": []
+}

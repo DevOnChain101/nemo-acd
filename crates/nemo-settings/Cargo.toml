@@ -1,0 +1,17 @@
+[package]
+name = "nemo-settings"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+nemo-config = { path = "../nemo-config" }
+nemo-hooks = { path = "../nemo-hooks" }
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"

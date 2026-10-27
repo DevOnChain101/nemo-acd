@@ -1,0 +1,971 @@
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use nemo_core::{ParentRef, PermissionMode, SessionStatus, WorkspaceContext};
+use nemo_events::{Budget, Event, Record, TaskStatus};
+use nemo_session::node::{self, items_from_entries, sanitize_path};
+use nemo_session::{
+    Error, NewMessage, NewSession, OrphanAction, OrphanState, ProcessProbe, ProcessRecord,
+    Retention, SessionWriter, Store, StoreOptions, ToolCallRecord, recover_with,
+};
+use serde_json::{Value, json};
+
+struct Env {
+    _tmp: tempfile::TempDir,
+    home: PathBuf,
+    base: PathBuf,
+}
+
+fn env() -> Env {
+    let tmp = tempfile::tempdir().unwrap();
+    let base = fs::canonicalize(tmp.path()).unwrap();
+    Env {
+        home: base.join("home"),
+        base,
+        _tmp: tmp,
+    }
+}
+
+impl Env {
+    fn store(&self) -> Store {
+        Store::open(&self.home, StoreOptions::default()).unwrap()
+    }
+    fn dir(&self, name: &str) -> PathBuf {
+        let d = self.base.join(name);
+        fs::create_dir_all(&d).unwrap();
+        d
+    }
+}
+
+fn new_session<'a>(id: Option<&str>, ws: &'a WorkspaceContext) -> NewSession<'a> {
+    NewSession {
+        id: id.map(str::to_string),
+        workspace: ws,
+        model_config_id: "anthropic/claude".into(),
+        permission_mode: PermissionMode::AcceptEdits,
+        permission_policy_id: "default".into(),
+        budget: Budget::default(),
+        parent: None,
+        title: None,
+    }
+}
+
+fn ws(dir: &Path) -> WorkspaceContext {
+    WorkspaceContext::open("w1", dir, dir, &[], dir.join(".art"), "pg").unwrap()
+}
+
+fn create(e: &Env, id: &str, dir: &Path) -> SessionWriter {
+    e.store()
+        .create_session(new_session(Some(id), &ws(dir)))
+        .unwrap()
+}
+
+fn notice(text: &str) -> Event {
+    Event::Notice {
+        level: "info".into(),
+        text: text.into(),
+    }
+}
+
+#[test]
+fn create_persists_explicit_workspace_and_resumes_it() {
+    let e = env();
+    let (a, b) = (e.dir("proj-a"), e.dir("proj-b"));
+    let store = e.store();
+    let wa = store
+        .create_session(new_session(Some("sa"), &ws(&a)))
+        .unwrap();
+    let wb = store
+        .create_session(new_session(Some("sb"), &ws(&b)))
+        .unwrap();
+    let r = store.reader().unwrap();
+    let ra = r.get_session("sa").unwrap();
+    assert_eq!(Path::new(&ra.cwd), a);
+    assert_eq!(Path::new(&ra.workspace_root), a);
+    assert_eq!(ra.status, SessionStatus::Created);
+    assert_eq!(ra.permission_mode, PermissionMode::AcceptEdits);
+    assert_eq!(ra.model_config_id, "anthropic/claude");
+    assert_eq!(r.get_session("sb").unwrap().cwd, b.to_str().unwrap());
+    assert_eq!(r.list_sessions(Some(a.to_str().unwrap())).unwrap().len(), 1);
+    assert_eq!(r.list_sessions(None).unwrap().len(), 2);
+    // Resume rebuilds the persisted workspace, not the process cwd.
+    drop((wa, wb));
+    let w = store.resume_session("sa", false).unwrap();
+    let rebuilt = w
+        .get_session("sa")
+        .unwrap()
+        .open_workspace(store.home())
+        .unwrap();
+    assert_eq!(rebuilt.cwd, a);
+    assert!(matches!(
+        store.create_session(new_session(Some("sa"), &ws(&b))),
+        Err(Error::Locked(_))
+    ));
+    drop(w);
+    assert!(matches!(
+        store.create_session(new_session(Some("sa"), &ws(&b))),
+        Err(Error::AlreadyExists(_))
+    ));
+}
+
+#[test]
+fn sessions_in_different_dirs_do_not_interfere() {
+    let e = env();
+    let (a, b) = (e.dir("a"), e.dir("b"));
+    let store = e.store();
+    let mut wa = store
+        .create_session(new_session(Some("sa"), &ws(&a)))
+        .unwrap();
+    let mut wb = store
+        .create_session(new_session(Some("sb"), &ws(&b)))
+        .unwrap();
+    for i in 0..5 {
+        assert_eq!(
+            wa.append_event(notice(&format!("a{i}"))).unwrap().seq,
+            i + 1
+        );
+        assert_eq!(
+            wb.append_event(notice(&format!("b{i}"))).unwrap().seq,
+            i + 1
+        );
+    }
+    wa.append_message(NewMessage::user(json!("hi a"))).unwrap();
+    assert_eq!(wb.read_messages("sb").unwrap().len(), 0);
+    assert_eq!(wa.read_events("sa", 0, 100).unwrap().len(), 5);
+    let mirror_a = wa.mirror_path().unwrap().to_path_buf();
+    assert!(
+        mirror_a.starts_with(
+            e.home
+                .join("projects")
+                .join(sanitize_path(a.to_str().unwrap()))
+        )
+    );
+    assert!(
+        wb.mirror_path()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains(&sanitize_path(b.to_str().unwrap()))
+    );
+    assert!(!wb.mirror_path().unwrap().exists());
+}
+
+#[test]
+fn events_are_gapless_redacted_and_replayable() {
+    let e = env();
+    let d = e.dir("p");
+    let store = Store::open(
+        &e.home,
+        StoreOptions {
+            secrets: vec!["hunter2-secret".into()],
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let mut w = store
+        .create_session(new_session(Some("s1"), &ws(&d)))
+        .unwrap();
+    w.task_id = Some("t1".into());
+    let env1 = w
+        .append_event(notice(
+            "key sk-ant-api03-abcdefghijklmnop and hunter2-secret",
+        ))
+        .unwrap();
+    assert_eq!(env1.seq, 1);
+    let Event::Notice { text, .. } = &env1.event else {
+        panic!()
+    };
+    assert_eq!(text, "key [REDACTED:sk-ant] and [REDACTED:secret]");
+    for i in 0..9 {
+        assert_eq!(w.append_event(notice(&format!("n{i}"))).unwrap().seq, i + 2);
+    }
+    let all = w.read_events("s1", 0, 100).unwrap();
+    assert_eq!(all.len(), 10);
+    let Record::Known(first) = &all[0] else {
+        panic!()
+    };
+    assert_eq!(first, &env1);
+    assert_eq!(first.task_id.as_deref(), Some("t1"));
+    // Reconnect from a cursor, with a limit.
+    let tail = w.read_events("s1", 7, 100).unwrap();
+    assert_eq!(tail.len(), 3);
+    assert_eq!(w.read_events("s1", 0, 4).unwrap().len(), 4);
+    assert_eq!(w.get_session("s1").unwrap().event_cursor, 10);
+    // The raw database never holds the secret.
+    let raw = fs::read(e.home.join("nemo.db")).unwrap();
+    let wal = fs::read(e.home.join("nemo.db-wal")).unwrap_or_default();
+    for b in [raw, wal] {
+        assert!(!String::from_utf8_lossy(&b).contains("hunter2-secret"));
+    }
+}
+
+#[test]
+fn large_payload_becomes_an_artifact_ref() {
+    let e = env();
+    let d = e.dir("p");
+    let mut w = create(&e, "s1", &d);
+    let big = "x".repeat(20_000);
+    let env1 = w.append_event(notice(&big)).unwrap();
+    let small = w.append_event(notice("small")).unwrap();
+    let conn = rusqlite::Connection::open(e.home.join("nemo.db")).unwrap();
+    let row = |seq: i64| -> (Option<String>, Option<String>) {
+        conn.query_row(
+            "SELECT payload, payload_ref FROM events WHERE seq=?1",
+            [seq],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap()
+    };
+    let (p, r) = row(1);
+    assert!(p.is_none() && r.is_some());
+    let (p, r) = row(2);
+    assert!(p.is_some() && r.is_none());
+    // read_events inlines it again.
+    let back = w.read_events("s1", 0, 10).unwrap();
+    assert_eq!(back[0], Record::Known(env1));
+    assert_eq!(back[1], Record::Known(small));
+    let arts = w.artifacts("s1").unwrap();
+    assert_eq!(arts.len(), 1);
+    assert_eq!(arts[0].kind, "event_payload");
+    assert_eq!(arts[0].retention_policy, "session");
+    assert!(
+        e.home
+            .join("sessions/s1")
+            .join(&arts[0].reference.path)
+            .exists()
+    );
+}
+
+#[test]
+fn status_updates_follow_the_state_machine() {
+    let e = env();
+    let d = e.dir("p");
+    let mut w = create(&e, "s1", &d);
+    assert!(matches!(
+        w.update_status(SessionStatus::Running, None),
+        Err(Error::InvalidTransition(_))
+    ));
+    assert_eq!(w.get_session("s1").unwrap().status, SessionStatus::Created);
+    assert_eq!(
+        w.get_session("s1").unwrap().event_cursor,
+        0,
+        "a rejected transition writes no event"
+    );
+    w.update_status(SessionStatus::Preparing, None).unwrap();
+    w.update_status(SessionStatus::Running, Some("task"))
+        .unwrap();
+    w.update_status(SessionStatus::WaitingApproval, None)
+        .unwrap();
+    assert!(w.update_status(SessionStatus::Completed, None).is_err());
+    let evs = w.read_events("s1", 0, 10).unwrap();
+    assert_eq!(evs.len(), 3);
+    let Record::Known(env2) = &evs[1] else {
+        panic!()
+    };
+    assert!(
+        matches!(&env2.event, Event::SessionStatusChanged { from, to, reason }
+        if from == "preparing" && to == "running" && reason.as_deref() == Some("task"))
+    );
+}
+
+#[test]
+fn second_writer_is_refused_readers_are_fine() {
+    let e = env();
+    let d = e.dir("p");
+    let store = e.store();
+    let mut w = store
+        .create_session(new_session(Some("s1"), &ws(&d)))
+        .unwrap();
+    w.append_event(notice("a")).unwrap();
+    assert!(matches!(
+        store.resume_session("s1", true),
+        Err(Error::Locked(_))
+    ));
+    let r = store.reader().unwrap();
+    assert_eq!(r.read_events("s1", 0, 10).unwrap().len(), 1);
+    w.append_event(notice("b")).unwrap();
+    assert_eq!(
+        r.read_events("s1", 0, 10).unwrap().len(),
+        2,
+        "reader sees committed events"
+    );
+    drop(w);
+    store.resume_session("s1", true).unwrap();
+}
+
+#[test]
+fn schema_is_versioned_and_foreign_keys_are_on() {
+    let e = env();
+    drop(e.store());
+    drop(e.store()); // reopening is a no-op
+    let conn = rusqlite::Connection::open(e.home.join("nemo.db")).unwrap();
+    let v: i64 = conn
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(v, nemo_session::SCHEMA_VERSION_LATEST);
+    let mode: String = conn
+        .query_row("PRAGMA journal_mode", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(mode, "wal");
+    let n: i64 = conn
+        .query_row("SELECT COUNT(*) FROM schema_migrations", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(n, 1);
+    for t in [
+        "sessions",
+        "tasks",
+        "events",
+        "messages",
+        "tool_calls",
+        "processes",
+        "browser_contexts",
+        "artifacts",
+        "verification_reports",
+        "approvals",
+    ] {
+        conn.query_row(&format!("SELECT COUNT(*) FROM {t}"), [], |r| {
+            r.get::<_, i64>(0)
+        })
+        .unwrap();
+    }
+    conn.pragma_update(None, "user_version", 99).unwrap();
+    assert!(matches!(
+        Store::open(&e.home, StoreOptions::default()),
+        Err(Error::SchemaTooNew { found: 99, .. })
+    ));
+    conn.pragma_update(None, "user_version", 1).unwrap();
+    Store::open(&e.home, StoreOptions::default()).unwrap();
+}
+
+#[test]
+fn caps_and_ids_are_enforced() {
+    let e = env();
+    let d = e.dir("p");
+    let mut w = create(&e, "s1", &d);
+    assert!(matches!(
+        w.append_event(notice(&"y".repeat(17 * 1024 * 1024))),
+        Err(Error::TooLarge { .. })
+    ));
+    assert!(matches!(
+        w.append_message(NewMessage::user(json!("y".repeat(9 * 1024 * 1024)))),
+        Err(Error::TooLarge { .. })
+    ));
+    assert_eq!(w.get_session("s1").unwrap().event_cursor, 0);
+    assert!(w.read_messages("s1").unwrap().is_empty());
+    for bad in ["../x", "a/b", "", "a b", "x.y"] {
+        assert!(
+            matches!(
+                e.store().create_session(new_session(Some(bad), &ws(&d))),
+                Err(Error::InvalidId(_))
+            ),
+            "{bad}"
+        );
+    }
+}
+
+#[test]
+fn mirror_writes_node_shaped_lines_and_reads_back() {
+    let e = env();
+    let d = e.dir("p");
+    let mut w = create(&e, "11111111-2222-4333-8444-555555555555", &d);
+    let tr =
+        json!([{"type": "tool_result", "tool_use_id": "t1", "content": "x\ny", "is_error": false}]);
+    w.append_message(NewMessage::user(json!("fix the bug")))
+        .unwrap();
+    let mut a = NewMessage::assistant(json!([
+        {"type": "thinking", "thinking": "hmm"},
+        {"type": "text", "text": "Looking. key sk-ant-api03-abcdefghijklmnop"},
+        {"type": "tool_use", "id": "t1", "name": "Read", "input": {"file_path": "a.js"}}
+    ]));
+    a.msg.insert("id".into(), json!("m1"));
+    a.msg.insert("stop_reason".into(), json!("tool_use"));
+    w.append_message(a).unwrap();
+    w.append_message(NewMessage::user(tr)).unwrap();
+    w.append_message(NewMessage::user(json!(
+        "<command-name>/compact</command-name><command-args></command-args>"
+    )))
+    .unwrap();
+    w.append_message(NewMessage::compact_boundary("manual", "S"))
+        .unwrap();
+    w.set_title("my title").unwrap();
+    w.set_permission_mode(PermissionMode::Plan).unwrap();
+    w.mirror_hook_attachment("hook_success", "PreToolUse:Bash", "PreToolUse", Some(0));
+    assert_eq!(w.mirror_failures(), 0);
+
+    let path = w.mirror_path().unwrap().to_path_buf();
+    assert_eq!(
+        w.get_session(w.id())
+            .unwrap()
+            .legacy_transcript_path
+            .as_deref(),
+        path.to_str()
+    );
+    let text = fs::read_to_string(&path).unwrap();
+    assert!(!text.contains("abcdefghijklmnop"), "mirror is redacted too");
+    let lines: Vec<Value> = text
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    assert_eq!(lines.len(), 8);
+    for l in &lines {
+        assert!(
+            l["timestamp"].is_string()
+                && l["sessionId"] == w.id()
+                && l["cwd"] == d.to_str().unwrap(),
+            "{l}"
+        );
+    }
+    assert_eq!(lines[0]["type"], "user");
+    assert_eq!(lines[1]["message"]["id"], "m1");
+    assert_eq!(lines[4]["subtype"], "compact_boundary");
+    assert_eq!(
+        lines[5],
+        json!({"type": "summary", "summary": "my title", "timestamp": lines[5]["timestamp"], "sessionId": w.id(), "cwd": d.to_str().unwrap()})
+    );
+    assert_eq!(lines[6]["permissionMode"], "plan");
+    assert_eq!(lines[7]["attachment"]["hookName"], "PreToolUse:Bash");
+
+    // What we wrote, read with the Node-semantics reader, is the conversation.
+    let items = node::load_all_items(&path);
+    let kinds: Vec<_> = items.iter().map(|i| i["kind"].as_str().unwrap()).collect();
+    assert_eq!(
+        kinds,
+        ["user", "thinking", "text", "tool", "user", "compact"]
+    );
+    assert_eq!(items[3]["result"], "x\ny");
+    assert_eq!(items[3]["status"], "done");
+    assert_eq!(items[4]["text"], "/compact");
+    assert_eq!(items[5]["trigger"], "restored");
+    assert_eq!(node::session_meta(&path).first_prompt, "fix the bug");
+    // And the same items come back from an export of the SQLite rows.
+    let out = e.base.join("export.jsonl");
+    assert_eq!(w.export_node_transcript(&out).unwrap(), 5);
+    assert_eq!(
+        items_from_entries(&node::read_entries(&out, None).unwrap(), None),
+        items
+    );
+    assert!(matches!(
+        w.export_node_transcript(&out),
+        Err(Error::AlreadyExists(_))
+    ));
+    let rows = w.read_messages(w.id()).unwrap();
+    assert!(rows[..4].iter().all(|r| r.compacted) && !rows[4].compacted);
+    assert_eq!(
+        w.get_session(w.id()).unwrap().title.as_deref(),
+        Some("my title")
+    );
+}
+
+#[test]
+fn mirror_off_writes_no_node_file_and_external_edits_block_resume() {
+    let e = env();
+    let d = e.dir("p");
+    let off = Store::open(
+        &e.home,
+        StoreOptions {
+            write_node_transcripts: false,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let mut w = off
+        .create_session(new_session(Some("s0"), &ws(&d)))
+        .unwrap();
+    w.append_message(NewMessage::user(json!("hi"))).unwrap();
+    assert!(w.mirror_path().is_none());
+    assert!(!e.home.join("projects").exists());
+    assert_eq!(w.read_messages("s0").unwrap().len(), 1);
+    drop(w);
+
+    let store = e.store();
+    let mut w = store
+        .create_session(new_session(Some("s1"), &ws(&d)))
+        .unwrap();
+    w.append_message(NewMessage::user(json!("hi"))).unwrap();
+    let path = w.mirror_path().unwrap().to_path_buf();
+    drop(w);
+    store.resume_session("s1", false).unwrap(); // untouched since our last write
+    let mut f = fs::OpenOptions::new().append(true).open(&path).unwrap();
+    std::io::Write::write_all(
+        &mut f,
+        b"{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":\"from node\"}}\n",
+    )
+    .unwrap();
+    drop(f);
+    assert!(matches!(
+        store.resume_session("s1", false),
+        Err(Error::TranscriptChanged(_))
+    ));
+    store.resume_session("s1", true).unwrap();
+}
+
+#[test]
+fn import_reads_node_jsonl_without_touching_it() {
+    let e = env();
+    let d = e.dir("p");
+    let src = e.base.join("11111111-2222-4333-8444-555555555555.jsonl");
+    let text = [
+        json!({"type": "user", "timestamp": "2026-10-02T00:00:01.000Z", "cwd": d, "message": {"role": "user", "content": "first"}}).to_string(),
+        "{garbage".to_string(),
+        json!({"type": "summary", "summary": "Named"}).to_string(),
+        json!({"type": "permission-mode", "permissionMode": "plan"}).to_string(),
+        json!({"type": "permission-mode", "permissionMode": "bypassPermissions"}).to_string(),
+        json!({"type": "assistant", "isSidechain": true, "message": {"role": "assistant", "content": []}}).to_string(),
+        json!({"type": "assistant", "timestamp": "2026-10-02T00:00:02.000Z", "message": {"id": "m", "role": "assistant", "content": [{"type": "text", "text": "ok"}], "usage": {"input_tokens": 1}}}).to_string(),
+    ]
+    .join("\n");
+    fs::write(&src, &text).unwrap();
+    let store = e.store();
+    let (w, stats) = store
+        .import_node_transcript(&src, new_session(None, &ws(&d)))
+        .unwrap();
+    assert_eq!((stats.lines, stats.messages, stats.skipped), (7, 2, 2));
+    assert_eq!(fs::read_to_string(&src).unwrap(), text);
+    let rec = w.get_session(w.id()).unwrap();
+    assert_eq!(rec.id, "11111111-2222-4333-8444-555555555555");
+    assert_eq!(rec.title.as_deref(), Some("Named"));
+    assert_eq!(
+        rec.permission_mode,
+        PermissionMode::Plan,
+        "bypassPermissions is never restored"
+    );
+    assert_eq!(rec.status, SessionStatus::Idle);
+    assert_eq!(rec.legacy_transcript_path.as_deref(), src.to_str());
+    let evs = w.read_events(&rec.id, 0, 10).unwrap();
+    let Record::Unknown(last) = evs.last().unwrap() else {
+        panic!("legacy.imported is store-owned")
+    };
+    assert_eq!(last.kind, "legacy.imported");
+    assert_eq!(last.payload["lines"], 7);
+    // Continuing the session appends to the same Node file, and resume sees it as ours.
+    drop(w);
+    let mut w = store.resume_session(&rec.id, false).unwrap();
+    w.append_message(NewMessage::user(json!("more"))).unwrap();
+    assert_eq!(node::load_all_items(&src).len(), 3);
+    drop(w);
+    store.resume_session(&rec.id, false).unwrap();
+}
+
+#[test]
+fn records_tool_calls_processes_approvals_reports_artifacts_checkpoints() {
+    let e = env();
+    let d = e.dir("p");
+    fs::write(d.join("a.txt"), "v1 sk-ant-api03-abcdefghijklmnop").unwrap();
+    // Byte-exact snapshots are an explicit opt-out (default redacts: see tests/hardening.rs).
+    let store = Store::open(
+        &e.home,
+        StoreOptions {
+            redact_snapshots: false,
+            ..StoreOptions::default()
+        },
+    )
+    .unwrap();
+    let mut w = store
+        .create_session(new_session(Some("s1"), &ws(&d)))
+        .unwrap();
+    let id = w.id().to_string();
+
+    let call = ToolCallRecord {
+        id: "toolu_1".into(),
+        turn_id: "t".into(),
+        tool_name: "Bash".into(),
+        input_ref: None,
+        result_ref: None,
+        status: "running".into(),
+        decision: None,
+        duration_ms: None,
+    };
+    w.upsert_tool_call(&call).unwrap();
+    w.upsert_tool_call(&ToolCallRecord {
+        status: "ok".into(),
+        decision: Some("allow".into()),
+        duration_ms: Some(12),
+        ..call.clone()
+    })
+    .unwrap();
+    let calls = w.tool_calls(&id).unwrap();
+    assert_eq!(
+        (calls.len(), calls[0].status.as_str(), calls[0].duration_ms),
+        (1, "ok", Some(12))
+    );
+
+    let p = ProcessRecord {
+        id: "p1".into(),
+        name: Some("dev".into()),
+        pid: Some(4242),
+        pid_start: Some("tok".into()),
+        cwd: "/x".into(),
+        command: "serve --token sk-ant-api03-abcdefghijklmnop".into(),
+        started_at: "2026-10-27T00:00:00.000Z".into(),
+        ended_at: None,
+        status: "running".into(),
+        exit_code: None,
+        log_artifact_id: None,
+        log_cursor: None,
+    };
+    w.upsert_process(&p).unwrap();
+    w.finish_process("p1", "exited", Some(0)).unwrap();
+    let ps = w.processes(&id).unwrap();
+    assert_eq!(
+        (ps[0].status.as_str(), ps[0].exit_code),
+        ("exited", Some(0))
+    );
+    assert!(!ps[0].command.contains("abcdefghij"));
+
+    w.request_approval("ap1", "toolu_1", &json!({"prompt": "run?"}))
+        .unwrap();
+    assert_eq!(w.approvals(&id).unwrap()[0].decision, "pending");
+    w.resolve_approval("ap1", "allow", "user").unwrap();
+    let ap = &w.approvals(&id).unwrap()[0];
+    assert_eq!(
+        (
+            ap.decision.as_str(),
+            ap.reviewer.as_str(),
+            ap.resolved_at.is_some()
+        ),
+        ("allow", "user", true)
+    );
+    assert!(matches!(
+        w.resolve_approval("nope", "allow", "user"),
+        Err(Error::NotFound(_))
+    ));
+
+    let t = w.begin_task("do it", &[]).unwrap();
+    assert_eq!(w.task_id.as_deref(), Some(t.as_str()));
+    w.record_verification_report(&t, 1, "failed", &json!({"checks": []}))
+        .unwrap();
+    w.record_verification_report(&t, 2, "passed", &json!({"checks": [1]}))
+        .unwrap();
+    assert_eq!(w.verification_reports(&t).unwrap().len(), 2);
+    assert!(
+        w.record_verification_report("missing", 1, "x", &json!({}))
+            .is_err()
+    );
+    w.end_task(&t, TaskStatus::Completed, "done").unwrap();
+    assert!(w.task_id.is_none());
+
+    let a = w
+        .put_artifact(
+            "log",
+            "text/plain",
+            b"out sk-ant-api03-abcdefghijklmnop",
+            Retention::Until("2026-12-01T00:00:00.000Z".into()),
+        )
+        .unwrap();
+    let k = w
+        .put_artifact("log", "text/plain", b"keep", Retention::Keep)
+        .unwrap();
+    let stored = w.artifact_bytes(&id, &a.artifact_id).unwrap();
+    assert_eq!(String::from_utf8(stored).unwrap(), "out [REDACTED:sk-ant]");
+    let rows = w.artifacts(&id).unwrap();
+    let row = rows
+        .iter()
+        .find(|r| r.reference.artifact_id == a.artifact_id)
+        .unwrap();
+    assert_eq!(
+        (row.retention_policy.as_str(), row.expires_at.as_deref()),
+        ("ttl", Some("2026-12-01T00:00:00.000Z"))
+    );
+    assert_eq!(
+        rows.iter()
+            .find(|r| r.reference.artifact_id == k.artifact_id)
+            .unwrap()
+            .retention_policy,
+        "keep"
+    );
+
+    // Checkpoint: event seq + message count + snapshots (byte-exact, inside the workspace only).
+    w.append_event(notice("e1")).unwrap();
+    w.append_message(NewMessage::user(json!("m0"))).unwrap();
+    let cp = w
+        .create_checkpoint(
+            "before-refactor",
+            &[PathBuf::from("a.txt"), d.join("new.txt")],
+        )
+        .unwrap();
+    assert_eq!((cp.event_seq, cp.message_count, cp.files.len()), (1, 1, 2));
+    assert!(
+        cp.files[1].artifact_id.is_none(),
+        "absent file recorded as absent"
+    );
+    let snap = w
+        .artifact_bytes(&id, cp.files[0].artifact_id.as_ref().unwrap())
+        .unwrap();
+    assert_eq!(snap, fs::read(d.join("a.txt")).unwrap());
+    assert_eq!(w.checkpoint(&id, "before-refactor").unwrap(), cp);
+    assert_eq!(
+        w.get_session(&id).unwrap().checkpoint_id.as_deref(),
+        Some(cp.id.as_str())
+    );
+    assert!(
+        w.create_checkpoint("before-refactor", &[]).is_err(),
+        "names are unique per session"
+    );
+    let outside = e.dir("outside");
+    fs::write(outside.join("s"), "x").unwrap();
+    assert!(matches!(
+        w.create_checkpoint("bad", &[outside.join("s")]),
+        Err(Error::OutsideWorkspace(_))
+    ));
+    assert!(matches!(
+        w.create_checkpoint("bad2", &[PathBuf::from("../outside/s")]),
+        Err(Error::OutsideWorkspace(_))
+    ));
+}
+
+#[test]
+fn sub_agent_sessions_reference_their_parent() {
+    let e = env();
+    let d = e.dir("p");
+    let store = e.store();
+    drop(
+        store
+            .create_session(new_session(Some("parent"), &ws(&d)))
+            .unwrap(),
+    );
+    let wsd = ws(&d);
+    let mut n = new_session(Some("child"), &wsd);
+    n.parent = Some(ParentRef {
+        session_id: "parent".into(),
+        tool_call_id: "toolu_9".into(),
+    });
+    drop(store.create_session(n).unwrap());
+    let p = store
+        .reader()
+        .unwrap()
+        .get_session("child")
+        .unwrap()
+        .parent
+        .unwrap();
+    assert_eq!(
+        (p.session_id.as_str(), p.tool_call_id.as_str()),
+        ("parent", "toolu_9")
+    );
+    let mut bad = new_session(Some("orphan"), &wsd);
+    bad.parent = Some(ParentRef {
+        session_id: "nope".into(),
+        tool_call_id: "x".into(),
+    });
+    assert!(store.create_session(bad).is_err());
+}
+
+#[test]
+fn path_sanitisation_odd_and_very_long_cwds() {
+    assert_eq!(sanitize_path("/a-b"), "-a-b");
+    assert_eq!(sanitize_path("/a/b"), "-a-b", "lossy like Node");
+    assert_eq!(sanitize_path("/Users/me/my proj/é"), "-Users-me-my-proj--");
+    assert_eq!(
+        sanitize_path("😀"),
+        "--",
+        "one hyphen per UTF-16 unit, as in JS"
+    );
+    assert_eq!(sanitize_path("C:\\x\\y"), "C--x-y");
+    let long = format!("/{}", "d".repeat(5000));
+    let s = sanitize_path(&long);
+    assert!(s.len() <= 220 && s.starts_with("-ddd"));
+    assert_ne!(
+        s,
+        sanitize_path(&format!("/{}e", "d".repeat(5000))),
+        "hash keeps long names distinct"
+    );
+    assert_eq!(s, sanitize_path(&long), "deterministic");
+    let p = node::transcript_path(Path::new("/h"), &long, "id");
+    assert!(
+        p.file_name().unwrap() == "id.jsonl"
+            && p.parent().unwrap().file_name().unwrap().len() < 255
+    );
+}
+
+#[test]
+fn real_directories_with_odd_and_long_names_get_a_mirror_file() {
+    let e = env();
+    let mut names = vec![
+        "with space".to_string(),
+        "ünï-çødé".to_string(),
+        "emoji-😀".to_string(),
+        "dots..and'quote".to_string(),
+    ];
+    if cfg!(unix) {
+        names.push("a:b*c\"d".to_string());
+    }
+    for (i, n) in names.iter().enumerate() {
+        let d = e.dir(n);
+        let mut w = create(&e, &format!("odd-{i}"), &d);
+        w.append_message(NewMessage::user(json!("hi"))).unwrap();
+        assert_eq!(w.mirror_failures(), 0, "{n}");
+        assert!(w.mirror_path().unwrap().exists(), "{n}");
+        assert_eq!(
+            node::session_meta(w.mirror_path().unwrap()).cwd,
+            w.get_session(w.id()).unwrap().cwd
+        );
+    }
+    // Deep path whose sanitised name is far over 255 bytes.
+    let mut deep = e.base.join("deep");
+    for _ in 0..7 {
+        deep.push("n".repeat(100));
+    }
+    fs::create_dir_all(&deep).unwrap();
+    let mut w = create(&e, "deep", &deep);
+    w.append_message(NewMessage::user(json!("hi"))).unwrap();
+    assert_eq!(w.mirror_failures(), 0);
+    assert!(w.mirror_path().unwrap().exists());
+}
+
+// ---- recovery with a fake OS ----
+
+struct FakeProbe {
+    alive: Vec<(u32, &'static str)>,
+    killed: std::cell::RefCell<Vec<u32>>,
+}
+impl ProcessProbe for FakeProbe {
+    fn start_time(&self, pid: u32) -> Option<String> {
+        self.alive
+            .iter()
+            .find(|a| a.0 == pid)
+            .map(|a| a.1.to_string())
+    }
+    fn kill_tree(&self, pid: u32) -> std::io::Result<()> {
+        self.killed.borrow_mut().push(pid);
+        Ok(())
+    }
+}
+
+fn proc(id: &str, pid: Option<u32>, start: Option<&str>) -> ProcessRecord {
+    ProcessRecord {
+        id: id.into(),
+        name: None,
+        pid,
+        pid_start: start.map(str::to_string),
+        cwd: "/x".into(),
+        command: format!("cmd-{id}"),
+        started_at: "2026-10-27T00:00:00.000Z".into(),
+        ended_at: None,
+        status: "running".into(),
+        exit_code: None,
+        log_artifact_id: None,
+        log_cursor: None,
+    }
+}
+
+#[test]
+fn recover_interrupts_sessions_and_handles_orphans_safely() {
+    let e = env();
+    let d = e.dir("p");
+    let mut w = create(&e, "crashed", &d);
+    w.update_status(SessionStatus::Preparing, None).unwrap();
+    w.update_status(SessionStatus::Running, None).unwrap();
+    for p in [
+        proc("alive", Some(100), Some("T1")),
+        proc("reused", Some(200), Some("OLD")),
+        proc("gone", Some(300), Some("T3")),
+        proc("nopid", None, None),
+        proc("unverified", Some(400), None),
+    ] {
+        w.upsert_process(&p).unwrap();
+    }
+    drop(w);
+    let mut idle = create(&e, "fine", &d);
+    idle.update_status(SessionStatus::Preparing, None).unwrap();
+    idle.update_status(SessionStatus::Idle, None).unwrap();
+    drop(idle);
+    let live = create(&e, "live", &d); // holds its lock: must be left alone
+    let probe = FakeProbe {
+        alive: vec![(100, "T1"), (200, "NEW"), (400, "T4")],
+        killed: Default::default(),
+    };
+
+    let rep = recover_with(&e.home, OrphanAction::Report, &probe).unwrap();
+    assert_eq!(rep.interrupted, ["crashed"]);
+    assert!(
+        rep.skipped_live.is_empty(),
+        "'live' is created, not running, and has no processes"
+    );
+    let mut lost = rep.lost.clone();
+    lost.sort();
+    assert_eq!(lost, ["gone", "nopid", "reused"]);
+    let by: Vec<_> = rep
+        .orphans
+        .iter()
+        .map(|o| (o.process_id.as_str(), o.state.clone(), o.killed))
+        .collect();
+    assert_eq!(
+        by,
+        [
+            ("alive", OrphanState::Alive, false),
+            ("unverified", OrphanState::Unverified, false)
+        ]
+    );
+    assert!(probe.killed.borrow().is_empty(), "report mode never kills");
+    let r = e.store().reader().unwrap();
+    assert_eq!(
+        r.get_session("crashed").unwrap().status,
+        SessionStatus::Interrupted
+    );
+    assert_eq!(r.get_session("fine").unwrap().status, SessionStatus::Idle);
+    let evs = r.read_events("crashed", 0, 10).unwrap();
+    assert!(
+        matches!(evs.last().unwrap(), Record::Known(e) if matches!(&e.event, Event::SessionStatusChanged { to, .. } if to == "interrupted"))
+    );
+    drop(live);
+
+    // Idempotent in report mode, then kill only the verified orphan; the unverified one stays.
+    assert_eq!(
+        recover_with(&e.home, OrphanAction::Report, &probe)
+            .unwrap()
+            .orphans,
+        rep.orphans
+    );
+    let rep2 = recover_with(&e.home, OrphanAction::Kill, &probe).unwrap();
+    assert_eq!(*probe.killed.borrow(), [100]);
+    assert!(rep2.orphans[0].killed && !rep2.orphans[1].killed);
+    assert!(rep2.interrupted.is_empty());
+    let rep3 = recover_with(&e.home, OrphanAction::Kill, &probe).unwrap();
+    assert_eq!(rep3.orphans.len(), 1, "only the unverified one remains");
+    assert_eq!(*probe.killed.borrow(), [100]);
+    let st: Vec<_> = r
+        .processes("crashed")
+        .unwrap()
+        .into_iter()
+        .map(|p| (p.id, p.status))
+        .collect();
+    assert!(
+        st.contains(&("alive".into(), "killed".into()))
+            && st.contains(&("reused".into(), "lost".into()))
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn recover_kills_a_real_orphan_only_when_the_start_time_matches() {
+    use std::process::Command;
+    let e = env();
+    let d = e.dir("p");
+    let mut child = Command::new("sleep").arg("60").spawn().unwrap();
+    let pid = child.id();
+    let tok = nemo_session::process_start_time(pid).expect("start time of a live pid");
+    assert_eq!(
+        nemo_session::process_start_time(pid).as_deref(),
+        Some(tok.as_str()),
+        "stable token"
+    );
+    let mut w = create(&e, "s", &d);
+    w.update_status(SessionStatus::Preparing, None).unwrap();
+    w.update_status(SessionStatus::Running, None).unwrap();
+    w.upsert_process(&proc("wrong", Some(pid), Some("not-the-start-time")))
+        .unwrap();
+    drop(w);
+    let rep = nemo_session::recover(&e.home, OrphanAction::Kill).unwrap();
+    assert_eq!(rep.lost, ["wrong"]);
+    assert!(
+        child.try_wait().unwrap().is_none(),
+        "a pid with another start time is never killed"
+    );
+    let mut w = e.store().resume_session("s", true).unwrap();
+    w.upsert_process(&proc("right", Some(pid), Some(&tok)))
+        .unwrap();
+    drop(w);
+    let rep = nemo_session::recover(&e.home, OrphanAction::Kill).unwrap();
+    assert!(rep.orphans[0].killed, "{rep:?}");
+    assert!(child.wait().is_ok());
+    assert!(nemo_session::process_start_time(pid).is_none());
+}

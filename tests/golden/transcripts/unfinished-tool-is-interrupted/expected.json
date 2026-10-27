@@ -1,0 +1,137 @@
+{
+  "items": [
+    {
+      "id": "t1",
+      "input": {
+        "command": "sleep 9"
+      },
+      "kind": "tool",
+      "name": "Bash",
+      "start": 1790899201000,
+      "status": "interrupted",
+      "ts": 1790899201000
+    },
+    {
+      "end": 1790899202000,
+      "id": "t2",
+      "input": {},
+      "kind": "tool",
+      "name": "Read",
+      "result": "done",
+      "soft": false,
+      "start": 1790899201000,
+      "status": "done",
+      "ts": 1790899201000
+    }
+  ],
+  "phase": {
+    "phase": "tool",
+    "running": [
+      "t1"
+    ],
+    "runningAgents": []
+  },
+  "session": {
+    "activity": [],
+    "agents": {},
+    "components": {
+      "tool:Bash": {
+        "count": 1,
+        "error": false,
+        "firstSeen": 1790899201000,
+        "key": "tool:Bash",
+        "kind": "tool",
+        "lastEnd": null,
+        "lastStart": 1790899201000,
+        "name": "Bash",
+        "open": 1,
+        "sub": "sleep 9"
+      },
+      "tool:Read": {
+        "count": 1,
+        "error": false,
+        "firstSeen": 1790899201000,
+        "key": "tool:Read",
+        "kind": "tool",
+        "lastEnd": 1790899202000,
+        "lastStart": 1790899201000,
+        "name": "Read",
+        "open": 0,
+        "sub": ""
+      }
+    },
+    "contextUsed": 0,
+    "cwd": "",
+    "errors": 0,
+    "feed": [
+      {
+        "kind": "tool",
+        "text": "Bash sleep 9",
+        "ts": 1790899201000
+      },
+      {
+        "kind": "tool",
+        "text": "Read ",
+        "ts": 1790899201000
+      }
+    ],
+    "gitBranch": "",
+    "hookCounts": {},
+    "id": "sess",
+    "lastActivity": 1790899202000,
+    "lastAssistantAt": 1790899201000,
+    "lastPrompt": "",
+    "lastPromptAt": null,
+    "lastStopReason": null,
+    "lastUserAt": 1790899202000,
+    "lastVerify": null,
+    "memoryWrites": 0,
+    "model": "claude-opus-5.5",
+    "prompts": 0,
+    "skills": {},
+    "startedAt": 1790899201000,
+    "timeline": [
+      {
+        "total": 0,
+        "ts": 1790899201000
+      }
+    ],
+    "todos": [],
+    "tokens": {
+      "cacheCreate": 0,
+      "cacheRead": 0,
+      "input": 0,
+      "output": 0
+    },
+    "toolCounts": {
+      "Bash": 1,
+      "Read": 1
+    },
+    "tools": {
+      "t1": {
+        "cat": "execute",
+        "compKey": "tool:Bash",
+        "end": null,
+        "id": "t1",
+        "isError": false,
+        "name": "Bash",
+        "start": 1790899201000,
+        "summary": "sleep 9"
+      },
+      "t2": {
+        "cat": "plan",
+        "compKey": "tool:Read",
+        "end": 1790899202000,
+        "id": "t2",
+        "isError": false,
+        "name": "Read",
+        "start": 1790899201000,
+        "summary": ""
+      }
+    },
+    "turnReplied": false,
+    "usageById": {},
+    "version": ""
+  },
+  "total_tokens": 0
+}

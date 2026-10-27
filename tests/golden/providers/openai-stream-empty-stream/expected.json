@@ -1,0 +1,21 @@
+{
+  "create_call_option_keys": [
+    "signal"
+  ],
+  "events": [],
+  "provider_type": "openai",
+  "wire_body": {
+    "max_completion_tokens": 100,
+    "messages": [
+      {
+        "content": "hi",
+        "role": "user"
+      }
+    ],
+    "model": "gpt-5",
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    }
+  }
+}

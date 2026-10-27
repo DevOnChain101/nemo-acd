@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "NEMO_INVALID_CONFIG",
+    "message": "invalid config <NEMO_HOME>/nemo.json: $.bogus is not allowed by config.json/v1; $.alsoBogus is not allowed by config.json/v1",
+    "name": "ConfigValidationError"
+  }
+}

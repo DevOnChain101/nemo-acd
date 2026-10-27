@@ -1,0 +1,13 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<HOME>/.claude/agents/cl.md": "---\ndescription: from claude\n---\nbody",
+    "<HOME>/.nemo/nemo.json": {
+      "claude": {
+        "readUserConfig": true
+      }
+    }
+  },
+  "op": "workspace"
+}

@@ -1,0 +1,59 @@
+{
+  "autoMode": {},
+  "calls": [
+    {
+      "input": {
+        "command": "touch <TMP>/outside/extra/x"
+      },
+      "tool": "Bash"
+    },
+    {
+      "input": {
+        "file_path": "<TMP>/outside/extra/x"
+      },
+      "tool": "Write"
+    },
+    {
+      "input": {
+        "command": "rm -rf <TMP>/outside/*"
+      },
+      "tool": "Bash"
+    },
+    {
+      "input": {
+        "file_path": "<TMP>/outside/extra/r.txt"
+      },
+      "tool": "Read"
+    },
+    {
+      "input": {
+        "file_path": "<TMP>/outside/other.txt"
+      },
+      "tool": "Read"
+    }
+  ],
+  "cwd": "<TMP>/ws",
+  "flags": {},
+  "fs": {
+    "dirs": [
+      "<TMP>/ws/sub",
+      "<TMP>/outside/extra"
+    ]
+  },
+  "home": "<HOME>",
+  "modes": [
+    "default",
+    "acceptEdits",
+    "plan",
+    "auto",
+    "dontAsk",
+    "bypassPermissions"
+  ],
+  "op": "check",
+  "rules": {
+    "additionalDirectories": [
+      "<TMP>/outside/extra"
+    ]
+  },
+  "suggestions": false
+}

@@ -1,0 +1,16 @@
+{
+  "steps": [
+    {
+      "content": "Write: <TMP>/ws/sub is a directory.",
+      "isError": true,
+      "soft": true,
+      "tool": "Write"
+    }
+  ],
+  "tree_after": [
+    {
+      "path": "sub",
+      "type": "dir"
+    }
+  ]
+}

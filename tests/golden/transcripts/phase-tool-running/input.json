@@ -1,0 +1,33 @@
+{
+  "entries": [
+    {
+      "message": {
+        "content": "go",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:00.000Z",
+      "type": "user"
+    },
+    {
+      "message": {
+        "content": [
+          {
+            "id": "t1",
+            "input": {
+              "command": "sleep 1"
+            },
+            "name": "Bash",
+            "type": "tool_use"
+          }
+        ],
+        "id": "m1",
+        "model": "claude-opus-5.5",
+        "stop_reason": "tool_use"
+      },
+      "timestamp": "2026-10-02T00:00:01.000Z",
+      "type": "assistant"
+    }
+  ],
+  "now": 1790899202000,
+  "op": "replay"
+}

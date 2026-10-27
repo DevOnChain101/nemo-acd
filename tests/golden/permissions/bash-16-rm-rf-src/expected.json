@@ -1,0 +1,34 @@
+[
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "Bash requires confirmation"
+      },
+      "auto": {
+        "decision": "classify",
+        "reason": "Bash: classifier review"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "Bash requires confirmation"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "dontAsk mode"
+      },
+      "plan": {
+        "decision": "classify",
+        "reason": "plan mode: classifier review"
+      }
+    },
+    "input": {
+      "command": "rm -rf src/*"
+    },
+    "tool": "Bash"
+  }
+]

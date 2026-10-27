@@ -1,0 +1,39 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<HOME>/.nemo/settings.json": {
+      "permissions": {
+        "additionalDirectories": [
+          "/a",
+          "/b"
+        ],
+        "allow": [
+          "Read",
+          "Read",
+          "Grep"
+        ],
+        "ask": [
+          "Bash"
+        ]
+      }
+    },
+    "<TMP>/ws/.nemo/settings.json": {
+      "permissions": {
+        "additionalDirectories": [
+          "/b",
+          "/c"
+        ],
+        "allow": [
+          "Grep",
+          "Glob"
+        ],
+        "ask": [
+          "Bash",
+          "Edit"
+        ]
+      }
+    }
+  },
+  "op": "workspace"
+}

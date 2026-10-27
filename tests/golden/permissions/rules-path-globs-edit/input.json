@@ -1,0 +1,50 @@
+{
+  "autoMode": {},
+  "calls": [
+    {
+      "input": {
+        "file_path": "<TMP>/ws/src/a/b.js"
+      },
+      "tool": "Edit"
+    },
+    {
+      "input": {
+        "file_path": "<TMP>/ws/src/k.secret"
+      },
+      "tool": "Edit"
+    },
+    {
+      "input": {
+        "file_path": "<TMP>/ws/lib/a.js"
+      },
+      "tool": "Edit"
+    }
+  ],
+  "cwd": "<TMP>/ws",
+  "flags": {},
+  "fs": {
+    "dirs": [
+      "<TMP>/ws/sub"
+    ]
+  },
+  "home": "<HOME>",
+  "modes": [
+    "default",
+    "acceptEdits",
+    "plan",
+    "auto",
+    "dontAsk",
+    "bypassPermissions"
+  ],
+  "op": "check",
+  "rules": {
+    "allow": [
+      "Edit(src/**)",
+      "Write(/abs-never/**)"
+    ],
+    "deny": [
+      "Edit(**/*.secret)"
+    ]
+  },
+  "suggestions": false
+}

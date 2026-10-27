@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "NEMO_INVALID_CONFIG",
+    "message": "invalid config <TMP>/ws/.nemo/config.json: $.model must be a non-empty string",
+    "name": "ConfigValidationError"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "steps": [
+    {
+      "content": "     1\théllo\n     2\t日本語\n     3\t😀",
+      "isError": false,
+      "soft": false,
+      "tool": "Read"
+    }
+  ],
+  "tree_after": [
+    {
+      "content": "héllo\n日本語\n😀\n",
+      "path": "a.txt",
+      "type": "file"
+    }
+  ]
+}

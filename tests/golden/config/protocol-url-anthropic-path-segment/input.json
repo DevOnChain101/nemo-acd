@@ -1,0 +1,7 @@
+{
+  "args": {
+    "baseURL": "https://gw.example.test/anthropic",
+    "id": "x"
+  },
+  "op": "detectProtocol"
+}

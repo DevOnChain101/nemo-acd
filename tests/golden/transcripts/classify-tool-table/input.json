@@ -1,0 +1,98 @@
+{
+  "calls": [
+    [
+      "Agent",
+      {}
+    ],
+    [
+      "Skill",
+      {}
+    ],
+    [
+      "SendMessage",
+      {}
+    ],
+    [
+      "Read",
+      {}
+    ],
+    [
+      "Grep",
+      {}
+    ],
+    [
+      "TodoWrite",
+      {}
+    ],
+    [
+      "ExitPlanMode",
+      {}
+    ],
+    [
+      "Edit",
+      {
+        "file_path": "/p/CLAUDE.md"
+      }
+    ],
+    [
+      "Write",
+      {
+        "file_path": "/p/lessons.md"
+      }
+    ],
+    [
+      "Edit",
+      {
+        "file_path": "C:\\p\\memory\\x.md"
+      }
+    ],
+    [
+      "Edit",
+      {
+        "file_path": "/p/a.js"
+      }
+    ],
+    [
+      "Bash",
+      {
+        "command": "npm test"
+      }
+    ],
+    [
+      "Bash",
+      {
+        "command": "ls",
+        "description": "lint it"
+      }
+    ],
+    [
+      "Bash",
+      {
+        "command": "cargo test"
+      }
+    ],
+    [
+      "Bash",
+      {
+        "command": "terraform plan"
+      }
+    ],
+    [
+      "Bash",
+      {
+        "command": "echo hi"
+      }
+    ],
+    [
+      "PowerShell",
+      {
+        "command": "pytest -q"
+      }
+    ],
+    [
+      "WebFetch",
+      {}
+    ]
+  ],
+  "op": "classifyTool"
+}

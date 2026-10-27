@@ -1,0 +1,9 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<NEMO_HOME>/state.json": "garbage"
+  },
+  "home": "<NEMO_HOME>",
+  "op": "loadConfig"
+}

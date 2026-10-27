@@ -1,0 +1,18 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {
+    "NEMO_DEFAULT_CUSTOM_MODEL": "gateway/c-9",
+    "NEMO_DEFAULT_OPUS_MODEL": "gateway/o-9",
+    "NEMO_DEFAULT_SONNET_MODEL": "gateway/s-9"
+  },
+  "files": {
+    "<NEMO_HOME>/nemo.json": {
+      "$schema": "config.json/v1",
+      "aliases": {
+        "opus": "anthropic/claude-opus-1"
+      }
+    }
+  },
+  "home": "<NEMO_HOME>",
+  "op": "loadConfig"
+}

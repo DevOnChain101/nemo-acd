@@ -1,0 +1,20 @@
+{
+  "config": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "printf '%s' '{\"continue\":false,\"stopReason\":\"done here\"}'",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ]
+  },
+  "event": "Stop",
+  "op": "run",
+  "opts": {},
+  "payload": {},
+  "target": null
+}

@@ -1,0 +1,20 @@
+{
+  "description": "Reads the output a background Bash command (started with run_in_background) has printed since the last BashOutput call, and says whether it is still running. Optionally keep only the lines matching a regular expression.",
+  "input_schema": {
+    "properties": {
+      "bash_id": {
+        "description": "The id returned when the background command was started.",
+        "type": "string"
+      },
+      "filter": {
+        "description": "Optional regular expression: only matching lines are returned.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "bash_id"
+    ],
+    "type": "object"
+  },
+  "name": "BashOutput"
+}

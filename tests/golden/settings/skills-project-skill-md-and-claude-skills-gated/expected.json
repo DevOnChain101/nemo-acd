@@ -1,0 +1,43 @@
+{
+  "agents": [],
+  "autoMemoryDir": "<HOME>/.nemo/projects/<SANITIZED_CWD>/memory",
+  "claudeDir": "<HOME>/.claude",
+  "commands": [],
+  "mcpServers": [],
+  "memory": [],
+  "projectRoot": "<TMP>/ws",
+  "settings": {
+    "disableAllHooks": false,
+    "hooks": {},
+    "mcpApproval": {
+      "disabledMcpjsonServers": [],
+      "enableAllProjectMcpServers": false,
+      "enabledMcpjsonServers": []
+    },
+    "permissions": {
+      "additionalDirectories": [],
+      "allow": [],
+      "ask": [],
+      "defaultMode": "default",
+      "deny": []
+    }
+  },
+  "skills": [
+    {
+      "name": "nemocode-config",
+      "source": "built-in"
+    },
+    {
+      "allowedTools": [
+        "Read",
+        "Grep"
+      ],
+      "description": "finds things",
+      "dir": "<TMP>/ws/.nemo/skills/scout",
+      "name": "scout",
+      "path": "<TMP>/ws/.nemo/skills/scout/SKILL.md",
+      "source": "project"
+    }
+  ],
+  "warnings": []
+}
