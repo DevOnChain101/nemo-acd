@@ -62,7 +62,13 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       # test-provider only exists in debug builds (compile_error! in release). This also runs the
       # nemo-cli binary tests (apps/cli/tests/*), which need it for the scripted model.
-      - run: cargo test --workspace --locked --features nemo-cli/test-provider
+      # --no-fail-fast: a failing binary must not hide the crates after it. The digest step prints the
+      # failures as the last lines of the job (the log viewer only shows the tail of a long step).
+      - name: cargo test
+        run: cargo test --workspace --locked --no-fail-fast --features nemo-cli/test-provider 2>&1 | tee test.log
+      - name: Failure digest
+        if: always()
+        run: DIGEST_ENV=1 bash scripts/ci-digest.sh test.log "cargo test (${{ matrix.os }})"
 
   evals-selftest:
     name: eval selftest (${{ matrix.os }})
@@ -85,7 +91,11 @@ jobs:
       - run: |
           git config --global user.email ci@example.invalid
           git config --global user.name ci
-      - run: node tests/agent-evals/harness/selftest.js
+      - name: eval selftest
+        run: node tests/agent-evals/harness/selftest.js 2>&1 | tee evals.log
+      - name: Failure digest
+        if: always()
+        run: DIGEST_ENV=1 bash scripts/ci-digest.sh evals.log "eval selftest (${{ matrix.os }})"
 
   browser:
     # Real Chrome from browser-actions/setup-chrome (stable channel). Nemo never downloads a browser,
@@ -115,9 +125,14 @@ jobs:
           # Hosted Linux runners forbid the Chrome sandbox (AppArmor userns restriction); the test
           # hook adds --no-sandbox for the test fixture server only.
           if [ "$RUNNER_OS" = Linux ]; then export NEMO_BROWSER_TEST_NO_SANDBOX=1; fi
-          cargo test -p nemo-browser --locked -- --nocapture 2>&1 | tee browser.log
+          cargo test -p nemo-browser --locked --no-fail-fast -- --nocapture 2>&1 | tee browser.log
           # The suite prints SKIP and passes without a browser: make skipping a failure here.
           if grep -q "SKIP" browser.log; then echo "::error::browser tests were skipped"; exit 1; fi
+      - name: Failure digest
+        if: always()
+        env:
+          NEMO_BROWSER_PATH: ${{ steps.chrome.outputs.chrome-path }}
+        run: DIGEST_ENV=1 bash scripts/ci-digest.sh browser.log "browser (${{ matrix.os }})"
 
   sandbox-linux:
     # Landlock + bubblewrap integration tests (cfg linux). Ubuntu 24.04 blocks unprivileged user
@@ -141,7 +156,11 @@ jobs:
         run: |
           cat /sys/kernel/security/lsm; echo
           grep -q landlock /sys/kernel/security/lsm || { echo "::error::Landlock not enabled on this runner kernel"; exit 1; }
-      - run: cargo test -p nemo-sandbox -p nemo-terminal --locked -- --nocapture
+      - name: sandbox tests
+        run: cargo test -p nemo-sandbox -p nemo-terminal --locked --no-fail-fast -- --nocapture 2>&1 | tee sandbox.log
+      - name: Failure digest
+        if: always()
+        run: DIGEST_ENV=1 bash scripts/ci-digest.sh sandbox.log "sandbox (linux)"
       - name: doctor reports the Linux backends
         run: cargo run -q --locked -p nemo-cli -- doctor --cwd "$RUNNER_TEMP"
 
@@ -206,6 +225,8 @@ jobs:
         with:
           persist-credentials: false
       - run: shellcheck packaging/install.sh scripts/*.sh
+      - name: Tracked paths are portable to Windows
+        run: node scripts/check-portable-paths.mjs
       - name: Release tag policy tests (local origin + stub gh)
         run: bash scripts/test-check-release-tag.sh
       - uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2

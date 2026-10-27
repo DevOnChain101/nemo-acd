@@ -4,7 +4,7 @@
 //! # Threat model
 //! The repository (its `.git/config`, `.gitattributes`, `.git/hooks`, files) is UNTRUSTED
 //! input: a cloned repo must not be able to run code just because the agent inspects it.
-//! Every `git` invocation goes through one helper ([`git`] module, crate-private) that:
+//! Every `git` invocation goes through one helper (`git` module, crate-private) that:
 //! * resolves `git` to an absolute path from the injected `PATH` (no cwd lookup on Windows);
 //! * uses `env_clear()` plus `nemo_config::Env::child_env()` (allowlist; no ambient env, no
 //!   caller `GIT_*`), then sets `GIT_CONFIG_NOSYSTEM=1`, `GIT_TERMINAL_PROMPT=0`,

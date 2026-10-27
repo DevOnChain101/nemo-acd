@@ -151,7 +151,7 @@ pub struct Common {
     pub approve_mcp: Vec<String>,
     #[arg(long)]
     pub no_session_store: bool,
-    /// Work in an isolated git worktree on branch nemo/<session>; left in place for review.
+    /// Work in an isolated git worktree on branch `nemo/<session>`; left in place for review.
     #[arg(long)]
     pub worktree: bool,
     /// With --worktree: remove the worktree at the end when nothing changed.

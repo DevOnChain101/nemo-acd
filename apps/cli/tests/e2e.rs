@@ -7,6 +7,29 @@ use std::process::{Child, Command, Output, Stdio};
 
 use serde_json::{Value, json};
 
+/// Whether this host has an OS sandbox that confines commands (what `nemo doctor` reports). The
+/// default `--sandbox enforce` refuses to start without one (e.g. CI runners with userns blocked).
+fn host_confines() -> bool {
+    static C: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *C.get_or_init(|| {
+        let o = Command::new(env!("CARGO_BIN_EXE_nemo"))
+            .arg("doctor")
+            .env("NEMO_HOME", tempfile::tempdir().unwrap().path())
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&o.stdout).contains("will confine commands")
+    })
+}
+
+/// For tests about confinement itself: they cannot pass (or mean anything) on a host without it.
+fn skip_without_sandbox() -> bool {
+    let skip = !host_confines();
+    if skip {
+        eprintln!("SKIP: no OS sandbox available on this host");
+    }
+    skip
+}
+
 struct Rig {
     dir: tempfile::TempDir,
 }
@@ -38,6 +61,10 @@ impl Rig {
             .arg("--provider")
             .arg(format!("fake:{}", s.display()));
         c.args(["--prompt", "do it"]).args(args);
+        // Tests not about the sandbox must not depend on the host having one.
+        if !args.contains(&"--sandbox") && !host_confines() {
+            c.args(["--sandbox", "best-effort"]);
+        }
         c.env_clear()
             .env("PATH", std::env::var_os("PATH").unwrap_or_default())
             .env("HOME", self.dir.path())
@@ -312,10 +339,14 @@ fn network_allow_warns_and_records_a_notice_deny_and_loopback_are_silent() {
     for mode in ["deny", "loopback"] {
         let (o, ev) = rig.run(json!([{"text": "ok"}]), &["--network", mode]);
         assert!(
-            !String::from_utf8_lossy(&o.stderr).contains("WARNING"),
+            !String::from_utf8_lossy(&o.stderr).contains("--network"),
             "{mode}"
         );
-        assert!(!types(&ev).contains(&"notice"), "{mode}");
+        assert!(
+            !ev.iter().any(|e| e["type"] == "notice"
+                && e["payload"]["text"].as_str().unwrap().contains("--network")),
+            "{mode}"
+        );
     }
     let o = rig
         .cmd(json!([{"text": "ok"}]), &["--network", "bogus"])
@@ -326,6 +357,9 @@ fn network_allow_warns_and_records_a_notice_deny_and_loopback_are_silent() {
 
 #[test]
 fn sandbox_read_refuses_home_roots_missing_and_credential_ancestors() {
+    if skip_without_sandbox() {
+        return;
+    }
     let rig = Rig::new();
     let home = rig.dir.path().to_path_buf();
     std::fs::create_dir_all(home.join(".kube")).unwrap();
@@ -377,6 +411,9 @@ fn sandbox_off_warns_on_stderr_and_records_a_notice() {
                 .contains("unsandboxed_by_request")
     }));
     // The default is fail-closed and silent.
+    if skip_without_sandbox() {
+        return;
+    }
     let (o, ev) = rig.run(json!([{"text": "ok"}]), &[]);
     assert!(!String::from_utf8_lossy(&o.stderr).contains("WARNING"));
     assert!(!types(&ev).contains(&"notice"));
@@ -992,6 +1029,9 @@ fn events_out_is_created_0600_even_over_an_existing_file() {
 #[cfg(unix)]
 #[test]
 fn worktree_sandbox_does_not_let_commands_overwrite_the_git_pointer() {
+    if skip_without_sandbox() {
+        return;
+    }
     let rig = Rig::new();
     git(&rig.ws(), &["init", "-q"]);
     git(&rig.ws(), &["add", "."]);

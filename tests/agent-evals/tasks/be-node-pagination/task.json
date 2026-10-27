@@ -11,21 +11,21 @@
     {
       "id": "c1",
       "text": "page 2 starts after page 1",
-      "check": "node --test test/"
+      "check": "node --test test/*.test.js"
     }
   ],
   "setup": [],
   "hidden_checks": [
     {
       "id": "h1",
-      "command": "node --test hidden/",
+      "command": "node --test hidden/*.test.js",
       "timeout_ms": 120000
     }
   ],
   "regression_checks": [
     {
       "id": "r1",
-      "command": "node --test test/",
+      "command": "node --test test/*.test.js",
       "timeout_ms": 120000
     }
   ],

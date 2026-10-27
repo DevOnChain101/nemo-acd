@@ -5,12 +5,12 @@ Nemo is one native binary, `nemo`. On Linux a helper, `nemo-sandbox-exec`, must 
 ## 1. Install script (macOS, Linux)
 
 ```sh
-curl --proto '=https' --tlsv1.2 -fsSL https://github.com/OWNER/Nemo-ACD/releases/latest/download/install.sh | sh
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/DevOnChain101/nemo-acd/releases/latest/download/install.sh | sh
 ```
 
 Environment: `NEMO_VERSION` (must match `^[0-9A-Za-z.+-]+$`), `NEMO_REPO`, `NEMO_INSTALL_DIR` (default `~/.local/bin`), `NEMO_BIN_NAME` (default `nemo`), `NEMO_SKIP_ATTESTATION=1` (accept a checksum-only install; the default requires `gh`), `NEMO_DOWNLOAD_BASE` (must be https; `NEMO_INSECURE_DOWNLOAD_BASE_I_KNOW=1` allows others, tests only).
 
-Verification: all downloads use `curl --proto '=https' --tlsv1.2`. The archive's sha256 is checked against `SHA256SUMS`, and `SHA256SUMS` itself is checked with `gh attestation verify` (build provenance from `release.yml`) (also pinned to the `release.yml` workflow and the `refs/tags/v<version>` source ref); this requires `gh` installed and logged in. Without `gh` the installer **refuses** (exit 1) and explains how to install `gh`; `NEMO_SKIP_ATTESTATION=1` proceeds with a loud warning that only the checksum was checked (the checksum file then comes from the same server as the archive and proves integrity, not origin). The `install.sh` you pipe into `sh` is not covered by this: download it, read it, and verify it with `gh attestation verify install.sh --repo OWNER/Nemo-ACD`. The installer copy in a release is stamped with the repository slug; a copy taken from the git tree refuses to run without `NEMO_REPO`. Prefer downloading `install.sh` first and reading it. musl systems get the x86_64 musl build when published.
+Verification: all downloads use `curl --proto '=https' --tlsv1.2`. The archive's sha256 is checked against `SHA256SUMS`, and `SHA256SUMS` itself is checked with `gh attestation verify` (build provenance from `release.yml`) (also pinned to the `release.yml` workflow and the `refs/tags/v<version>` source ref); this requires `gh` installed and logged in. Without `gh` the installer **refuses** (exit 1) and explains how to install `gh`; `NEMO_SKIP_ATTESTATION=1` proceeds with a loud warning that only the checksum was checked (the checksum file then comes from the same server as the archive and proves integrity, not origin). The `install.sh` you pipe into `sh` is not covered by this: download it, read it, and verify it with `gh attestation verify install.sh --repo DevOnChain101/nemo-acd`. The installer copy in a release is stamped with the repository slug; a copy taken from the git tree refuses to run without `NEMO_REPO`. Prefer downloading `install.sh` first and reading it. musl systems get the x86_64 musl build when published.
 
 ## 2. Windows
 
@@ -27,7 +27,7 @@ nemo-acd --version
 
 ## 4. Manual
 
-Download `nemo-<version>-<target>.tar.gz|zip` and `SHA256SUMS` from the release, check `sha256sum -c --ignore-missing SHA256SUMS`, `gh attestation verify SHA256SUMS --repo OWNER/Nemo-ACD` (authenticates the checksum file) and optionally the archive itself, extract, and put the contents of the directory on your PATH. Targets: `x86_64`/`aarch64` `apple-darwin`, `unknown-linux-gnu`, `pc-windows-msvc`; `x86_64-unknown-linux-musl` is experimental.
+Download `nemo-<version>-<target>.tar.gz|zip` and `SHA256SUMS` from the release, check `sha256sum -c --ignore-missing SHA256SUMS`, `gh attestation verify SHA256SUMS --repo DevOnChain101/nemo-acd` (authenticates the checksum file) and optionally the archive itself, extract, and put the contents of the directory on your PATH. Targets: `x86_64`/`aarch64` `apple-darwin`, `unknown-linux-gnu`, `pc-windows-msvc`; `x86_64-unknown-linux-musl` is experimental.
 
 ## 5. Homebrew / winget
 

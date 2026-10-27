@@ -34,6 +34,17 @@ if (fake) { // never touch the real home in scripted mode
 for (const [env_, flag] of [['EVAL_MAX_TURNS', '--max-turns'], ['EVAL_MAX_TOOL_CALLS', '--max-tool-calls']]) if (process.env[env_]) args.push(flag, process.env[env_]);
 if (process.env.EVAL_MAX_WALL_MS) args.push('--max-wall-secs', String(Math.ceil(Number(process.env.EVAL_MAX_WALL_MS) / 1000)));
 
+// Enforce (the default) refuses to start on a host without a usable sandbox that also honours
+// `--network loopback` (e.g. CI runners with userns blocked). That is a property of the host, not of
+// the task: fall back to best-effort there. EVAL_SANDBOX=enforce|best-effort|off overrides.
+let sandbox = process.env.EVAL_SANDBOX;
+if (!sandbox) {
+  const doc = spawnSync(bin, ['doctor', '--cwd', cwd], { env, encoding: 'utf8' }).stdout || '';
+  sandbox = /will confine commands/.test(doc) && /loopback=(Weak|Strong)/.test(doc) ? 'enforce' : 'best-effort';
+}
+process.stderr.write(`adapter "rust": --sandbox ${sandbox}\n`);
+args.push('--sandbox', sandbox);
+
 // The task's acceptance criteria are what a user would hand to `--criteria-file`.
 const manifest = path.join(here, '..', '..', 'tasks', process.env.EVAL_TASK_ID || '', 'task.json');
 if (process.env.EVAL_TASK_ID && fs.existsSync(manifest)) {

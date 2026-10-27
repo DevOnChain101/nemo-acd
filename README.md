@@ -10,12 +10,12 @@ Pick one (details in [docs/INSTALL.md](docs/INSTALL.md)):
 
 ```sh
 # macOS / Linux: checksum + provenance verified (needs gh, else refuses), no sudo, installs to ~/.local/bin
-curl --proto '=https' --tlsv1.2 -fsSL https://github.com/OWNER/Nemo-ACD/releases/latest/download/install.sh | sh
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/DevOnChain101/nemo-acd/releases/latest/download/install.sh | sh
 # any OS with Node >= 18: native binary via platform packages
 npm install -g nemo-acd        # installs the command `nemo-acd`
 ```
 
-Windows: `packaging/install.ps1`. Release archives, SHA256SUMS and build provenance are on the GitHub Releases page. (`OWNER/Nemo-ACD` is replaced by `node scripts/check-placeholders.mjs --set <owner>/<repo>`; releases refuse to run until then.)
+Windows: `packaging/install.ps1`. Release archives, SHA256SUMS and build provenance are on the GitHub Releases page. (`DevOnChain101/nemo-acd` is replaced by `node scripts/check-placeholders.mjs --set <owner>/<repo>`; releases refuse to run until then.)
 
 ## Quick start
 
