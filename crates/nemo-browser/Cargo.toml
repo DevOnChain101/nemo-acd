@@ -10,7 +10,7 @@ workspace = true
 
 [dependencies]
 nemo-config = { path = "../nemo-config" }
-base64 = "0.22"
+base64 = "0.23"
 futures-util = { version = "0.3", default-features = false, features = ["sink"] }
 process-wrap = { version = "10", default-features = false, features = ["tokio1", "process-group", "job-object", "kill-on-drop"] }
 regex = "1.13.1"

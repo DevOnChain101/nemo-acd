@@ -14,7 +14,7 @@ nemo-config = { path = "../nemo-config" }
 nemo-core = { path = "../nemo-core" }
 nemo-terminal = { path = "../nemo-terminal" }
 nemo-verification = { path = "../nemo-verification" }
-base64 = "0.22"
+base64 = "0.23"
 # Capability-based dir handles: open files relative to the workspace root, no symlink escape (F12).
 cap-std = "4.0.3"
 globset = "0.4"
