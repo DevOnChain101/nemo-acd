@@ -29,6 +29,18 @@ fn run(policy: &SandboxPolicy, cwd: &Path, prog: &str, args: &[&str]) -> Output 
         .unwrap()
 }
 
+/// The `net_probe` example (target/<profile>/examples): a plain Rust binary to run inside the
+/// sandbox. Not python3/perl: `/usr/bin/*` interpreters are xcrun shims that fail under Seatbelt.
+fn net_probe() -> std::path::PathBuf {
+    let mut p = std::env::current_exe().unwrap();
+    p.pop();
+    p.pop();
+    p.push("examples");
+    p.push("net_probe");
+    assert!(p.exists(), "build the example first: {}", p.display());
+    p
+}
+
 /// Dirs live under target/, not the system temp dir (which the sandbox always makes writable).
 fn tmp() -> tempfile::TempDir {
     tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap()
@@ -211,6 +223,14 @@ fn common_toolchains_run_with_mach_allowlist() {
             eprintln!("SKIPPED {tool}: not installed");
             continue;
         };
+        // /usr/bin/{git,python3} are xcrun shims; on CI runners they cannot load libxcrun under Seatbelt.
+        if std::env::var_os("CI").is_some()
+            && bin.starts_with("/usr/bin")
+            && matches!(tool, "git" | "python3")
+        {
+            eprintln!("SKIPPED {tool}: {} is an xcrun shim", bin.display());
+            continue;
+        }
         let o = run(&p, w.path(), bin.to_str().unwrap(), args);
         assert!(
             o.status.success(),
@@ -312,13 +332,14 @@ fn unix_sockets_follow_network_policy() {
     let (a, s) = (tmp(), tmp());
     let sock = s.path().join("s.sock");
     let _l = std::os::unix::net::UnixListener::bind(&sock).unwrap();
-    let script = format!(
-        "import socket;c=socket.socket(socket.AF_UNIX);c.connect('{}')",
-        sock.display()
-    );
+    let probe = net_probe();
+    let sock = sock.to_str().unwrap();
     let mut p = pol(a.path());
-    p.readable_roots = vec![s.path().canonicalize().unwrap()];
-    let py = |p: &SandboxPolicy| run(p, a.path(), "/usr/bin/python3", &["-c", &script]);
+    p.readable_roots = vec![
+        s.path().canonicalize().unwrap(),
+        probe.parent().unwrap().canonicalize().unwrap(),
+    ];
+    let py = |p: &SandboxPolicy| run(p, a.path(), probe.to_str().unwrap(), &["unix", sock]);
     assert!(!py(&p).status.success(), "AF_UNIX connect must be denied");
     p.network = NetworkPolicy::Allow;
     let c = py(&p);
@@ -333,25 +354,11 @@ fn unix_sockets_follow_network_policy() {
 fn loopback_allows_local_bind_and_connect_only() {
     let a = tmp();
     // Child binds, connects and accepts on 127.0.0.1 and ::1, then probes non-loopback targets.
-    let script = r#"
-import socket
-def pair(fam, addr):
-    l = socket.socket(fam); l.bind((addr, 0)); l.listen(1)
-    c = socket.socket(fam); c.settimeout(2); c.connect((addr, l.getsockname()[1]))
-    l.accept()
-pair(socket.AF_INET, "127.0.0.1"); pair(socket.AF_INET6, "::1")
-print("LOOPBACK_OK")
-for host in ("169.254.1.1", "192.0.2.1"):
-    c = socket.socket(); c.settimeout(2)
-    try:
-        c.connect((host, 80)); print("REMOTE_CONNECTED")
-    except OSError as e:
-        print("remote_denied", e.errno)
-"#;
+    let probe = net_probe();
     let mut p = pol(a.path());
     p.network = NetworkPolicy::Loopback;
-    p.readable_roots = vec!["/Library".into()];
-    let o = run(&p, a.path(), "/usr/bin/python3", &["-c", script]);
+    p.readable_roots = vec![probe.parent().unwrap().canonicalize().unwrap()];
+    let o = run(&p, a.path(), probe.to_str().unwrap(), &["loopback"]);
     let out = String::from_utf8_lossy(&o.stdout);
     assert!(
         out.contains("LOOPBACK_OK"),

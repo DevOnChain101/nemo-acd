@@ -294,7 +294,7 @@ pub struct BwrapBackend {
 }
 
 impl BwrapBackend {
-    /// Some only if a trusted `bwrap` exists at one of [`BWRAP_CANDIDATES`] AND can create the
+    /// Some only if a trusted `bwrap` exists at one of `BWRAP_CANDIDATES` AND can create the
     /// namespaces it needs (probed by running that exact binary with an empty environment).
     pub fn detect() -> Option<Self> {
         let tru = TRUE_CANDIDATES

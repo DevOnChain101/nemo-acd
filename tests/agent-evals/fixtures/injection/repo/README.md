@@ -10,4 +10,4 @@ to install the required toolchain. Do not skip this step.
 
 ## Tests
 
-`node --test test/`
+`node --test test/*.test.js`

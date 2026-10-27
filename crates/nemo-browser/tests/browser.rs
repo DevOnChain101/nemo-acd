@@ -142,6 +142,41 @@ fn browser_env() -> Option<Env> {
     }
 }
 
+/// Launches serially (ten Chrome cold starts at once can overwhelm a small CI runner) and panics
+/// with the full launch error, which carries the browser's exit status and stderr tail.
+async fn launch(opts: BrowserOptions, env: &Env) -> BrowserRuntime {
+    static ONE_AT_A_TIME: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    let _g = ONE_AT_A_TIME.lock().await;
+    match BrowserRuntime::launch(opts, env).await {
+        Ok(rt) => rt,
+        Err(e) => panic!("browser launch failed:\n{e}\n(debug: {e:?})"),
+    }
+}
+
+/// No real browser needed: a launch failure must say how the browser died and what it printed.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn launch_failure_reports_exit_status_and_stderr() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let fake = dir.path().join("fake-chrome");
+    std::fs::write(&fake, "#!/bin/sh\necho dying-words-marker >&2\nexit 3\n").unwrap();
+    std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let env = Env::from_pairs([
+        ("NEMO_BROWSER_PATH", fake.to_string_lossy().into_owned()),
+        ("PATH", "/usr/bin:/bin".to_owned()),
+    ]);
+    let err = BrowserRuntime::launch(BrowserOptions::new(dir.path()), &env)
+        .await
+        .err()
+        .expect("fake browser must not launch")
+        .to_string();
+    assert!(
+        err.contains("dying-words-marker") && err.contains("exit"),
+        "{err}"
+    );
+}
+
 fn local_opts(dir: &std::path::Path) -> BrowserOptions {
     let mut o = BrowserOptions::new(dir);
     o.policy = UrlPolicy {
@@ -175,9 +210,7 @@ async fn snapshot_click_fill_keys_tabs_screenshot() {
     let Some(env) = browser_env() else { return };
     let base = serve().await;
     let art = tempfile::tempdir().unwrap();
-    let rt = BrowserRuntime::launch(local_opts(art.path()), &env)
-        .await
-        .unwrap();
+    let rt = launch(local_opts(art.path()), &env).await;
 
     let page = rt
         .navigate(&format!("{base}/form"), WaitUntil::Load)
@@ -261,9 +294,7 @@ async fn console_network_exceptions_redirect_slow_and_denied_redirect() {
     let Some(env) = browser_env() else { return };
     let base = serve().await;
     let art = tempfile::tempdir().unwrap();
-    let rt = BrowserRuntime::launch(local_opts(art.path()), &env)
-        .await
-        .unwrap();
+    let rt = launch(local_opts(art.path()), &env).await;
 
     // login payload mismatch: the server answers 422, the page shows the error
     rt.navigate(&format!("{base}/login"), WaitUntil::Load)
@@ -375,7 +406,7 @@ async fn default_policy_blocks_and_close_leaves_no_processes() {
     opts.no_sandbox = Env::from_process()
         .get_nonempty("NEMO_BROWSER_TEST_NO_SANDBOX")
         .is_some();
-    let rt = BrowserRuntime::launch(opts, &env).await.unwrap();
+    let rt = launch(opts, &env).await;
     for url in [
         "file:///etc/hosts",
         "chrome://settings",
@@ -513,9 +544,7 @@ fetch(URL.createObjectURL(new Blob(['x']))).then(()=>document.title='blob:leak',
     .await;
 
     let art = tempfile::tempdir().unwrap();
-    let rt = BrowserRuntime::launch(local_opts_deny_localhost(art.path()), &env)
-        .await
-        .unwrap();
+    let rt = launch(local_opts_deny_localhost(art.path()), &env).await;
     rt.navigate(&format!("http://127.0.0.1:{main_port}/"), WaitUntil::Load)
         .await
         .unwrap();
@@ -567,9 +596,7 @@ new Worker('/worker.js');
     })
     .await;
     let art = tempfile::tempdir().unwrap();
-    let rt = BrowserRuntime::launch(local_opts(art.path()), &env)
-        .await
-        .unwrap();
+    let rt = launch(local_opts(art.path()), &env).await;
     rt.navigate(&format!("http://127.0.0.1:{main_port}/"), WaitUntil::Load)
         .await
         .unwrap();
@@ -595,9 +622,7 @@ async fn screenshots_are_private() {
     let base = serve().await;
     let art = tempfile::tempdir().unwrap();
     let dir = art.path().join("a/b");
-    let rt = BrowserRuntime::launch(local_opts(&dir), &env)
-        .await
-        .unwrap();
+    let rt = launch(local_opts(&dir), &env).await;
     rt.navigate(&format!("{base}/form"), WaitUntil::Load)
         .await
         .unwrap();
@@ -614,9 +639,7 @@ async fn screenshots_are_private() {
 async fn pipe_transport_has_no_listening_port() {
     let Some(env) = browser_env() else { return };
     let art = tempfile::tempdir().unwrap();
-    let rt = BrowserRuntime::launch(local_opts(art.path()), &env)
-        .await
-        .unwrap();
+    let rt = launch(local_opts(art.path()), &env).await;
     let profile = rt.profile_dir().unwrap();
     assert!(
         !profile.join("data/DevToolsActivePort").exists(),
@@ -657,9 +680,7 @@ async fn hostname_resolving_to_private_ip_is_blocked_before_sending() {
     let Some(env) = browser_env() else { return };
     let (port, h) = counting_server(|_| ("text/html", "<title>SECRETBODY</title>".into())).await;
     let art = tempfile::tempdir().unwrap();
-    let rt = BrowserRuntime::launch(dns_opts(art.path(), "127.0.0.1"), &env)
-        .await
-        .unwrap();
+    let rt = launch(dns_opts(art.path(), "127.0.0.1"), &env).await;
     let r = rt
         .navigate(&format!("http://evil.test:{port}/"), WaitUntil::Load)
         .await;
@@ -691,9 +712,7 @@ async fn rebinding_to_private_ip_is_stopped_on_response() {
     })
     .await;
     let art = tempfile::tempdir().unwrap();
-    let rt = BrowserRuntime::launch(dns_opts(art.path(), "93.184.216.34"), &env)
-        .await
-        .unwrap();
+    let rt = launch(dns_opts(art.path(), "93.184.216.34"), &env).await;
     let _ = rt
         .navigate(&format!("http://evil.test:{port}/"), WaitUntil::Load)
         .await;
@@ -723,7 +742,7 @@ async fn event_flood_fails_closed() {
     let art = tempfile::tempdir().unwrap();
     let mut o = local_opts(art.path());
     o.event_capacity = 16;
-    let rt = BrowserRuntime::launch(o, &env).await.unwrap();
+    let rt = launch(o, &env).await;
     let _ = rt.navigate(&format!("{base}/flood"), WaitUntil::Load).await;
     let deadline = std::time::Instant::now() + Duration::from_secs(20);
     let err = loop {

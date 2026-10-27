@@ -261,6 +261,8 @@ mod tests {
             "t",
             "--provider",
             &provider,
+            "--sandbox",
+            "off", // not a sandbox test: must not depend on the host
             "--trust-project",
             "--approve-mcp",
             "proj",

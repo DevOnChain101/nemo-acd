@@ -12,7 +12,9 @@ fail() { echo "::error::$*"; exit 1; }
 
 # Checkout may not persist credentials: pass the token as a header for this one command only (never written to .git/config).
 auth=()
-if [ -n "${GH_TOKEN:-}" ]; then auth=(-c "http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"); fi
+if [ -n "${GH_TOKEN:-}" ]; then
+  auth=(-c "http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')")
+fi
 git ${auth[@]+"${auth[@]}"} fetch --force --no-tags origin "refs/tags/$TAG:refs/tags/$TAG"   # checkout can turn annotated tags into lightweight ones
 [ "$(git cat-file -t "refs/tags/$TAG")" = tag ] || fail "$TAG is a lightweight tag; use git tag -s"
 obj=$(git rev-parse "refs/tags/$TAG")
@@ -27,9 +29,9 @@ IFS=$'\t' read -r verified name otype osha email < <(gh api "repos/$REPO/git/tag
 
 list=${MAINTAINERS:-.github/release-maintainers.txt}
 allowed=""
-[ -f "$list" ] && allowed=$(sed 's/#.*//; s/[[:space:]]//g; /^$/d' "$list" | tr 'A-Z' 'a-z')
+if [ -f "$list" ]; then allowed=$(sed 's/#.*//; s/[[:space:]]//g; /^$/d' "$list" | tr '[:upper:]' '[:lower:]'); fi
 if [ -n "$allowed" ]; then
-  printf '%s\n' "$allowed" | grep -Fxq -- "$(printf '%s' "$email" | tr 'A-Z' 'a-z')" \
+  printf '%s\n' "$allowed" | grep -Fxq -- "$(printf '%s' "$email" | tr '[:upper:]' '[:lower:]')" \
     || fail "tagger '$email' is not listed in $list"
   echo "tagger is a listed maintainer"
 elif [ "${NEMO_ALLOW_ANY_VERIFIED_TAGGER:-}" = true ]; then

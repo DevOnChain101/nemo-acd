@@ -26,7 +26,7 @@ use process_wrap::tokio::{ChildWrapper, CommandWrap};
 use serde_json::{Value, json};
 use snapshot::RefTable;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -406,6 +406,27 @@ fn key_def(key: &str) -> Option<(String, String, u32, Option<String>)> {
     }
 }
 
+/// A launch failure that says what happened to the browser: its exit status (or that it is still
+/// running) and the last 2 KiB of its stderr, so a CI log alone explains why it did not come up.
+fn launch_failure(
+    child: &mut dyn ChildWrapper,
+    stderr_path: &Path,
+    exe: &Path,
+    what: &str,
+) -> BrowserError {
+    let status = match child.try_wait() {
+        Ok(Some(s)) => format!("exited ({s})"),
+        Ok(None) => "still running".to_owned(),
+        Err(e) => format!("status unknown ({e})"),
+    };
+    let bytes = std::fs::read(stderr_path).unwrap_or_default();
+    let tail = String::from_utf8_lossy(&bytes[bytes.len().saturating_sub(2048)..]).into_owned();
+    BrowserError::Launch(format!(
+        "{what}; browser {} {status}; in a container or as root try the explicit no_sandbox option. stderr (last 2 KiB): {tail}",
+        exe.display()
+    ))
+}
+
 impl BrowserRuntime {
     /// Discovers a browser (`NEMO_BROWSER_PATH` first), launches it headless with an isolated
     /// temp profile and opens one tab in a fresh browser context.
@@ -495,36 +516,54 @@ impl BrowserRuntime {
                         break format!("ws://127.0.0.1:{}{}", port.trim(), path.trim());
                     }
                 }
-                if let Some(status) = child.try_wait()? {
-                    let tail = std::fs::read_to_string(&stderr_path).unwrap_or_default();
-                    let tail: String = tail
-                        .chars()
-                        .rev()
-                        .take(600)
-                        .collect::<Vec<_>>()
-                        .into_iter()
-                        .rev()
-                        .collect();
-                    return Err(BrowserError::Launch(format!(
-                        "browser exited ({status}) before DevTools was ready; in a container or as root try the explicit no_sandbox option. stderr: {tail}"
-                    )));
+                if child.try_wait()?.is_some() {
+                    return Err(launch_failure(
+                        &mut *child,
+                        &stderr_path,
+                        &exe,
+                        "browser exited before DevTools was ready",
+                    ));
                 }
                 if Instant::now() > deadline {
-                    return Err(BrowserError::Timeout(
-                        "browser did not publish its DevTools port".into(),
+                    return Err(launch_failure(
+                        &mut *child,
+                        &stderr_path,
+                        &exe,
+                        "browser did not publish its DevTools port in time",
                     ));
                 }
                 tokio::time::sleep(Duration::from_millis(50)).await;
             };
-            Arc::new(Cdp::connect(&ws_url, opts.event_capacity).await?)
+            match Cdp::connect(&ws_url, opts.event_capacity).await {
+                Ok(c) => Arc::new(c),
+                Err(e) => {
+                    return Err(launch_failure(
+                        &mut *child,
+                        &stderr_path,
+                        &exe,
+                        &e.to_string(),
+                    ));
+                }
+            }
         };
-        let ctx = cdp
+        let ctx = match cdp
             .send(
                 None,
                 "Target.createBrowserContext",
                 json!({"disposeOnDetach": true}),
             )
-            .await?;
+            .await
+        {
+            Ok(c) => c,
+            Err(e) => {
+                return Err(launch_failure(
+                    &mut *child,
+                    &stderr_path,
+                    &exe,
+                    &e.to_string(),
+                ));
+            }
+        };
         let context_id = ctx["browserContextId"]
             .as_str()
             .unwrap_or_default()
@@ -568,7 +607,12 @@ impl BrowserRuntime {
             pid,
             shots: AtomicU32::new(0),
         };
-        rt.new_tab(None).await?;
+        if let Err(e) = rt.new_tab(None).await {
+            if let Some(c) = rt.child.lock().await.as_mut() {
+                return Err(launch_failure(&mut **c, &stderr_path, &exe, &e.to_string()));
+            }
+            return Err(e);
+        }
         Ok(rt)
     }
 

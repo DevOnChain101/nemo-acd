@@ -22,7 +22,7 @@ impl ColorMode {
     /// Terminal colour depth from the environment.
     ///
     /// Order: `CLAUDE_MONITOR_COLOR` (truecolor|24bit|256|16, the Node override) beats
-    /// `NO_COLOR` (non-empty value, https://no-color.org) beats `COLORTERM`
+    /// `NO_COLOR` (non-empty value, <https://no-color.org>) beats `COLORTERM`
     /// (truecolor|24bit), `TERM_PROGRAM`, `WT_SESSION`, `TERM`; a basic `TERM` (linux, ansi,
     /// vt100, xterm, screen, ...) gives 16 colours; otherwise truecolor on Windows, 256 elsewhere.
     pub fn detect(env: &Env, platform: Platform) -> Self {

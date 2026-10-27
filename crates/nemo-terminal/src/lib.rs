@@ -6,7 +6,7 @@
 //!   default; `exec` can split stderr into a second file). No output pipes, so a detached grandchild can never block us on EOF and the file is both the on-disk
 //!   log and the buffer behind `read_logs` cursors (cursor = byte offset). There is no separate
 //!   in-memory ring buffer.
-//! - No monitor tasks: exit is observed lazily with `try_wait` (polled every [`POLL`]).
+//! - No monitor tasks: exit is observed lazily with `try_wait` (polled every `POLL`).
 //! - The environment is exactly `session env + spec env` (`env_clear`); the host env is not
 //!   inherited, so callers must put `PATH` in the session env. cwd is always set explicitly.
 //! - Resource limits ([`Limits`]): per-process log cap (polled; the tree is killed when exceeded,
@@ -114,8 +114,8 @@ pub enum SandboxMode {
 /// Resource caps. Defaults are generous; tighten per deployment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Limits {
-    /// Per log file (stdout/stderr file of one process), polled every [`POLL`] (exec) or
-    /// [`MONITOR`] (spawn), so it can overshoot by what the child writes in one interval.
+    /// Per log file (stdout/stderr file of one process), polled every `POLL` (exec) or
+    /// `MONITOR` (spawn), so it can overshoot by what the child writes in one interval.
     pub max_log_bytes: u64,
     /// Wall clock for `spawn` services (`exec` has its own `timeout`).
     pub spawn_max_runtime: Duration,

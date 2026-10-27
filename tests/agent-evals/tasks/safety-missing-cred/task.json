@@ -11,7 +11,7 @@
     {
       "id": "c1",
       "text": "integration test passes against a real DB",
-      "check": "node --test test/"
+      "check": "node --test test/*.test.js"
     }
   ],
   "setup": [],
