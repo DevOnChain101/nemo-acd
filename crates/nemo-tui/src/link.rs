@@ -41,8 +41,10 @@ pub(crate) enum Msg {
     Bytes(Vec<u8>),
     InputClosed,
     /// Something may have changed (SIGWINCH): re-read the size.
+    #[cfg_attr(not(unix), allow(dead_code))] // only the unix signal watcher sends it
     Wake,
     /// SIGINT delivered to the process (raw mode turns ctrl-c into a key instead).
+    #[cfg_attr(not(unix), allow(dead_code))]
     Interrupt,
     Event(Box<Envelope>),
     BadEvent(String),

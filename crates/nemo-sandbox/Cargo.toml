@@ -8,6 +8,10 @@ license.workspace = true
 [lints]
 workspace = true
 
+[features]
+# `NEMO_TEST_FORCE_BACKEND=landlock-only|none` forces `detect()` (Landlock only / no sandbox). Debug builds only.
+test-backend = []
+
 [dependencies]
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"

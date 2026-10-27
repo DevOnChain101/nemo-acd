@@ -146,16 +146,32 @@ pub fn doctor(env: &Env, cwd: Option<&Path>) -> Result<u8, String> {
     );
 
     let best = nemo_sandbox::detect();
-    let confines = best.capabilities().filesystem >= nemo_sandbox::Guarantee::Weak;
+    // The exact preflight `nemo run` does under --sandbox enforce, on the standard policy for
+    // this workspace (default network deny), not just "does a backend exist".
+    let root = std::fs::canonicalize(cwd.unwrap_or(Path::new("."))).unwrap_or_else(|_| ".".into());
+    let policy = nemo_sandbox::SandboxPolicy::standard(&root, &std::env::temp_dir());
+    let ready = crate::run::sandbox_preflight(&*best, Some(&policy));
     out!("sandbox for tool commands (`nemo run --sandbox enforce|best-effort|off`):");
     out!(
         "  default mode: enforce; `nemo run` {}",
-        if confines {
+        if ready.is_ok() {
             "will confine commands"
         } else {
-            "will REFUSE to start (exit 2): no backend confines the filesystem; use --sandbox best-effort|off to run unconfined"
+            "will REFUSE to start (exit 2); use --sandbox best-effort|off to run unconfined"
         }
     );
+    match &ready {
+        Ok(()) => out!("  enforce_ready: yes"),
+        Err(e) => out!("  enforce_ready: no ({})", san(e)),
+    }
+    if best.name() == "landlock" {
+        out!(
+            "  hint: only Landlock is available. It cannot make .git/hooks and .git/config read-only inside the writable workspace, so --sandbox enforce needs bubblewrap (bwrap) with unprivileged user namespaces."
+        );
+        out!(
+            "  hint: on Ubuntu 24.04+ AppArmor restricts them: `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`, or install an AppArmor profile that allows /usr/bin/bwrap to create user namespaces; or run with --sandbox best-effort (unconfined)."
+        );
+    }
     out!("  selected {}", guarantees(&*nemo_sandbox::detect()));
     out!(
         "  network (`nemo run --network deny|loopback|allow`, default deny): {}",

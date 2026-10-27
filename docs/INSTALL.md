@@ -36,7 +36,7 @@ Templates only: `packaging/homebrew/nemo.rb.tmpl`, `packaging/winget/*.tmpl`. No
 ## Requirements and checks
 
 - git on PATH; a Chrome-family browser only for browser features (`NEMO_BROWSER_PATH` to choose one; Nemo never downloads a browser).
-- Linux sandbox: kernel with Landlock (5.13+, ABI 3+ for strong filesystem confinement) or `bubblewrap`. On Ubuntu 24.04 bubblewrap needs `sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0` (or an AppArmor profile for bwrap).
+- Linux sandbox: the default `--sandbox enforce` needs `bubblewrap` (`bwrap`) with unprivileged user namespaces. Landlock alone (kernel 5.13+) cannot express the standard policy (read-only `.git/hooks` inside the writable workspace), so `nemo doctor` shows `enforce_ready: no` and `nemo run` refuses unless you pass `--sandbox best-effort`. On Ubuntu 24.04 bubblewrap needs `sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0` (or an AppArmor profile for bwrap).
 - Run `nemo doctor --cwd .` and read the sandbox section.
 - Keys: `NEMO_*` environment variables only (README, docs/specs/config.md).
 

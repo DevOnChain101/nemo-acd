@@ -14,7 +14,7 @@ path = "src/main.rs"
 
 [features]
 # Enables `--provider fake:<script.json>` (scripted model, no network). Debug builds only.
-test-provider = []
+test-provider = ["nemo-sandbox/test-backend"]
 
 [dependencies]
 clap = { version = "4.6.7", features = ["derive"] }

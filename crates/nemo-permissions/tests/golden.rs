@@ -76,15 +76,15 @@ impl Sandbox {
             fs::create_dir_all(Path::new(p).parent().unwrap()).unwrap();
             fs::write(p, c.as_str().unwrap_or("")).unwrap();
         }
-        for (link, target) in fs_spec["symlinks"].as_object().into_iter().flatten() {
-            #[cfg(unix)]
+        let links = fs_spec["symlinks"].as_object().filter(|m| !m.is_empty());
+        #[cfg(not(unix))]
+        if links.is_some() {
+            return false; // symlink cases need privileges on Windows: skipped there
+        }
+        #[cfg(unix)]
+        for (link, target) in links.into_iter().flatten() {
             std::os::unix::fs::symlink(target.as_str().unwrap(), link)
                 .unwrap_or_else(|e| panic!("symlink {link} -> {target}: {e}"));
-            #[cfg(not(unix))]
-            {
-                let _ = (link, target);
-                return false; // symlink cases need privileges on Windows: skipped there
-            }
         }
         true
     }

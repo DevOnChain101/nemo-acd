@@ -26,7 +26,7 @@ env_dump() {
   if [ ! -x "$nemo" ] && [ -x "$nemo.exe" ]; then nemo=$nemo.exe; fi
   if [ -x "$nemo" ]; then
     echo "nemo doctor (sandbox):"
-    "$nemo" doctor --cwd "${RUNNER_TEMP:-${TMPDIR:-/tmp}}" 2>&1 | grep -E 'default mode: enforce|^  selected |available:' | sed 's/^/  /'
+    "$nemo" doctor --cwd "${RUNNER_TEMP:-${TMPDIR:-/tmp}}" 2>&1 | grep -E 'default mode: enforce|enforce_ready|^  selected |available:' | sed 's/^/  /'
   fi
 }
 
@@ -70,6 +70,7 @@ digest() {
 out=$(digest)
 printf '%s\n' "$out"
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+  # shellcheck disable=SC2016 # the backticks are literal markdown fences
   printf '```\n%s\n```\n' "$out" >>"$GITHUB_STEP_SUMMARY"
 fi
 exit 0

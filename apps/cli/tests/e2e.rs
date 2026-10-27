@@ -7,17 +7,20 @@ use std::process::{Child, Command, Output, Stdio};
 
 use serde_json::{Value, json};
 
-/// Whether this host has an OS sandbox that confines commands (what `nemo doctor` reports). The
-/// default `--sandbox enforce` refuses to start without one (e.g. CI runners with userns blocked).
+/// Whether `--sandbox enforce` (the default) would start here with the standard policy, as
+/// `nemo doctor` reports it (`enforce_ready: yes`). False e.g. on CI runners with userns blocked
+/// (bubblewrap unusable) where Landlock alone cannot express the standard policy.
 fn host_confines() -> bool {
     static C: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *C.get_or_init(|| {
+        let d = tempfile::tempdir().unwrap();
         let o = Command::new(env!("CARGO_BIN_EXE_nemo"))
-            .arg("doctor")
-            .env("NEMO_HOME", tempfile::tempdir().unwrap().path())
+            .args(["doctor", "--cwd"])
+            .arg(d.path())
+            .env("NEMO_HOME", d.path())
             .output()
             .unwrap();
-        String::from_utf8_lossy(&o.stdout).contains("will confine commands")
+        String::from_utf8_lossy(&o.stdout).contains("enforce_ready: yes")
     })
 }
 
@@ -25,7 +28,7 @@ fn host_confines() -> bool {
 fn skip_without_sandbox() -> bool {
     let skip = !host_confines();
     if skip {
-        eprintln!("SKIP: no OS sandbox available on this host");
+        eprintln!("SKIP: `nemo doctor` reports enforce_ready: no on this host");
     }
     skip
 }
@@ -70,6 +73,10 @@ impl Rig {
             .env("HOME", self.dir.path())
             .env("NEMO_HOME", self.home())
             .stdin(Stdio::null());
+        // Lets CI simulate a Landlock-only host (see nemo-sandbox feature `test-backend`).
+        if let Some(v) = std::env::var_os("NEMO_TEST_FORCE_BACKEND") {
+            c.env("NEMO_TEST_FORCE_BACKEND", v);
+        }
         c
     }
     fn run(&self, script: Value, args: &[&str]) -> (Output, Vec<Value>) {
@@ -839,6 +846,22 @@ fn closed_stdout_cancels_the_run_exit_141_and_still_persists_the_end() {
         )
         .unwrap();
     assert_eq!(n, 1, "task.ended persisted after the pipe closed");
+}
+
+#[test]
+fn doctor_reports_enforce_readiness() {
+    let d = tempfile::tempdir().unwrap();
+    let o = Command::new(env!("CARGO_BIN_EXE_nemo"))
+        .args(["doctor", "--cwd"])
+        .arg(d.path())
+        .env("NEMO_HOME", d.path())
+        .output()
+        .unwrap();
+    let out = String::from_utf8_lossy(&o.stdout);
+    assert!(
+        out.contains("enforce_ready: yes") || out.contains("enforce_ready: no ("),
+        "{out}"
+    );
 }
 
 #[test]

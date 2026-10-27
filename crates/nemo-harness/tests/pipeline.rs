@@ -1,3 +1,5 @@
+// Most tests here are unix-only (sandbox/process groups), so their helpers are unused on Windows.
+#![cfg_attr(not(unix), allow(unused_imports, dead_code))]
 mod common;
 
 use std::sync::Arc;

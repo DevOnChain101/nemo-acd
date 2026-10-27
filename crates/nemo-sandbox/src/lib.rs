@@ -353,6 +353,10 @@ impl SandboxBackend for NullSandbox {
 /// it returns [`NullSandbox`] (`capabilities().filesystem == Guarantee::None`). Callers must
 /// check the capabilities; `nemo-terminal` refuses such a backend unless told otherwise.
 pub fn detect() -> Box<dyn SandboxBackend> {
+    #[cfg(all(feature = "test-backend", debug_assertions))]
+    if std::env::var_os("NEMO_TEST_FORCE_BACKEND").is_some_and(|v| v == "none") {
+        return Box::new(NullSandbox);
+    }
     #[cfg(target_os = "macos")]
     if let Some(b) = SeatbeltBackend::detect() {
         return Box::new(b);

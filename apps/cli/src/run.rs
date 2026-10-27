@@ -87,7 +87,7 @@ impl NetworkArg {
 
 /// `Enforce` needs a backend that confines the filesystem and accepts the policy; `Err` is
 /// the message for the exit-2 refusal.
-fn sandbox_preflight(
+pub(crate) fn sandbox_preflight(
     backend: &dyn SandboxBackend,
     policy: Option<&nemo_terminal::SandboxPolicy>,
 ) -> Result<(), String> {

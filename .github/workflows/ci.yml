@@ -122,9 +122,12 @@ jobs:
           NEMO_BROWSER_PATH: ${{ steps.chrome.outputs.chrome-path }}
         run: |
           echo "Chrome: $NEMO_BROWSER_PATH"
-          # Hosted Linux runners forbid the Chrome sandbox (AppArmor userns restriction); the test
-          # hook adds --no-sandbox for the test fixture server only.
-          if [ "$RUNNER_OS" = Linux ]; then export NEMO_BROWSER_TEST_NO_SANDBOX=1; fi
+          "$NEMO_BROWSER_PATH" --version || echo "(could not print the Chrome version)"
+          # Chrome's OWN helper sandbox is unusable on these ephemeral VMs (Linux: AppArmor userns
+          # restriction; macOS: Mach port rendezvous denied, "Page.enable got no answer"). The test
+          # hook only adds --no-sandbox so the tests can exercise OUR URL policy; production keeps
+          # Chrome's sandbox ON (default). Windows keeps it on.
+          if [ "$RUNNER_OS" != Windows ]; then export NEMO_BROWSER_TEST_NO_SANDBOX=1; fi
           cargo test -p nemo-browser --locked --no-fail-fast -- --nocapture 2>&1 | tee browser.log
           # The suite prints SKIP and passes without a browser: make skipping a failure here.
           if grep -q "SKIP" browser.log; then echo "::error::browser tests were skipped"; exit 1; fi
@@ -224,7 +227,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - run: shellcheck packaging/install.sh scripts/*.sh
+      - run: shellcheck -S warning packaging/install.sh scripts/*.sh
       - name: Tracked paths are portable to Windows
         run: node scripts/check-portable-paths.mjs
       - name: Release tag policy tests (local origin + stub gh)

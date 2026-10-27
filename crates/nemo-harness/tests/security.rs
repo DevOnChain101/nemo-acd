@@ -1,4 +1,6 @@
 //! Findings of the security review of the harness (M9-M12, L7) and the hook / gate gaps.
+// Most tests here are unix-only (sandbox/process groups), so their helpers are unused on Windows.
+#![cfg_attr(not(unix), allow(unused_imports, dead_code))]
 
 mod common;
 
