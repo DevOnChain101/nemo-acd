@@ -423,6 +423,7 @@ async fn default_policy_blocks_and_close_leaves_no_processes() {
     }
     let profile = rt.profile_dir().unwrap();
     assert!(profile.is_dir());
+    #[cfg(unix)]
     let pid = rt.pid();
     #[cfg(unix)]
     {

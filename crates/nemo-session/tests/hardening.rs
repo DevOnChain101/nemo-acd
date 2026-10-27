@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use nemo_core::{PermissionMode, SessionStatus, WorkspaceContext};
 use nemo_events::{Budget, Event};
-use nemo_session::{NewMessage, NewSession, Retention, SessionWriter, Store, StoreOptions};
+use nemo_session::{NewSession, Retention, SessionWriter, Store, StoreOptions};
 use serde_json::json;
 
 struct Env {
@@ -67,6 +67,7 @@ fn mode(p: &Path) -> u32 {
 #[cfg(unix)]
 #[test]
 fn home_db_artifacts_and_mirror_are_private() {
+    use nemo_session::NewMessage;
     let e = env();
     let (_s, mut w) = session(&e, StoreOptions::default(), "s1");
     w.append_message(NewMessage::user(json!("hi"))).unwrap();

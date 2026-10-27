@@ -53,6 +53,47 @@ impl SeatbeltBackend {
     }
 }
 
+/// Developer dirs that Apple's tool shims (`/usr/bin/git` -> xcrun) must read and exec, resolved
+/// once: `$DEVELOPER_DIR`, `xcode-select -p`, the Command Line Tools and every installed
+/// `/Applications/Xcode*.app`. Read-only; only existing directories, canonicalised.
+fn developer_dirs() -> &'static [PathBuf] {
+    static D: std::sync::OnceLock<Vec<PathBuf>> = std::sync::OnceLock::new();
+    D.get_or_init(|| {
+        let mut c: Vec<PathBuf> = std::env::var_os("DEVELOPER_DIR")
+            .map(PathBuf::from)
+            .into_iter()
+            .collect();
+        let sel = std::process::Command::new("/usr/bin/xcode-select")
+            .arg("-p")
+            .env_clear()
+            .output();
+        if let Some(o) = sel.ok().filter(|o| o.status.success()) {
+            c.push(PathBuf::from(String::from_utf8_lossy(&o.stdout).trim()));
+        }
+        c.push("/Library/Developer/CommandLineTools".into());
+        for e in std::fs::read_dir("/Applications")
+            .into_iter()
+            .flatten()
+            .flatten()
+        {
+            let n = e.file_name();
+            let n = n.to_string_lossy();
+            if n.starts_with("Xcode") && n.ends_with(".app") {
+                c.push(e.path().join("Contents/Developer"));
+            }
+        }
+        let mut c: Vec<PathBuf> = c
+            .into_iter()
+            .filter(|p| p.is_absolute())
+            .filter_map(|p| p.canonicalize().ok())
+            .filter(|p| p.is_dir())
+            .collect();
+        c.sort();
+        c.dedup();
+        c
+    })
+}
+
 fn canon(p: &Path) -> PathBuf {
     p.canonicalize().unwrap_or_else(|_| p.to_path_buf())
 }
@@ -80,6 +121,7 @@ pub fn seatbelt_profile(
     let mut reads = canon_all(&policy.readable_roots);
     reads.extend(canon_all(&policy.writable_roots));
     reads.extend(tmp.clone());
+    reads.extend(developer_dirs().iter().cloned());
     let mut writes = canon_all(&policy.writable_roots);
     writes.extend(tmp); // the real /tmp and /var/folders are NOT granted
     let (r, w, d, ro) = (
@@ -219,6 +261,55 @@ mod tests {
         assert!(!s.contains("allow default") && !s.contains('é'));
         assert!(params.iter().any(|(_, v)| *v == evil));
         assert!(s.trim_end().ends_with(')'));
+    }
+
+    #[test]
+    fn active_developer_dir_is_readable_and_git_runs_inside() {
+        let sel = std::process::Command::new("/usr/bin/xcode-select")
+            .arg("-p")
+            .output()
+            .unwrap();
+        let sel = PathBuf::from(String::from_utf8_lossy(&sel.stdout).trim()).canonicalize();
+        if let Ok(sel) = sel {
+            let (_, params) = seatbelt_profile(&SandboxPolicy::default(), None);
+            assert!(
+                params.iter().any(|(_, v)| *v == sel),
+                "{sel:?} not in {params:?}"
+            );
+        }
+        if SeatbeltBackend::detect().is_none() {
+            return;
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().canonicalize().unwrap();
+        let policy = SandboxPolicy {
+            writable_roots: vec![root.clone()],
+            ..Default::default()
+        };
+        let run = |args: &[&str]| {
+            let c = SandboxedCommand {
+                program: "/usr/bin/git".into(),
+                args: args.iter().map(Into::into).collect(),
+                cwd: Some(root.clone()),
+                ..Default::default()
+            };
+            let w = SeatbeltBackend.wrap(&policy, &c).unwrap();
+            let o = std::process::Command::new(&w.program)
+                .args(&w.args)
+                .current_dir(&root)
+                .env_clear()
+                .envs(w.env.iter().map(|(k, v)| (k, v)))
+                .output()
+                .unwrap();
+            (
+                o.status.success(),
+                String::from_utf8_lossy(&o.stderr).into_owned(),
+            )
+        };
+        // xcrun may warn about its cache dir on stderr; only the exit status matters
+        assert!(run(&["--version"]).0);
+        assert!(run(&["init", "-q"]).0);
+        assert!(run(&["status", "--porcelain"]).0);
     }
 
     #[test]

@@ -211,6 +211,11 @@ impl LinuxLandlockBackend {
 
 #[cfg(target_os = "linux")]
 pub(crate) fn detect_linux() -> Option<Box<dyn SandboxBackend>> {
+    // Test hook: simulate a host where only Landlock works (e.g. Ubuntu 24.04 with userns blocked).
+    #[cfg(all(feature = "test-backend", debug_assertions))]
+    if std::env::var_os("NEMO_TEST_FORCE_BACKEND").is_some_and(|v| v == "landlock-only") {
+        return LinuxLandlockBackend::detect().map(|b| Box::new(b) as Box<dyn SandboxBackend>);
+    }
     if let Some(b) = BwrapBackend::detect() {
         return Some(Box::new(b));
     }

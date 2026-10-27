@@ -35,12 +35,12 @@ for (const [env_, flag] of [['EVAL_MAX_TURNS', '--max-turns'], ['EVAL_MAX_TOOL_C
 if (process.env.EVAL_MAX_WALL_MS) args.push('--max-wall-secs', String(Math.ceil(Number(process.env.EVAL_MAX_WALL_MS) / 1000)));
 
 // Enforce (the default) refuses to start on a host without a usable sandbox that also honours
-// `--network loopback` (e.g. CI runners with userns blocked). That is a property of the host, not of
+// `--network loopback` (`enforce_ready: yes` = the standard policy builds and wraps) (e.g. CI runners with userns blocked). That is a property of the host, not of
 // the task: fall back to best-effort there. EVAL_SANDBOX=enforce|best-effort|off overrides.
 let sandbox = process.env.EVAL_SANDBOX;
 if (!sandbox) {
   const doc = spawnSync(bin, ['doctor', '--cwd', cwd], { env, encoding: 'utf8' }).stdout || '';
-  sandbox = /will confine commands/.test(doc) && /loopback=(Weak|Strong)/.test(doc) ? 'enforce' : 'best-effort';
+  sandbox = /enforce_ready: yes/.test(doc) && /loopback=(Weak|Strong)/.test(doc) ? 'enforce' : 'best-effort';
 }
 process.stderr.write(`adapter "rust": --sandbox ${sandbox}\n`);
 args.push('--sandbox', sandbox);

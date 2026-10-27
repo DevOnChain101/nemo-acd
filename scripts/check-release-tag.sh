@@ -24,7 +24,7 @@ IFS=$'\t' read -r verified name otype osha email < <(gh api "repos/$REPO/git/tag
   --jq '[.verification.verified, .tag, .object.type, .object.sha, (.tagger.email // "")] | @tsv')
 [ "$verified" = true ] || fail "GitHub does not report a verified signature for tag $TAG (see docs/RELEASE.md)"
 [ "$name" = "$TAG" ] || fail "tag object is named '$name', expected '$TAG'"
-[ "$otype" = commit ] && [ "$osha" = "$GITHUB_SHA" ] || fail "API tag object targets $otype $osha, expected commit $GITHUB_SHA"
+if [ "$otype" != commit ] || [ "$osha" != "$GITHUB_SHA" ]; then fail "API tag object targets $otype $osha, expected commit $GITHUB_SHA"; fi
 [ "$(gh api "repos/$REPO/git/ref/tags/$TAG" --jq .object.sha)" = "$obj" ] || fail "API ref for $TAG does not resolve to tag object $obj"
 
 list=${MAINTAINERS:-.github/release-maintainers.txt}
