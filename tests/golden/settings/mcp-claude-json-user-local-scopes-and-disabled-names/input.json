@@ -1,0 +1,58 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<HOME>/.claude.json": {
+      "mcpServers": {
+        "u1": {
+          "command": "u"
+        }
+      },
+      "projects": {
+        "<TMP>/ws": {
+          "disabledMcpServers": [
+            "u1"
+          ],
+          "enabledMcpjsonServers": [
+            "alpha"
+          ],
+          "mcpServers": {
+            "l1": {
+              "args": [
+                1,
+                2
+              ],
+              "command": "l"
+            }
+          }
+        }
+      }
+    },
+    "<HOME>/.nemo/nemo.json": {
+      "claude": {
+        "readUserConfig": true
+      }
+    },
+    "<TMP>/ws/.mcp.json": {
+      "mcpServers": {
+        "alpha": {
+          "args": [
+            "a.js"
+          ],
+          "command": "node",
+          "env": {
+            "SECRET": "x"
+          }
+        },
+        "remote": {
+          "headers": {
+            "Authorization": "Bearer z"
+          },
+          "type": "http",
+          "url": "https://user:pw@h.example.test/mcp?token=abc"
+        }
+      }
+    }
+  },
+  "op": "workspace"
+}

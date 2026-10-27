@@ -1,0 +1,16 @@
+{
+  "description": "Exits planning mode and presents the plan to the user for approval before starting implementation.",
+  "input_schema": {
+    "properties": {
+      "plan": {
+        "description": "The plan to present, in markdown.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "plan"
+    ],
+    "type": "object"
+  },
+  "name": "ExitPlanMode"
+}

@@ -1,0 +1,22 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<HOME>/.nemo/settings.json": {
+      "hooks": {
+        "PostToolUse": [
+          {
+            "hooks": "bad",
+            "matcher": "x"
+          },
+          {
+            "matcher": "y"
+          }
+        ],
+        "PreToolUse": "nope",
+        "Stop": []
+      }
+    }
+  },
+  "op": "workspace"
+}

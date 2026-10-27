@@ -1,0 +1,21 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<NEMO_HOME>/nemo.json": {
+      "$schema": "config.json/v1",
+      "providers": {
+        "p": {
+          "apiKey": "{env:NOPE}",
+          "authToken": "{env:NOPE2}",
+          "headers": {
+            "A": "{env:NOPE3}"
+          },
+          "type": "openai"
+        }
+      }
+    }
+  },
+  "home": "<NEMO_HOME>",
+  "op": "loadConfig"
+}

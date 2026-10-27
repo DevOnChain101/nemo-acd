@@ -1,0 +1,13 @@
+{
+  "additionalContext": [],
+  "blocked": false,
+  "results": [
+    {
+      "command": "printf '{\"decision\":\"block\",\"reason\":\"r\"}'; exit 1",
+      "exitCode": 1,
+      "stderr": "",
+      "stdout": "{\"decision\":\"block\",\"reason\":\"r\"}"
+    }
+  ],
+  "stop": false
+}

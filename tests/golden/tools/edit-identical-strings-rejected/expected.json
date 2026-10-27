@@ -1,0 +1,23 @@
+{
+  "steps": [
+    {
+      "content": "     1\tx",
+      "isError": false,
+      "soft": false,
+      "tool": "Read"
+    },
+    {
+      "content": "Edit: \"old_string\" and \"new_string\" must be different.",
+      "isError": true,
+      "soft": true,
+      "tool": "Edit"
+    }
+  ],
+  "tree_after": [
+    {
+      "content": "x\n",
+      "path": "a.txt",
+      "type": "file"
+    }
+  ]
+}

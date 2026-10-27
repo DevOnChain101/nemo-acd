@@ -1,0 +1,30 @@
+{
+  "files": {
+    "<NEMO_HOME>/settings.json": {
+      "autoMode": {
+        "allow": [
+          "a"
+        ],
+        "classifyAllShell": true,
+        "environment": [
+          "e",
+          1
+        ],
+        "extra": 1,
+        "hard_deny": [
+          "h"
+        ],
+        "soft_deny": "x",
+        "useAutoModeDuringPlan": "no"
+      }
+    },
+    "<TMP>/ws/.nemo/settings.json": {
+      "autoMode": {
+        "allow": [
+          "PROJECT"
+        ]
+      }
+    }
+  },
+  "op": "autoMode"
+}

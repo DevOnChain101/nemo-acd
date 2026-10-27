@@ -1,0 +1,10 @@
+{
+  "cwd": "<TMP>/ws/pkg",
+  "env": {},
+  "files": {
+    "<TMP>/ws/.git/KEEP": "",
+    "<TMP>/ws/AGENTS.md": "root memory",
+    "<TMP>/ws/pkg/AGENTS.md": "pkg memory"
+  },
+  "op": "workspace"
+}

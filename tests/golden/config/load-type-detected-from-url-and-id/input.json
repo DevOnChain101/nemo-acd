@@ -1,0 +1,26 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<NEMO_HOME>/nemo.json": {
+      "$schema": "config.json/v1",
+      "providers": {
+        "a1": {
+          "baseURL": "https://api.anthropic.com"
+        },
+        "a2": {
+          "baseURL": "https://x.example.test/anthropic/v1"
+        },
+        "a3": {
+          "baseURL": "https://api.openai.com/v1"
+        },
+        "a4": {
+          "npm": "@ai-sdk/openai-compatible"
+        },
+        "a5": {}
+      }
+    }
+  },
+  "home": "<NEMO_HOME>",
+  "op": "loadConfig"
+}

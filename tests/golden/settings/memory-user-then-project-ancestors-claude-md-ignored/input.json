@@ -1,0 +1,13 @@
+{
+  "cwd": "<TMP>/ws/pkg",
+  "env": {},
+  "files": {
+    "<HOME>/.claude/CLAUDE.md": "user claude memory",
+    "<HOME>/.nemo/AGENTS.md": "user nemo memory",
+    "<TMP>/ws/.git/KEEP": "",
+    "<TMP>/ws/AGENTS.md": "root memory",
+    "<TMP>/ws/CLAUDE.md": "root claude memory",
+    "<TMP>/ws/pkg/AGENTS.md": "sub memory"
+  },
+  "op": "workspace"
+}

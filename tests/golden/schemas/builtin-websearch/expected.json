@@ -1,0 +1,30 @@
+{
+  "description": "Searches the web and returns the top results (title, URL, snippet). Use it for current information the conversation does not have; follow up with WebFetch on a result to read the page. Optionally restrict results to allowed_domains or drop blocked_domains.",
+  "input_schema": {
+    "properties": {
+      "allowed_domains": {
+        "description": "Only return results from these domains (subdomains included).",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "blocked_domains": {
+        "description": "Never return results from these domains.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "query": {
+        "description": "The search query.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "query"
+    ],
+    "type": "object"
+  },
+  "name": "WebSearch"
+}

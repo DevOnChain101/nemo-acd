@@ -1,0 +1,13 @@
+{
+  "dirs": [],
+  "files": {},
+  "steps": [
+    {
+      "input": {
+        "content": "abs",
+        "file_path": "<TMP>/ws/abs.txt"
+      },
+      "tool": "Write"
+    }
+  ]
+}

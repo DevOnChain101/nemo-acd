@@ -1,0 +1,18 @@
+[
+  {
+    "by_mode": {
+      "bogus": {
+        "decision": "ask",
+        "reason": "Bash requires confirmation"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "Bash requires confirmation"
+      }
+    },
+    "input": {
+      "command": "npm test"
+    },
+    "tool": "Bash"
+  }
+]

@@ -1,0 +1,13 @@
+diff --git b/src/client.js a/src/client.js
+index 098792f..52eb56d 100644
+--- b/src/client.js
++++ a/src/client.js
+@@ -3,7 +3,7 @@ export async function login(baseUrl, user, pass) {
+   const res = await fetch(baseUrl + '/login', {
+     method: 'POST',
+     headers: { 'content-type': 'application/json' },
+-    body: JSON.stringify({ user, pass }),
++    body: JSON.stringify({ username: user, password: pass }),
+   });
+   if (res.status === 401) return null;
+   if (!res.ok) throw new Error('login failed: ' + res.status);

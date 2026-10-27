@@ -1,0 +1,11 @@
+{
+  "classifyAllShell": true,
+  "op": "broad",
+  "rules": [
+    "Bash",
+    "Bash(ls:*)",
+    "Bash(ls)",
+    "Read",
+    "Task"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "config": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "printf 'o1'; printf 'e1' >&2",
+            "type": "command"
+          },
+          {
+            "command": "printf 'o2'; exit 3",
+            "type": "command"
+          },
+          {
+            "command": "exit 0",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ]
+  },
+  "event": "PreToolUse",
+  "op": "run",
+  "opts": {},
+  "payload": {
+    "tool_input": {
+      "command": "ls"
+    },
+    "tool_name": "Bash"
+  },
+  "target": "Bash"
+}

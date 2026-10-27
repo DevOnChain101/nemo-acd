@@ -1,0 +1,14 @@
+{
+  "refused": [
+    "ANTHROPIC_API_KEY",
+    "MY_TOKEN",
+    "DB_PASSWORD",
+    "OPENAI_BASE_URL",
+    "AWS_SECRET_ACCESS_KEY"
+  ],
+  "vars": {
+    "FOO": "override",
+    "N": "5",
+    "PROJ": "1"
+  }
+}

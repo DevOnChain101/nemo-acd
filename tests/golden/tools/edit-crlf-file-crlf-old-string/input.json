@@ -1,0 +1,22 @@
+{
+  "dirs": [],
+  "files": {
+    "<TMP>/ws/a.txt": "a\r\nb\r\nc\r\n"
+  },
+  "steps": [
+    {
+      "input": {
+        "file_path": "a.txt"
+      },
+      "tool": "Read"
+    },
+    {
+      "input": {
+        "file_path": "a.txt",
+        "new_string": "X",
+        "old_string": "a\r\nb"
+      },
+      "tool": "Edit"
+    }
+  ]
+}

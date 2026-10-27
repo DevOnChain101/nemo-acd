@@ -1,0 +1,17 @@
+{
+  "dirs": [],
+  "files": {
+    "<TMP>/ws/a.txt": "foo\n"
+  },
+  "steps": [
+    {
+      "input": {
+        "-n": false,
+        "output_mode": "content",
+        "path": "a.txt",
+        "pattern": "foo"
+      },
+      "tool": "Grep"
+    }
+  ]
+}

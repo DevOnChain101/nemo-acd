@@ -1,0 +1,9 @@
+diff --git b/src/math.js a/src/math.js
+index db130c7..506a413 100644
+--- b/src/math.js
++++ a/src/math.js
+@@ -1,3 +1,3 @@
+ export function sum(a, b) {
+-  return a - b;
++  return a + b;
+ }

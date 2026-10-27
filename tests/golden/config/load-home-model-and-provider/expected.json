@@ -1,0 +1,41 @@
+{
+  "value": {
+    "$schema": "config.json/v1",
+    "_explicitAliases": [],
+    "_modelExplicit": true,
+    "_warnings": [],
+    "aliases": {
+      "fable": null,
+      "haiku": null,
+      "opus": null,
+      "sonnet": null
+    },
+    "maxTokens": 32000,
+    "model": "gateway/m-1",
+    "profiles": {},
+    "providers": {
+      "anthropic": {
+        "headers": {},
+        "models": [],
+        "type": "anthropic",
+        "typeSource": "id"
+      },
+      "gateway": {
+        "apiKey": "sk-test-inline",
+        "apiKeySource": "inline",
+        "baseURL": "https://gw.example.test/v1",
+        "models": [
+          "m-1",
+          "m-2"
+        ],
+        "type": "openai",
+        "typeSource": "explicit"
+      },
+      "openai": {
+        "models": [],
+        "type": "openai",
+        "typeSource": "id"
+      }
+    }
+  }
+}

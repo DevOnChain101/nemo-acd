@@ -1,0 +1,26 @@
+{
+  "entries": [
+    {
+      "message": {
+        "content": [
+          {
+            "text": "a",
+            "type": "text"
+          },
+          {
+            "type": "tool_use"
+          },
+          {
+            "text": "b",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:01.000Z",
+      "type": "user"
+    }
+  ],
+  "now": 1790899800000,
+  "op": "replay"
+}

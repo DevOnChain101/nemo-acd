@@ -1,0 +1,113 @@
+[
+  {
+    "cat": "orchestrate",
+    "input": {},
+    "name": "Agent"
+  },
+  {
+    "cat": "orchestrate",
+    "input": {},
+    "name": "Skill"
+  },
+  {
+    "cat": "orchestrate",
+    "input": {},
+    "name": "SendMessage"
+  },
+  {
+    "cat": "plan",
+    "input": {},
+    "name": "Read"
+  },
+  {
+    "cat": "plan",
+    "input": {},
+    "name": "Grep"
+  },
+  {
+    "cat": "plan",
+    "input": {},
+    "name": "TodoWrite"
+  },
+  {
+    "cat": "plan",
+    "input": {},
+    "name": "ExitPlanMode"
+  },
+  {
+    "cat": "learn",
+    "input": {
+      "file_path": "/p/CLAUDE.md"
+    },
+    "name": "Edit"
+  },
+  {
+    "cat": "learn",
+    "input": {
+      "file_path": "/p/lessons.md"
+    },
+    "name": "Write"
+  },
+  {
+    "cat": "learn",
+    "input": {
+      "file_path": "C:\\p\\memory\\x.md"
+    },
+    "name": "Edit"
+  },
+  {
+    "cat": "execute",
+    "input": {
+      "file_path": "/p/a.js"
+    },
+    "name": "Edit"
+  },
+  {
+    "cat": "verify",
+    "input": {
+      "command": "npm test"
+    },
+    "name": "Bash"
+  },
+  {
+    "cat": "verify",
+    "input": {
+      "command": "ls",
+      "description": "lint it"
+    },
+    "name": "Bash"
+  },
+  {
+    "cat": "verify",
+    "input": {
+      "command": "cargo test"
+    },
+    "name": "Bash"
+  },
+  {
+    "cat": "verify",
+    "input": {
+      "command": "terraform plan"
+    },
+    "name": "Bash"
+  },
+  {
+    "cat": "execute",
+    "input": {
+      "command": "echo hi"
+    },
+    "name": "Bash"
+  },
+  {
+    "cat": "verify",
+    "input": {
+      "command": "pytest -q"
+    },
+    "name": "PowerShell"
+  },
+  {
+    "cat": "execute",
+    "input": {},
+    "name": "WebFetch"
+  }
+]

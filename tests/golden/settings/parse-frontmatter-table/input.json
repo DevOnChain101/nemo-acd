@@ -1,0 +1,11 @@
+{
+  "op": "frontmatter",
+  "texts": [
+    "---\nname: tester\ndescription: \"quoted: yes\"\ntools: Bash, Read\nlist: [a, b, c]\nitems:\n  - one\n  - two\nflag: true\nn: 5\nempty:\n---\nbody text here",
+    "---\nliteral: |\n  line one\n  line two\nfolded: >\n  wrapped\n  text\n---\nbody",
+    "just a plain file\nwith no frontmatter",
+    "---\nunterminated: yes\nbody",
+    "---\r\nname: crlf\r\n---\r\nbody\r\n",
+    ""
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "config": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "printf '%s' '{\"hookSpecificOutput\":{\"updatedInput\":{\"command\":\"one\"},\"additionalContext\":\"c1\"},\"additionalContext\":\"c2\"}'",
+            "type": "command"
+          },
+          {
+            "command": "printf '%s' '{\"hookSpecificOutput\":{\"updatedInput\":{\"command\":\"two\"}}}'",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ]
+  },
+  "event": "PreToolUse",
+  "op": "run",
+  "opts": {},
+  "payload": {
+    "tool_input": {
+      "command": "ls"
+    },
+    "tool_name": "Bash"
+  },
+  "target": "Bash"
+}

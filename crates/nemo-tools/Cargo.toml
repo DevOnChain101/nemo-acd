@@ -1,0 +1,48 @@
+[package]
+name = "nemo-tools"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+nemo-browser = { path = "../nemo-browser" }
+nemo-config = { path = "../nemo-config" }
+nemo-core = { path = "../nemo-core" }
+nemo-terminal = { path = "../nemo-terminal" }
+nemo-verification = { path = "../nemo-verification" }
+base64 = "0.22"
+# Capability-based dir handles: open files relative to the workspace root, no symlink escape (F12).
+cap-std = "4.0.3"
+globset = "0.4"
+ignore = "0.4"
+# default-features off: no HTTP schema resolver in the tool-input validator.
+jsonschema = { version = "0.60", default-features = false }
+regex = "1.13.1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
+# WebFetch/WebSearch: rustls, no system-proxy feature (proxy comes from the injected Env only), gzip/deflate bodies.
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "gzip", "deflate"] }
+# Charset decoding of fetched pages (the WHATWG Encoding Standard).
+encoding_rs = "0.8.42"
+# Bounded inflate of PDF streams.
+flate2 = "1.1"
+# Cell ids for NotebookEdit insert.
+fastrand = "2"
+# Host enum for the SSRF checks (same crate as reqwest::Url).
+url = "2"
+# sync: OnceCell for the lazy browser; spawn_blocking for fs IO; select!/sleep for the terminal tools.
+tokio = { version = "1.54.1", default-features = false, features = ["rt", "macros", "time", "sync", "net"] }
+
+[target.'cfg(unix)'.dependencies]
+# O_NONBLOCK constant only (no unsafe): opening a FIFO must not block.
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3.27.0"
+nemo-sandbox = { path = "../nemo-sandbox" }
+tokio-util = { version = "0.7.20", default-features = false }
+tokio = { version = "1.54.1", default-features = false, features = ["macros", "rt-multi-thread", "net", "io-util"] }

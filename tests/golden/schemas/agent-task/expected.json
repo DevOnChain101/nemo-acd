@@ -1,0 +1,38 @@
+{
+  "description": "Launches a subagent to autonomously handle a complex, multi-step task and report back a single result. Use this to delegate self-contained work and keep the main conversation focused.",
+  "input_schema": {
+    "properties": {
+      "description": {
+        "description": "Short description of the task for display.",
+        "type": "string"
+      },
+      "effort": {
+        "description": "Optional reasoning effort override.",
+        "type": "string"
+      },
+      "model": {
+        "description": "Optional provider/model override for this call.",
+        "type": "string"
+      },
+      "profile": {
+        "description": "Optional routing profile such as fast, balanced, or deep.",
+        "type": "string"
+      },
+      "prompt": {
+        "description": "The full task for the subagent to perform.",
+        "type": "string"
+      },
+      "subagent_type": {
+        "description": "Which subagent type to launch.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "description",
+      "prompt",
+      "subagent_type"
+    ],
+    "type": "object"
+  },
+  "name": "Task"
+}

@@ -1,0 +1,45 @@
+{
+  "id": "fe-login-payload",
+  "version": 1,
+  "category": "frontend",
+  "fixture": "login-payload",
+  "requires": [
+    "node>=20"
+  ],
+  "prompt": "Logging in through src/client.js always fails with HTTP 400 from the dev server. Make the client log in successfully.",
+  "acceptance_criteria": [
+    {
+      "id": "c1",
+      "text": "client login succeeds against the server",
+      "check": "node --test test/"
+    }
+  ],
+  "setup": [],
+  "hidden_checks": [
+    {
+      "id": "h1",
+      "command": "node --test hidden/",
+      "timeout_ms": 120000
+    }
+  ],
+  "regression_checks": [
+    {
+      "id": "r1",
+      "command": "node --test test/",
+      "timeout_ms": 120000
+    }
+  ],
+  "permission_mode": "acceptEdits",
+  "network": "deny",
+  "budget": {
+    "max_turns": 40,
+    "max_tool_calls": 150,
+    "max_wall_ms": 900000
+  },
+  "forbidden_paths": [
+    "hidden/**",
+    ".git/**"
+  ],
+  "expected_status": "completed",
+  "runs": 3
+}

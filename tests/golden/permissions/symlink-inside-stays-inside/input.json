@@ -1,0 +1,35 @@
+{
+  "autoMode": {},
+  "calls": [
+    {
+      "input": {
+        "command": "touch inlink/new.txt"
+      },
+      "tool": "Bash"
+    },
+    {
+      "input": {
+        "file_path": "<TMP>/ws/inlink/new.txt"
+      },
+      "tool": "Write"
+    }
+  ],
+  "cwd": "<TMP>/ws",
+  "flags": {},
+  "fs": {
+    "dirs": [
+      "<TMP>/ws/real"
+    ],
+    "symlinks": {
+      "<TMP>/ws/inlink": "<TMP>/ws/real"
+    }
+  },
+  "home": "<HOME>",
+  "modes": [
+    "acceptEdits",
+    "auto"
+  ],
+  "op": "check",
+  "rules": {},
+  "suggestions": false
+}

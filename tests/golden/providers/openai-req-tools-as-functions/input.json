@@ -1,0 +1,67 @@
+{
+  "chunks": [
+    {
+      "choices": [
+        {
+          "delta": {
+            "content": "ok"
+          }
+        }
+      ],
+      "id": "c1",
+      "model": "gpt-5"
+    },
+    {
+      "choices": [
+        {
+          "delta": {},
+          "finish_reason": "stop"
+        }
+      ],
+      "id": "c1",
+      "model": "gpt-5"
+    },
+    {
+      "choices": [],
+      "id": "c1",
+      "model": "gpt-5",
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 1
+      }
+    }
+  ],
+  "op": "stream",
+  "provider": "openai",
+  "req": {
+    "maxTokens": 10,
+    "messages": [],
+    "model": "gpt-5",
+    "tools": [
+      {
+        "description": "Run a command",
+        "extraIgnored": 1,
+        "input_schema": {
+          "properties": {
+            "command": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "command"
+          ],
+          "type": "object"
+        },
+        "name": "Bash"
+      },
+      {
+        "description": "Read",
+        "input_schema": {
+          "properties": {},
+          "type": "object"
+        },
+        "name": "Read"
+      }
+    ]
+  }
+}

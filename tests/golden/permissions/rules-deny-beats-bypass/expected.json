@@ -1,0 +1,66 @@
+[
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      },
+      "auto": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      },
+      "bypassPermissions": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      },
+      "default": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      },
+      "plan": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      }
+    },
+    "input": {
+      "command": "rm -rf ~"
+    },
+    "tool": "Bash"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      },
+      "auto": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      },
+      "bypassPermissions": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      },
+      "default": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      },
+      "plan": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      }
+    },
+    "input": {
+      "command": "rm -rf x"
+    },
+    "tool": "Bash"
+  }
+]

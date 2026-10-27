@@ -1,0 +1,154 @@
+{
+  "chunks": [
+    {
+      "choices": [
+        {
+          "delta": {
+            "content": "Hello "
+          }
+        }
+      ],
+      "id": "chatcmpl-1",
+      "model": "gpt-5"
+    },
+    {
+      "choices": [
+        {
+          "delta": {
+            "content": "world"
+          }
+        }
+      ],
+      "id": "chatcmpl-1",
+      "model": "gpt-5"
+    },
+    {
+      "choices": [
+        {
+          "delta": {
+            "tool_calls": [
+              {
+                "function": {
+                  "arguments": "",
+                  "name": "Bash"
+                },
+                "id": "call_a",
+                "index": 0
+              }
+            ]
+          }
+        }
+      ],
+      "id": "chatcmpl-1",
+      "model": "gpt-5"
+    },
+    {
+      "choices": [
+        {
+          "delta": {
+            "tool_calls": [
+              {
+                "function": {
+                  "arguments": "",
+                  "name": "Read"
+                },
+                "id": "call_b",
+                "index": 1
+              }
+            ]
+          }
+        }
+      ],
+      "id": "chatcmpl-1",
+      "model": "gpt-5"
+    },
+    {
+      "choices": [
+        {
+          "delta": {
+            "tool_calls": [
+              {
+                "function": {
+                  "arguments": "{\"cmd\":"
+                },
+                "index": 0
+              }
+            ]
+          }
+        }
+      ],
+      "id": "chatcmpl-1",
+      "model": "gpt-5"
+    },
+    {
+      "choices": [
+        {
+          "delta": {
+            "tool_calls": [
+              {
+                "function": {
+                  "arguments": "{\"path\":\"a.ts\"}"
+                },
+                "index": 1
+              }
+            ]
+          }
+        }
+      ],
+      "id": "chatcmpl-1",
+      "model": "gpt-5"
+    },
+    {
+      "choices": [
+        {
+          "delta": {
+            "tool_calls": [
+              {
+                "function": {
+                  "arguments": "\"ls\"}"
+                },
+                "index": 0
+              }
+            ]
+          }
+        }
+      ],
+      "id": "chatcmpl-1",
+      "model": "gpt-5"
+    },
+    {
+      "choices": [
+        {
+          "delta": {},
+          "finish_reason": "tool_calls"
+        }
+      ],
+      "id": "chatcmpl-1",
+      "model": "gpt-5"
+    },
+    {
+      "choices": [],
+      "id": "chatcmpl-1",
+      "model": "gpt-5",
+      "usage": {
+        "completion_tokens": 7,
+        "prompt_tokens": 42,
+        "prompt_tokens_details": {
+          "cached_tokens": 10
+        }
+      }
+    }
+  ],
+  "op": "stream",
+  "provider": "openai",
+  "req": {
+    "maxTokens": 100,
+    "messages": [
+      {
+        "content": "hi",
+        "role": "user"
+      }
+    ],
+    "model": "gpt-5"
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "create_call_option_keys": [
+    "signal"
+  ],
+  "events": [
+    {
+      "content_block": {
+        "thinking": "",
+        "type": "thinking"
+      },
+      "index": 0,
+      "type": "content_block_start"
+    },
+    {
+      "delta": {
+        "thinking": "hmm",
+        "type": "thinking_delta"
+      },
+      "index": 0,
+      "type": "content_block_delta"
+    },
+    {
+      "delta": {
+        "signature": "sig",
+        "type": "signature_delta"
+      },
+      "index": 0,
+      "type": "content_block_delta"
+    },
+    {
+      "index": 0,
+      "type": "content_block_stop"
+    },
+    {
+      "type": "ping"
+    }
+  ],
+  "provider_type": "anthropic",
+  "wire_body": {
+    "max_tokens": 100,
+    "messages": [
+      {
+        "content": "hi",
+        "role": "user"
+      }
+    ],
+    "model": "claude-sonnet-5",
+    "stream": true
+  }
+}

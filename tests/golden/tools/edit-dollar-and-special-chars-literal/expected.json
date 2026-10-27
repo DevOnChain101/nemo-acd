@@ -1,0 +1,26 @@
+{
+  "steps": [
+    {
+      "content": "     1\tprice $1 (x)",
+      "isError": false,
+      "soft": false,
+      "tool": "Read"
+    },
+    {
+      "content": "Edited <TMP>/ws/a.txt:\n     1\tprice $& $$ \\n\n     2\t",
+      "isError": false,
+      "meta": {
+        "replacements": 1
+      },
+      "soft": false,
+      "tool": "Edit"
+    }
+  ],
+  "tree_after": [
+    {
+      "content": "price $& $$ \\n\n",
+      "path": "a.txt",
+      "type": "file"
+    }
+  ]
+}

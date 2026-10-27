@@ -1,0 +1,62 @@
+[
+  {
+    "in": {},
+    "out": {
+      "apiKey": null,
+      "authToken": null,
+      "baseURL": "https://api.anthropic.com",
+      "maxRetries": 4
+    }
+  },
+  {
+    "in": {
+      "apiKey": "k",
+      "baseURL": "https://gw.test/v1"
+    },
+    "out": {
+      "apiKey": "k",
+      "authToken": null,
+      "baseURL": "https://gw.test",
+      "maxRetries": 4
+    }
+  },
+  {
+    "in": {
+      "apiKey": "k",
+      "authToken": "t",
+      "baseURL": "https://gw.test/v1/"
+    },
+    "out": {
+      "apiKey": null,
+      "authToken": "t",
+      "baseURL": "https://gw.test",
+      "maxRetries": 4
+    }
+  },
+  {
+    "in": {
+      "baseURL": "https://gw.test/prefix/v1",
+      "headers": {
+        "A": "b"
+      }
+    },
+    "out": {
+      "apiKey": null,
+      "authToken": null,
+      "baseURL": "https://gw.test/prefix",
+      "defaultHeaders": {
+        "A": "b"
+      },
+      "maxRetries": 4
+    }
+  },
+  {
+    "in": {},
+    "out": {
+      "apiKey": null,
+      "authToken": null,
+      "baseURL": "https://api.anthropic.com",
+      "maxRetries": 4
+    }
+  }
+]

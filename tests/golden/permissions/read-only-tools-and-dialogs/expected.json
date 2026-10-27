@@ -1,0 +1,362 @@
+[
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "plan": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      }
+    },
+    "input": {},
+    "tool": "Read"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "plan": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      }
+    },
+    "input": {},
+    "tool": "Glob"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "plan": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      }
+    },
+    "input": {},
+    "tool": "Grep"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "plan": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      }
+    },
+    "input": {},
+    "tool": "LS"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "plan": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      }
+    },
+    "input": {},
+    "tool": "BashOutput"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "plan": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      }
+    },
+    "input": {},
+    "tool": "TodoWrite"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "plan": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      }
+    },
+    "input": {},
+    "tool": "TaskCreate"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "plan": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      }
+    },
+    "input": {},
+    "tool": "Skill"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "plan": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      }
+    },
+    "input": {},
+    "tool": "Task"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "plan": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      }
+    },
+    "input": {},
+    "tool": "Agent"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "dialog tool"
+      },
+      "auto": {
+        "decision": "ask",
+        "reason": "dialog tool"
+      },
+      "bypassPermissions": {
+        "decision": "ask",
+        "reason": "dialog tool"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "dialog tool"
+      },
+      "dontAsk": {
+        "decision": "ask",
+        "reason": "dialog tool"
+      },
+      "plan": {
+        "decision": "ask",
+        "reason": "dialog tool"
+      }
+    },
+    "input": {},
+    "tool": "AskUserQuestion"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "dialog tool"
+      },
+      "auto": {
+        "decision": "ask",
+        "reason": "dialog tool"
+      },
+      "bypassPermissions": {
+        "decision": "ask",
+        "reason": "dialog tool"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "dialog tool"
+      },
+      "dontAsk": {
+        "decision": "ask",
+        "reason": "dialog tool"
+      },
+      "plan": {
+        "decision": "ask",
+        "reason": "dialog tool"
+      }
+    },
+    "input": {},
+    "tool": "ExitPlanMode"
+  }
+]

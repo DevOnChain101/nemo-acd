@@ -1,0 +1,22 @@
+{
+  "config": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "printf '%s' 'ctx-from-session-start'",
+            "type": "command"
+          }
+        ],
+        "matcher": "startup"
+      }
+    ]
+  },
+  "event": "SessionStart",
+  "op": "run",
+  "opts": {},
+  "payload": {
+    "source": "startup"
+  },
+  "target": "startup"
+}

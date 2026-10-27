@@ -1,0 +1,13 @@
+{
+  "dirs": [],
+  "files": {},
+  "steps": [
+    {
+      "input": {
+        "content": "héllo 日本",
+        "file_path": "u.txt"
+      },
+      "tool": "Write"
+    }
+  ]
+}

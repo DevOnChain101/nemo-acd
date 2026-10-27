@@ -1,0 +1,10 @@
+{
+  "dirs": [],
+  "files": {},
+  "steps": [
+    {
+      "input": {},
+      "tool": "Glob"
+    }
+  ]
+}

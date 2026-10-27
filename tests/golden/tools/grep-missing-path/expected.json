@@ -1,0 +1,54 @@
+{
+  "steps": [
+    {
+      "content": "Grep: cannot access <TMP>/ws/nope: ENOENT: no such file or directory, stat '<TMP>/ws/nope'",
+      "isError": true,
+      "soft": false,
+      "tool": "Grep"
+    }
+  ],
+  "tree_after": [
+    {
+      "path": ".git",
+      "type": "dir"
+    },
+    {
+      "content": "foo hidden\n",
+      "path": ".git/h",
+      "type": "file"
+    },
+    {
+      "content": "const foo = 1;\nfunction bar() {}\nFOO again\n",
+      "path": "a.js",
+      "type": "file"
+    },
+    {
+      "content": "let foo: number;\n",
+      "path": "b.ts",
+      "type": "file"
+    },
+    {
+      "base64": "Zm9vAGZvbw==",
+      "path": "bin.dat",
+      "type": "file"
+    },
+    {
+      "path": "node_modules",
+      "type": "dir"
+    },
+    {
+      "content": "foo hidden\n",
+      "path": "node_modules/x.js",
+      "type": "file"
+    },
+    {
+      "path": "sub",
+      "type": "dir"
+    },
+    {
+      "content": "foo in markdown\nline2\nfoo again\n",
+      "path": "sub/c.md",
+      "type": "file"
+    }
+  ]
+}

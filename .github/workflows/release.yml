@@ -1,0 +1,397 @@
+# Release pipeline. Trigger: push of a tag v*. Produces a DRAFT GitHub Release; the `publish` job (environment approval) makes it public.
+# Needs (all optional; steps skip with a log line when absent): see docs/RELEASE.md "Secrets".
+# UNVERIFIED: never run on GitHub. All actions are pinned to commit SHAs; the gate job refuses the release otherwise.
+# Security notes: trigger is tag push only (no pull_request_target, no untrusted PR code with secrets); no ${{ }} of
+# user-controlled data inside run: scripts (values go through env:); signing secrets are ENVIRONMENT secrets of `release`.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # Release-policy gate: runs before anything else. Scripts come from the tagged commit, which must be on main (reviewed).
+  gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Tagged commit is on main
+        run: |
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || { echo "::error::$GITHUB_SHA is not an ancestor of origin/main"; exit 1; }
+      - name: Tag policy (annotated, verified, points at this commit, maintainer allowlist, fail closed)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+          NEMO_ALLOW_ANY_VERIFIED_TAGGER: ${{ vars.NEMO_ALLOW_ANY_VERIFIED_TAGGER }}
+        run: bash scripts/check-release-tag.sh
+      - run: node scripts/check-action-pins.mjs
+      - name: Repository placeholder is replaced and matches this repository
+        env:
+          REPO: ${{ github.repository }}
+        run: node scripts/check-placeholders.mjs --expect "$REPO"
+
+  # Whole CI workflow re-run on the tagged commit; any red job blocks every job below.
+  ci:
+    needs: gate
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  version:
+    needs: gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - id: v
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          crate=$(awk -F'"' '/^version *=/ {print $2; exit}' Cargo.toml)
+          case "$tag" in ''|*[!0-9A-Za-z.+-]*) echo "::error::bad tag"; exit 1;; esac
+          [ "$tag" = "$crate" ] || { echo "::error::tag v$tag != workspace version $crate"; exit 1; }
+          echo "version=$tag" >>"$GITHUB_OUTPUT"
+          case "$tag" in *-*) echo "prerelease=true" >>"$GITHUB_OUTPUT";; *) echo "prerelease=false" >>"$GITHUB_OUTPUT";; esac
+
+  build:
+    name: build ${{ matrix.target }}
+    needs: [ci, version]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    environment: release   # signing secrets live here (environment secrets + required reviewers), not in repo secrets
+    permissions:
+      contents: read
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: x86_64-apple-darwin,       os: macos-latest,     ext: tar.gz, experimental: false }
+          - { target: aarch64-apple-darwin,      os: macos-latest,     ext: tar.gz, experimental: false }
+          - { target: x86_64-unknown-linux-gnu,  os: ubuntu-22.04,     ext: tar.gz, experimental: false } # old glibc baseline
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04-arm, ext: tar.gz, experimental: false }
+          # musl: aws-lc-sys (rustls) and bundled SQLite compile C; musl-gcc is enough in theory. Unverified.
+          - { target: x86_64-unknown-linux-musl, os: ubuntu-22.04,     ext: tar.gz, experimental: true }
+          - { target: x86_64-pc-windows-msvc,    os: windows-latest,   ext: zip,    experimental: false }
+          # aws-lc-sys on arm64 MSVC may need clang/NASM; unverified.
+          - { target: aarch64-pc-windows-msvc,   os: windows-11-arm,   ext: zip,    experimental: true }
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      TARGET: ${{ matrix.target }}
+      EXT: ${{ matrix.ext }}
+      # Signing material (empty when the secret is not configured).
+      HAVE_MACOS_SIGN: ${{ secrets.MACOS_CERTIFICATE != '' && secrets.MACOS_CERTIFICATE_PASSWORD != '' && secrets.MACOS_SIGN_IDENTITY != '' }}
+      HAVE_MACOS_NOTARY: ${{ secrets.APPLE_ID != '' && secrets.APPLE_TEAM_ID != '' && secrets.APPLE_APP_PASSWORD != '' }}
+      HAVE_WINDOWS_SIGN: ${{ secrets.WINDOWS_CERTIFICATE != '' && secrets.WINDOWS_CERTIFICATE_PASSWORD != '' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install Rust toolchain (rust-toolchain.toml) and target
+        run: |
+          rustup toolchain install
+          rustup target add "$TARGET"
+      - name: musl build tools
+        if: endsWith(matrix.target, '-musl')
+        run: |
+          sudo apt-get update && sudo apt-get install -y musl-tools
+          echo "CC_x86_64_unknown_linux_musl=musl-gcc" >>"$GITHUB_ENV"
+      - name: Build
+        run: |
+          pkgs="-p nemo-cli"
+          # Landlock backend looks for nemo-sandbox-exec next to nemo (crates/nemo-sandbox/src/linux.rs).
+          case "$TARGET" in *linux*) pkgs="$pkgs -p nemo-sandbox";; esac
+          cargo build --release --locked --target "$TARGET" $pkgs
+      - name: Locate artifacts
+        run: |
+          d="target/$TARGET/release"
+          exe=""; case "$TARGET" in *windows*) exe=".exe";; esac
+          echo "BIN=$d/nemo$exe" >>"$GITHUB_ENV"
+          case "$TARGET" in *linux*) echo "HELPER=$d/nemo-sandbox-exec" >>"$GITHUB_ENV";; esac
+      - name: Prove the scripted test provider is absent
+        run: bash scripts/check-no-test-provider.sh "$BIN"
+      - name: Smoke test
+        run: |
+          "$BIN" --version | tee version.txt
+          grep -q "nemo $VERSION" version.txt
+          "$BIN" doctor --cwd "$RUNNER_TEMP"
+
+      - name: Sign macOS binary
+        if: startsWith(matrix.os, 'macos')
+        run: |
+          if [ "$HAVE_MACOS_SIGN" != true ]; then echo "SKIP codesign: secrets MACOS_CERTIFICATE, MACOS_CERTIFICATE_PASSWORD, MACOS_SIGN_IDENTITY not all set (binary stays unsigned)"; exit 0; fi
+          kc="$RUNNER_TEMP/build.keychain-db"; kp=$(uuidgen)
+          echo "$MACOS_CERTIFICATE" | base64 --decode >"$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$kp" "$kc"
+          security set-keychain-settings -lut 3600 "$kc"
+          security unlock-keychain -p "$kp" "$kc"
+          security import "$RUNNER_TEMP/cert.p12" -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$kc"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$kp" "$kc"
+          security list-keychains -d user -s "$kc" login.keychain
+          codesign --force --options runtime --timestamp --sign "$MACOS_SIGN_IDENTITY" "$BIN"
+          codesign --verify --strict --verbose=2 "$BIN"
+          rm -f "$RUNNER_TEMP/cert.p12"
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+      - name: Notarize macOS binary
+        if: startsWith(matrix.os, 'macos')
+        run: |
+          if [ "$HAVE_MACOS_SIGN" != true ] || [ "$HAVE_MACOS_NOTARY" != true ]; then echo "SKIP notarization: needs the codesign secrets plus APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD"; exit 0; fi
+          ditto -c -k --keepParent "$BIN" "$RUNNER_TEMP/notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
+          # A bare Mach-O cannot be stapled; Gatekeeper verifies the ticket online.
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+      - name: Sign Windows binary (Authenticode)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if ($env:HAVE_WINDOWS_SIGN -ne 'true') { Write-Host "SKIP Authenticode: secrets WINDOWS_CERTIFICATE, WINDOWS_CERTIFICATE_PASSWORD not both set (binary stays unsigned)"; exit 0 }
+          $pfx = Join-Path $env:RUNNER_TEMP 'cert.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $st = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" | Sort-Object FullName | Select-Object -Last 1
+          & $st.FullName sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f $pfx /p $env:WINDOWS_CERTIFICATE_PASSWORD $env:BIN
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          & $st.FullName verify /pa $env:BIN
+          Remove-Item $pfx
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+
+      - name: Package
+        run: |
+          name="nemo-$VERSION-$TARGET"
+          mkdir -p "dist/$name"
+          cp "$BIN" "dist/$name/"
+          if [ -n "${HELPER:-}" ]; then cp "$HELPER" "dist/$name/"; fi
+          cp LICENSE README.md "dist/$name/"
+          cd dist
+          if [ "$EXT" = zip ]; then 7z a -tzip "$name.zip" "$name" >/dev/null; else tar -czf "$name.tar.gz" "$name"; fi
+          ls -l
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: archive-${{ matrix.target }}
+          path: dist/nemo-*.*
+          if-no-files-found: error
+      - name: Keep raw binaries for the npm generator
+        run: |
+          mkdir -p raw
+          cp "$BIN" raw/
+          if [ -n "${HELPER:-}" ]; then cp "$HELPER" raw/; fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: raw-${{ matrix.target }}
+          path: raw/*
+          if-no-files-found: error
+
+  sbom:
+    needs: [ci, version]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install
+      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2
+        with:
+          tool: cargo-cyclonedx
+      - name: Generate CycloneDX SBOM for nemo-cli
+        run: |
+          cd apps/cli
+          cargo cyclonedx --format json
+          ls -l *.cdx.json
+          mkdir -p ../../sbom && cp *.cdx.json "../../sbom/nemo-$VERSION.cdx.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sbom
+          path: sbom/*
+
+  npm-packages:
+    needs: [build, version]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: raw-*
+          path: raw
+      - name: Generate and pack npm packages (publish is manual, see docs/RELEASE.md)
+        run: |
+          node scripts/package-npm.mjs --version "$VERSION" --raw raw --out npm-out --require-all
+          mkdir -p npm-tgz
+          for d in npm-out/*/; do (cd "$d" && npm pack --pack-destination "$GITHUB_WORKSPACE/npm-tgz"); done
+          ls -l npm-tgz
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: npm-tarballs
+          path: npm-tgz/*.tgz
+
+  checksums:
+    needs: [build, sbom, npm-packages, version]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: "{archive-*,sbom,npm-tarballs}"
+          path: assets
+          merge-multiple: true
+      - name: Stamp the installers with the repository slug (packaging/REPO)
+        working-directory: assets
+        run: |
+          slug=$(tr -d '[:space:]' <../packaging/REPO)
+          printf '%s' "$slug" | grep -Eq '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' || { echo "::error::bad slug"; exit 1; }
+          for f in install.sh install.ps1; do
+            sed "s#@NEMO_REPO@#$slug#g" "../packaging/$f" >"$f"
+            if grep -q '@NEMO_REPO@' "$f"; then echo "::error::$f still has the placeholder"; exit 1; fi
+          done
+          chmod +x install.sh
+      - name: Checksums
+        working-directory: assets
+        run: |
+          ls -l
+          sha256sum nemo-*.tar.gz nemo-*.zip *.tgz *.cdx.json install.sh install.ps1 > SHA256SUMS
+          cat SHA256SUMS
+          sha256sum --check SHA256SUMS
+      - name: Require the non-experimental targets
+        working-directory: assets
+        run: |
+          for t in x86_64-apple-darwin aarch64-apple-darwin x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-pc-windows-msvc; do
+            ls nemo-*-"$t".* >/dev/null || { echo "::error::missing archive for $t"; exit 1; }
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-assets
+          path: assets/*
+          if-no-files-found: error
+
+  # Only job with id-token/attestations. SHA256SUMS is attested too, so installers can authenticate it.
+  attest:
+    needs: checksums
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write       # keyless signing
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-assets
+          path: assets
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: |
+            assets/nemo-*.tar.gz
+            assets/nemo-*.zip
+            assets/*.tgz
+            assets/SHA256SUMS
+            assets/install.sh
+            assets/install.ps1
+
+  release:
+    needs: [attest, version]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write       # create the draft release
+    steps:
+      # Same commit the gate approved (GITHUB_SHA); only used to run the policy script and read the allowlist.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false   # check-release-tag.sh passes GH_TOKEN as a one-off header for its tag fetch
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-assets
+          path: assets
+      - name: Draft GitHub Release (tag re-checked before and after creation)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          PRE: ${{ needs.version.outputs.prerelease }}
+          NEMO_ALLOW_ANY_VERIFIED_TAGGER: ${{ vars.NEMO_ALLOW_ANY_VERIFIED_TAGGER }}
+        run: |
+          # The gate ran long ago (environment approval can take days): the tag must still be the built commit.
+          bash scripts/check-release-tag.sh
+          flag=""; [ "$PRE" = true ] && flag="--prerelease"
+          gh release create "$TAG" --draft --verify-tag --target "$GITHUB_SHA" $flag \
+            --title "Nemo $TAG" --generate-notes assets/*
+          if ! bash scripts/check-release-tag.sh; then
+            gh release delete "$TAG" --yes   # tag moved during creation: do not leave a draft on the wrong commit
+            exit 1
+          fi
+
+  # Separate small job so publishing needs its own environment approval and re-verifies the draft before going public.
+  publish:
+    needs: release
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write       # edit the release
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Re-verify tag and draft target, then publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          NEMO_ALLOW_ANY_VERIFIED_TAGGER: ${{ vars.NEMO_ALLOW_ANY_VERIFIED_TAGGER }}
+        run: |
+          bash scripts/check-release-tag.sh
+          read -r draft target < <(gh release view "$TAG" --json isDraft,targetCommitish --jq '[.isDraft, .targetCommitish] | @tsv')
+          [ "$draft" = true ] || { echo "::error::release $TAG is not a draft"; exit 1; }
+          [ "$target" = "$GITHUB_SHA" ] || { echo "::error::draft targets '$target', expected $GITHUB_SHA"; exit 1; }
+          gh release edit "$TAG" --draft=false

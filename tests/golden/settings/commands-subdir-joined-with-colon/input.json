@@ -1,0 +1,9 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<TMP>/ws/.nemo/commands/git/commit.md": "Commit everything.\nNo placeholder here.",
+    "<TMP>/ws/.nemo/commands/review.md": "---\ndescription: Reviews code\nargument-hint: [file]\n---\nReview $1 carefully. $ARGUMENTS"
+  },
+  "op": "workspace"
+}

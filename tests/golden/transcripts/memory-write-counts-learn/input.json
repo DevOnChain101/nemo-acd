@@ -1,0 +1,40 @@
+{
+  "entries": [
+    {
+      "message": {
+        "content": [
+          {
+            "id": "t1",
+            "input": {
+              "file_path": "/p/CLAUDE.md"
+            },
+            "name": "Edit",
+            "type": "tool_use"
+          },
+          {
+            "id": "t2",
+            "input": {
+              "file_path": "/p/memory/notes.md"
+            },
+            "name": "Write",
+            "type": "tool_use"
+          },
+          {
+            "id": "t3",
+            "input": {
+              "file_path": "/p/src/a.js"
+            },
+            "name": "Write",
+            "type": "tool_use"
+          }
+        ],
+        "id": "m1",
+        "model": "claude-opus-5.5"
+      },
+      "timestamp": "2026-10-02T00:00:01.000Z",
+      "type": "assistant"
+    }
+  ],
+  "now": 1790899800000,
+  "op": "replay"
+}

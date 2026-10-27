@@ -1,0 +1,179 @@
+//! Check planning (verification.md §4.2). Reads files only; never runs anything.
+
+use crate::types::*;
+use std::fs;
+use std::path::Path;
+
+fn chk(kind: CheckKind, cmd: &str, cwd: &Path) -> Check {
+    Check {
+        id: String::new(),
+        kind,
+        command: Some(cmd.into()),
+        cwd: cwd.into(),
+        timeout_ms: DEFAULT_TIMEOUT_MS,
+        declared_by: Declarer::Harness,
+        criteria_ids: vec![],
+    }
+}
+
+/// Project commands discovered in `dir` (shortcut: top level only, no monorepo walk).
+pub fn detect_checks(dir: &Path) -> Vec<Check> {
+    let mut out = vec![];
+    let has = |f: &str| dir.join(f).is_file();
+    let read = |f: &str| fs::read_to_string(dir.join(f)).unwrap_or_default();
+
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&read("package.json")) {
+        let pm = if has("pnpm-lock.yaml") {
+            "pnpm"
+        } else if has("yarn.lock") {
+            "yarn"
+        } else {
+            "npm"
+        };
+        for (script, kind) in [
+            ("typecheck", CheckKind::Typecheck),
+            ("lint", CheckKind::Lint),
+            ("build", CheckKind::Build),
+            ("test", CheckKind::Unit),
+        ] {
+            let Some(body) = v["scripts"][script].as_str() else {
+                continue;
+            };
+            if script == "test" && body.contains("no test specified") {
+                continue; // npm init placeholder
+            }
+            out.push(chk(kind, &format!("{pm} run {script}"), dir));
+        }
+    }
+    if has("Cargo.toml") {
+        out.push(chk(CheckKind::Syntax, "cargo fmt --check", dir));
+        out.push(chk(
+            CheckKind::Lint,
+            "cargo clippy --all-targets -- -D warnings",
+            dir,
+        ));
+        out.push(chk(CheckKind::Unit, "cargo test", dir));
+    }
+    let py = if cfg!(windows) { "python" } else { "python3" };
+    let pytest_cfg = has("pytest.ini") || read("pyproject.toml").contains("pytest");
+    let has_py_tests = [dir.to_path_buf(), dir.join("tests"), dir.join("test")]
+        .iter()
+        .filter_map(|d| fs::read_dir(d).ok())
+        .flatten()
+        .flatten()
+        .any(|e| {
+            let n = e.file_name().to_string_lossy().into_owned();
+            n.starts_with("test") && n.ends_with(".py")
+        });
+    if pytest_cfg {
+        out.push(chk(CheckKind::Unit, &format!("{py} -m pytest"), dir));
+    } else if has_py_tests {
+        out.push(chk(
+            CheckKind::Unit,
+            &format!("{py} -m unittest discover"),
+            dir,
+        ));
+    }
+    if read("Makefile")
+        .lines()
+        .any(|l| l.starts_with("test:") || l.starts_with("test :"))
+    {
+        out.push(chk(CheckKind::Unit, "make test", dir));
+    }
+    if has("go.mod") {
+        out.push(chk(CheckKind::Unit, "go test ./...", dir));
+    }
+    out
+}
+
+/// Plan order: user-declared criterion checks, model-registered checks, inferred checks.
+/// Inferred checks duplicating an earlier command are dropped; ids `k1..` are assigned to
+/// checks that have none.
+pub fn plan_checks(criteria: &[Criterion], model_checks: &[Check], dir: &Path) -> Vec<Check> {
+    let mut out: Vec<Check> = vec![];
+    for c in criteria
+        .iter()
+        .filter(|c| c.source == CriterionSource::User)
+    {
+        if let Some(cmd) = &c.check {
+            let mut k = chk(CheckKind::Custom, cmd, dir);
+            k.declared_by = Declarer::User;
+            k.criteria_ids = vec![c.id.clone()];
+            out.push(k);
+        }
+    }
+    out.extend(model_checks.iter().cloned().map(|mut k| {
+        k.declared_by = Declarer::Model;
+        k
+    }));
+    for k in detect_checks(dir) {
+        if !out.iter().any(|o| o.command == k.command) {
+            out.push(k);
+        }
+    }
+    for (i, k) in out.iter_mut().enumerate() {
+        if k.id.is_empty() {
+            k.id = format!("k{}", i + 1);
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detects_without_running_and_maps_criteria() {
+        let d = tempfile::tempdir().unwrap();
+        let p = d.path();
+        fs::write(
+            p.join("package.json"),
+            r#"{"scripts":{"test":"node --test","lint":"x","build":"y","start":"z"}}"#,
+        )
+        .unwrap();
+        fs::write(p.join("Cargo.toml"), "").unwrap();
+        fs::write(p.join("go.mod"), "").unwrap();
+        fs::write(p.join("Makefile"), "all:\n\ttrue\ntest:\n\ttrue\n").unwrap();
+        fs::write(p.join("test_a.py"), "").unwrap();
+        let cmds: Vec<_> = detect_checks(p)
+            .into_iter()
+            .map(|c| c.command.unwrap())
+            .collect();
+        for want in [
+            "npm run test",
+            "npm run lint",
+            "npm run build",
+            "cargo test",
+            "cargo fmt --check",
+            "go test ./...",
+            "make test",
+        ] {
+            assert!(cmds.iter().any(|c| c == want), "{want} in {cmds:?}");
+        }
+        assert!(cmds.iter().any(|c| c.ends_with("-m unittest discover")));
+        assert!(!cmds.iter().any(|c| c.contains("start")));
+
+        let crit = [Criterion::user("c1", "works", Some("cargo test"))];
+        let plan = plan_checks(&crit, &[], p);
+        assert_eq!(plan[0].declared_by, Declarer::User);
+        assert_eq!(plan[0].criteria_ids, ["c1"]);
+        assert_eq!(
+            plan.iter()
+                .filter(|c| c.command.as_deref() == Some("cargo test"))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn npm_placeholder_test_is_skipped() {
+        let d = tempfile::tempdir().unwrap();
+        fs::write(
+            d.path().join("package.json"),
+            r#"{"scripts":{"test":"echo \"Error: no test specified\" && exit 1"}}"#,
+        )
+        .unwrap();
+        assert!(detect_checks(d.path()).is_empty());
+    }
+}

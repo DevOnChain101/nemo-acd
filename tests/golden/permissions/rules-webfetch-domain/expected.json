@@ -1,0 +1,98 @@
+[
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "plan": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      }
+    },
+    "input": {
+      "url": "https://example.com/a"
+    },
+    "tool": "WebFetch"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      },
+      "auto": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      },
+      "bypassPermissions": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      },
+      "default": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      },
+      "plan": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      }
+    },
+    "input": {
+      "url": "https://evil.test/a"
+    },
+    "tool": "WebFetch"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "WebFetch requires confirmation"
+      },
+      "auto": {
+        "decision": "classify",
+        "reason": "WebFetch: classifier review"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "WebFetch requires confirmation"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "dontAsk mode"
+      },
+      "plan": {
+        "decision": "ask",
+        "reason": "WebFetch requires confirmation"
+      }
+    },
+    "input": {
+      "url": "https://other.test"
+    },
+    "tool": "WebFetch"
+  }
+]

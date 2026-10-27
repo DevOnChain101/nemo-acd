@@ -1,0 +1,92 @@
+[
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "WebFetch requires confirmation"
+      },
+      "auto": {
+        "decision": "classify",
+        "reason": "WebFetch: classifier review"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "WebFetch requires confirmation"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "dontAsk mode"
+      },
+      "plan": {
+        "decision": "ask",
+        "reason": "WebFetch requires confirmation"
+      }
+    },
+    "input": {
+      "url": "https://example.com/x"
+    },
+    "suggestions": [
+      {
+        "behavior": "allow",
+        "destination": "session",
+        "rules": [
+          {
+            "ruleContent": "domain:example.com",
+            "toolName": "WebFetch"
+          }
+        ],
+        "type": "addRules"
+      }
+    ],
+    "tool": "WebFetch"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "WebSearch requires confirmation"
+      },
+      "auto": {
+        "decision": "classify",
+        "reason": "WebSearch: classifier review"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "WebSearch requires confirmation"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "dontAsk mode"
+      },
+      "plan": {
+        "decision": "ask",
+        "reason": "WebSearch requires confirmation"
+      }
+    },
+    "input": {
+      "query": "q"
+    },
+    "suggestions": [
+      {
+        "behavior": "allow",
+        "destination": "session",
+        "rules": [
+          {
+            "ruleContent": null,
+            "toolName": "WebSearch"
+          }
+        ],
+        "type": "addRules"
+      }
+    ],
+    "tool": "WebSearch"
+  }
+]

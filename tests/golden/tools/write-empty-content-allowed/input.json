@@ -1,0 +1,13 @@
+{
+  "dirs": [],
+  "files": {},
+  "steps": [
+    {
+      "input": {
+        "content": "",
+        "file_path": "e.txt"
+      },
+      "tool": "Write"
+    }
+  ]
+}

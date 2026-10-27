@@ -1,0 +1,135 @@
+[
+  {
+    "input": {
+      "command": "git commit -m x"
+    },
+    "suggestions": [
+      {
+        "behavior": "allow",
+        "destination": "session",
+        "rules": [
+          {
+            "ruleContent": "git commit:*",
+            "toolName": "Bash"
+          }
+        ],
+        "type": "addRules"
+      }
+    ],
+    "tool": "Bash"
+  },
+  {
+    "input": {
+      "command": "npm run build"
+    },
+    "suggestions": [
+      {
+        "behavior": "allow",
+        "destination": "session",
+        "rules": [
+          {
+            "ruleContent": "npm run:*",
+            "toolName": "Bash"
+          }
+        ],
+        "type": "addRules"
+      }
+    ],
+    "tool": "Bash"
+  },
+  {
+    "input": {
+      "command": "ls -la"
+    },
+    "suggestions": [
+      {
+        "behavior": "allow",
+        "destination": "session",
+        "rules": [
+          {
+            "ruleContent": "ls:*",
+            "toolName": "Bash"
+          }
+        ],
+        "type": "addRules"
+      }
+    ],
+    "tool": "Bash"
+  },
+  {
+    "input": {
+      "command": "  docker   compose up "
+    },
+    "suggestions": [
+      {
+        "behavior": "allow",
+        "destination": "session",
+        "rules": [
+          {
+            "ruleContent": "docker compose:*",
+            "toolName": "Bash"
+          }
+        ],
+        "type": "addRules"
+      }
+    ],
+    "tool": "Bash"
+  },
+  {
+    "input": {
+      "command": ""
+    },
+    "suggestions": [
+      {
+        "behavior": "allow",
+        "destination": "session",
+        "rules": [
+          {
+            "ruleContent": ":*",
+            "toolName": "Bash"
+          }
+        ],
+        "type": "addRules"
+      }
+    ],
+    "tool": "Bash"
+  },
+  {
+    "input": {
+      "command": "cargo test --all"
+    },
+    "suggestions": [
+      {
+        "behavior": "allow",
+        "destination": "session",
+        "rules": [
+          {
+            "ruleContent": "cargo test:*",
+            "toolName": "Bash"
+          }
+        ],
+        "type": "addRules"
+      }
+    ],
+    "tool": "Bash"
+  },
+  {
+    "input": {
+      "command": "python3 -m pytest"
+    },
+    "suggestions": [
+      {
+        "behavior": "allow",
+        "destination": "session",
+        "rules": [
+          {
+            "ruleContent": "python3 -m:*",
+            "toolName": "Bash"
+          }
+        ],
+        "type": "addRules"
+      }
+    ],
+    "tool": "Bash"
+  }
+]

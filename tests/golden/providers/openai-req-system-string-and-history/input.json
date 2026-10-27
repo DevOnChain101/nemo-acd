@@ -1,0 +1,87 @@
+{
+  "chunks": [
+    {
+      "choices": [
+        {
+          "delta": {
+            "content": "ok"
+          }
+        }
+      ],
+      "id": "c1",
+      "model": "gpt-5"
+    },
+    {
+      "choices": [
+        {
+          "delta": {},
+          "finish_reason": "stop"
+        }
+      ],
+      "id": "c1",
+      "model": "gpt-5"
+    },
+    {
+      "choices": [],
+      "id": "c1",
+      "model": "gpt-5",
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 1
+      }
+    }
+  ],
+  "op": "stream",
+  "provider": "openai",
+  "req": {
+    "maxTokens": 10,
+    "messages": [
+      {
+        "content": [
+          {
+            "text": "run ls",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      },
+      {
+        "content": [
+          {
+            "thinking": "secret reasoning",
+            "type": "thinking"
+          },
+          {
+            "text": "Sure. ",
+            "type": "text"
+          },
+          {
+            "id": "call_1",
+            "input": {
+              "command": "ls"
+            },
+            "name": "Bash",
+            "type": "tool_use"
+          }
+        ],
+        "role": "assistant"
+      },
+      {
+        "content": [
+          {
+            "content": "file.txt",
+            "tool_use_id": "call_1",
+            "type": "tool_result"
+          },
+          {
+            "text": "now what?",
+            "type": "text"
+          }
+        ],
+        "role": "user"
+      }
+    ],
+    "model": "gpt-5",
+    "system": "be helpful"
+  }
+}

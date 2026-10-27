@@ -1,0 +1,2 @@
+# Golden render cases the Rust port is KNOWN to differ on: "render/<case_id>[#json|txt|ansi] | <reason>".
+# tests/golden.rs fails on any mismatch not listed here, and on a listed entry that now passes.

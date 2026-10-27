@@ -1,0 +1,29 @@
+{
+  "entries": [
+    {
+      "message": {
+        "content": [
+          {
+            "content": "x",
+            "is_error": false,
+            "tool_use_id": "ghost",
+            "type": "tool_result"
+          }
+        ],
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:01.000Z",
+      "type": "user"
+    },
+    {
+      "message": {
+        "content": "hello",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:02.000Z",
+      "type": "user"
+    }
+  ],
+  "now": 1790899800000,
+  "op": "replay"
+}

@@ -1,0 +1,100 @@
+{
+  "create_call_option_keys": [
+    "signal"
+  ],
+  "events": [
+    {
+      "message": {
+        "id": "msg_1",
+        "model": "claude-sonnet-5",
+        "usage": {
+          "input_tokens": 10,
+          "output_tokens": 0
+        }
+      },
+      "type": "message_start"
+    },
+    {
+      "content_block": {
+        "text": "",
+        "type": "text"
+      },
+      "index": 0,
+      "type": "content_block_start"
+    },
+    {
+      "delta": {
+        "text": "Hel",
+        "type": "text_delta"
+      },
+      "index": 0,
+      "type": "content_block_delta"
+    },
+    {
+      "delta": {
+        "text": "lo",
+        "type": "text_delta"
+      },
+      "index": 0,
+      "type": "content_block_delta"
+    },
+    {
+      "index": 0,
+      "type": "content_block_stop"
+    },
+    {
+      "content_block": {
+        "id": "toolu_1",
+        "input": {},
+        "name": "Bash",
+        "type": "tool_use"
+      },
+      "index": 1,
+      "type": "content_block_start"
+    },
+    {
+      "delta": {
+        "partial_json": "{\"command\":",
+        "type": "input_json_delta"
+      },
+      "index": 1,
+      "type": "content_block_delta"
+    },
+    {
+      "delta": {
+        "partial_json": "\"ls\"}",
+        "type": "input_json_delta"
+      },
+      "index": 1,
+      "type": "content_block_delta"
+    },
+    {
+      "index": 1,
+      "type": "content_block_stop"
+    },
+    {
+      "delta": {
+        "stop_reason": "tool_use"
+      },
+      "type": "message_delta",
+      "usage": {
+        "output_tokens": 12
+      }
+    },
+    {
+      "type": "message_stop"
+    }
+  ],
+  "provider_type": "anthropic",
+  "wire_body": {
+    "max_tokens": 100,
+    "messages": [
+      {
+        "content": "hi",
+        "role": "user"
+      }
+    ],
+    "model": "claude-sonnet-5",
+    "stream": true
+  }
+}

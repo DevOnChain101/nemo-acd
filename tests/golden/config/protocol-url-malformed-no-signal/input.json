@@ -1,0 +1,7 @@
+{
+  "args": {
+    "baseURL": "not a url",
+    "id": "x"
+  },
+  "op": "detectProtocol"
+}

@@ -1,0 +1,11 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {
+    "NEMO_API_KEY": "sk-ant-abc",
+    "NEMO_BASE_URL": "https://corp.example.test/v1",
+    "NEMO_PROVIDER": "corp"
+  },
+  "files": {},
+  "home": "<NEMO_HOME>",
+  "op": "loadConfig"
+}

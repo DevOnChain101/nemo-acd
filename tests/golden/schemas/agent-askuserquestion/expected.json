@@ -1,0 +1,50 @@
+{
+  "description": "Asks the user one or more multiple-choice questions when a decision needs their input before proceeding.",
+  "input_schema": {
+    "properties": {
+      "questions": {
+        "items": {
+          "properties": {
+            "header": {
+              "type": "string"
+            },
+            "multiSelect": {
+              "type": "boolean"
+            },
+            "options": {
+              "items": {
+                "properties": {
+                  "description": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "label"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "question": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "question",
+            "options"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "questions"
+    ],
+    "type": "object"
+  },
+  "name": "AskUserQuestion"
+}

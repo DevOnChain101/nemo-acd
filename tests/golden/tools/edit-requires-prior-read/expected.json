@@ -1,0 +1,17 @@
+{
+  "steps": [
+    {
+      "content": "Edit: <TMP>/ws/a.txt has not been read in this conversation (or changed since). Read it first.",
+      "isError": true,
+      "soft": true,
+      "tool": "Edit"
+    }
+  ],
+  "tree_after": [
+    {
+      "content": "foo\n",
+      "path": "a.txt",
+      "type": "file"
+    }
+  ]
+}

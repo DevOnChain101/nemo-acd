@@ -1,0 +1,127 @@
+{
+  "create_call_option_keys": [
+    "signal"
+  ],
+  "events": [
+    {
+      "message": {
+        "id": "chatcmpl-1",
+        "model": "gpt-5",
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "type": "message_start"
+    },
+    {
+      "content_block": {
+        "text": "",
+        "type": "text"
+      },
+      "index": 0,
+      "type": "content_block_start"
+    },
+    {
+      "delta": {
+        "text": "Hello ",
+        "type": "text_delta"
+      },
+      "index": 0,
+      "type": "content_block_delta"
+    },
+    {
+      "delta": {
+        "text": "world",
+        "type": "text_delta"
+      },
+      "index": 0,
+      "type": "content_block_delta"
+    },
+    {
+      "content_block": {
+        "id": "call_a",
+        "input": {},
+        "name": "Bash",
+        "type": "tool_use"
+      },
+      "index": 1,
+      "type": "content_block_start"
+    },
+    {
+      "content_block": {
+        "id": "call_b",
+        "input": {},
+        "name": "Read",
+        "type": "tool_use"
+      },
+      "index": 2,
+      "type": "content_block_start"
+    },
+    {
+      "delta": {
+        "partial_json": "{\"cmd\":",
+        "type": "input_json_delta"
+      },
+      "index": 1,
+      "type": "content_block_delta"
+    },
+    {
+      "delta": {
+        "partial_json": "{\"path\":\"a.ts\"}",
+        "type": "input_json_delta"
+      },
+      "index": 2,
+      "type": "content_block_delta"
+    },
+    {
+      "delta": {
+        "partial_json": "\"ls\"}",
+        "type": "input_json_delta"
+      },
+      "index": 1,
+      "type": "content_block_delta"
+    },
+    {
+      "index": 0,
+      "type": "content_block_stop"
+    },
+    {
+      "index": 1,
+      "type": "content_block_stop"
+    },
+    {
+      "index": 2,
+      "type": "content_block_stop"
+    },
+    {
+      "delta": {
+        "stop_reason": "tool_use"
+      },
+      "type": "message_delta",
+      "usage": {
+        "cache_read_input_tokens": 10,
+        "input_tokens": 42,
+        "output_tokens": 7
+      }
+    },
+    {
+      "type": "message_stop"
+    }
+  ],
+  "provider_type": "openai",
+  "wire_body": {
+    "max_completion_tokens": 100,
+    "messages": [
+      {
+        "content": "hi",
+        "role": "user"
+      }
+    ],
+    "model": "gpt-5",
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    }
+  }
+}

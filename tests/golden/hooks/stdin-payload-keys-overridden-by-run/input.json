@@ -1,0 +1,29 @@
+{
+  "config": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "cat >&2",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ]
+  },
+  "event": "PreToolUse",
+  "op": "run",
+  "opts": {
+    "cwd": "<TMP>/ws",
+    "sessionId": "s1",
+    "transcriptPath": "x.jsonl"
+  },
+  "payload": {
+    "cwd": "/forged",
+    "hook_event_name": "forged",
+    "session_id": "forged",
+    "tool_name": "Bash"
+  },
+  "target": "Bash"
+}

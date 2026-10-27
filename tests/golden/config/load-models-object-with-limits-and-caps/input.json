@@ -1,0 +1,37 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<NEMO_HOME>/nemo.json": {
+      "$schema": "config.json/v1",
+      "providers": {
+        "p": {
+          "models": {
+            "m-a": {
+              "capabilities": {
+                "effort_tiers": [
+                  "low",
+                  "high"
+                ],
+                "vision": true
+              },
+              "family": "sonnet",
+              "limit": {
+                "context": 1000,
+                "output": 100
+              },
+              "name": "A",
+              "qualityScore": 3,
+              "reasoning": true,
+              "vendor": "v"
+            },
+            "m-b": {}
+          },
+          "type": "anthropic"
+        }
+      }
+    }
+  },
+  "home": "<NEMO_HOME>",
+  "op": "loadConfig"
+}

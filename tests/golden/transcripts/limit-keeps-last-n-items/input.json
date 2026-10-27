@@ -1,0 +1,55 @@
+{
+  "entries": [
+    {
+      "message": {
+        "content": "m0",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:01.000Z",
+      "type": "user"
+    },
+    {
+      "message": {
+        "content": "m1",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:02.000Z",
+      "type": "user"
+    },
+    {
+      "message": {
+        "content": "m2",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:03.000Z",
+      "type": "user"
+    },
+    {
+      "message": {
+        "content": "m3",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:04.000Z",
+      "type": "user"
+    },
+    {
+      "message": {
+        "content": "m4",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:05.000Z",
+      "type": "user"
+    },
+    {
+      "message": {
+        "content": "m5",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:06.000Z",
+      "type": "user"
+    }
+  ],
+  "limit": 2,
+  "now": 1790899800000,
+  "op": "replay"
+}

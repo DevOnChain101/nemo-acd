@@ -1,0 +1,90 @@
+[
+  {
+    "name": "Bash",
+    "summary": "ls -la"
+  },
+  {
+    "name": "Bash",
+    "summary": "List files"
+  },
+  {
+    "name": "PowerShell",
+    "summary": "dir"
+  },
+  {
+    "name": "Read",
+    "summary": "c.js"
+  },
+  {
+    "name": "Write",
+    "summary": "y.txt"
+  },
+  {
+    "name": "NotebookEdit",
+    "summary": "z.ipynb"
+  },
+  {
+    "name": "Grep",
+    "summary": "foo.*"
+  },
+  {
+    "name": "Glob",
+    "summary": "**/*.rs"
+  },
+  {
+    "name": "WebSearch",
+    "summary": "rust"
+  },
+  {
+    "name": "WebFetch",
+    "summary": "https://x.test"
+  },
+  {
+    "name": "Agent",
+    "summary": "general-purpose: d"
+  },
+  {
+    "name": "Task",
+    "summary": "planner: plan it"
+  },
+  {
+    "name": "Skill",
+    "summary": "s a b"
+  },
+  {
+    "name": "TodoWrite",
+    "summary": "2 todos"
+  },
+  {
+    "name": "TodoWrite",
+    "summary": "0 todos"
+  },
+  {
+    "name": "TaskCreate",
+    "summary": "S"
+  },
+  {
+    "name": "TaskUpdate",
+    "summary": "#3 → completed"
+  },
+  {
+    "name": "TaskUpdate",
+    "summary": "#? → update"
+  },
+  {
+    "name": "SendMessage",
+    "summary": "→ a: s"
+  },
+  {
+    "name": "mcp__x__y",
+    "summary": "baz"
+  },
+  {
+    "name": "Other",
+    "summary": ""
+  },
+  {
+    "name": "Bash",
+    "summary": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa…"
+  }
+]

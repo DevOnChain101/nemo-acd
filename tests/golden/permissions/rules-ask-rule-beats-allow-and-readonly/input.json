@@ -1,0 +1,37 @@
+{
+  "autoMode": {},
+  "calls": [
+    {
+      "input": {
+        "command": "ls -la"
+      },
+      "tool": "Bash"
+    }
+  ],
+  "cwd": "<TMP>/ws",
+  "flags": {},
+  "fs": {
+    "dirs": [
+      "<TMP>/ws/sub"
+    ]
+  },
+  "home": "<HOME>",
+  "modes": [
+    "default",
+    "acceptEdits",
+    "plan",
+    "auto",
+    "dontAsk",
+    "bypassPermissions"
+  ],
+  "op": "check",
+  "rules": {
+    "allow": [
+      "Bash(ls:*)"
+    ],
+    "ask": [
+      "Bash(ls:*)"
+    ]
+  },
+  "suggestions": false
+}

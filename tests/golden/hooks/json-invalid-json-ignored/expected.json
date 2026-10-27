@@ -1,0 +1,13 @@
+{
+  "additionalContext": [],
+  "blocked": false,
+  "results": [
+    {
+      "command": "printf '%s' '{not json'",
+      "exitCode": 0,
+      "stderr": "",
+      "stdout": "{not json"
+    }
+  ],
+  "stop": false
+}

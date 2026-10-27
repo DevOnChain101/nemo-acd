@@ -1,0 +1,22 @@
+{
+  "dirs": [],
+  "files": {
+    "<TMP>/ws/.git/h": "foo hidden\n",
+    "<TMP>/ws/a.js": "const foo = 1;\nfunction bar() {}\nFOO again\n",
+    "<TMP>/ws/b.ts": "let foo: number;\n",
+    "<TMP>/ws/bin.dat": {
+      "base64": "Zm9vAGZvbw=="
+    },
+    "<TMP>/ws/node_modules/x.js": "foo hidden\n",
+    "<TMP>/ws/sub/c.md": "foo in markdown\nline2\nfoo again\n"
+  },
+  "steps": [
+    {
+      "input": {
+        "pattern": "foo"
+      },
+      "sort_lines": true,
+      "tool": "Grep"
+    }
+  ]
+}

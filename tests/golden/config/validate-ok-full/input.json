@@ -1,0 +1,17 @@
+{
+  "file": "config.json",
+  "op": "validate",
+  "raw": {
+    "$schema": "config.json/v1",
+    "model": "a/b",
+    "providers": {
+      "p": {
+        "models": [
+          "x"
+        ],
+        "type": "openai"
+      }
+    },
+    "smallModel": "a/c"
+  }
+}

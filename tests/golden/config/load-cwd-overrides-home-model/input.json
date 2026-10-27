@@ -1,0 +1,27 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<NEMO_HOME>/nemo.json": {
+      "$schema": "config.json/v1",
+      "model": "gateway/m-1",
+      "providers": {
+        "gateway": {
+          "apiKey": "sk-test-inline",
+          "baseURL": "https://gw.example.test/v1",
+          "models": [
+            "m-1",
+            "m-2"
+          ],
+          "type": "openai"
+        }
+      }
+    },
+    "<TMP>/ws/.nemo/config.json": {
+      "$schema": "config.json/v1",
+      "model": "gateway/m-2"
+    }
+  },
+  "home": "<NEMO_HOME>",
+  "op": "loadConfig"
+}

@@ -1,0 +1,70 @@
+[
+  {
+    "bearer": true,
+    "in": {}
+  },
+  {
+    "bearer": true,
+    "in": {
+      "authHeader": "bearer"
+    }
+  },
+  {
+    "bearer": false,
+    "in": {
+      "authHeader": "x-api-key",
+      "providerId": "gw"
+    }
+  },
+  {
+    "bearer": false,
+    "in": {
+      "baseURL": "https://gw.test",
+      "providerId": "anthropic"
+    }
+  },
+  {
+    "bearer": false,
+    "in": {
+      "baseURL": "https://api.anthropic.com",
+      "providerId": "gw"
+    }
+  },
+  {
+    "bearer": false,
+    "in": {
+      "baseURL": "https://eu.anthropic.com/v1",
+      "providerId": "gw"
+    }
+  },
+  {
+    "bearer": false,
+    "in": {
+      "baseURL": "https://gw.test",
+      "key": "sk-ant-1",
+      "providerId": "gw"
+    }
+  },
+  {
+    "bearer": true,
+    "in": {
+      "baseURL": "https://gw.test",
+      "key": "sk-x",
+      "providerId": "gw"
+    }
+  },
+  {
+    "bearer": true,
+    "in": {
+      "baseURL": "not a url",
+      "providerId": "gw"
+    }
+  },
+  {
+    "bearer": true,
+    "in": {
+      "baseURL": "https://gw.test",
+      "providerId": "gw"
+    }
+  }
+]

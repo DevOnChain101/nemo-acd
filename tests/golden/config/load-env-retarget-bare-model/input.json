@@ -1,0 +1,16 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {
+    "NEMO_AUTH_TOKEN": "t",
+    "NEMO_BASE_URL": "https://gw2.example.test/v1",
+    "NEMO_PROVIDER": "gateway"
+  },
+  "files": {
+    "<NEMO_HOME>/nemo.json": {
+      "$schema": "config.json/v1",
+      "model": "foo"
+    }
+  },
+  "home": "<NEMO_HOME>",
+  "op": "loadConfig"
+}

@@ -1,0 +1,45 @@
+{
+  "agents": [
+    {
+      "description": "from claude",
+      "model": null,
+      "name": "cl",
+      "path": "<HOME>/.claude/agents/cl.md",
+      "profile": "inherit",
+      "prompt": "body",
+      "reasoning": "inherit",
+      "requiredCapabilities": [],
+      "source": "user",
+      "tools": null
+    }
+  ],
+  "autoMemoryDir": "<HOME>/.claude/projects/<SANITIZED_CWD>/memory",
+  "claudeDir": "<HOME>/.claude",
+  "commands": [],
+  "mcpServers": [],
+  "memory": [],
+  "projectRoot": "<TMP>/ws",
+  "settings": {
+    "disableAllHooks": false,
+    "hooks": {},
+    "mcpApproval": {
+      "disabledMcpjsonServers": [],
+      "enableAllProjectMcpServers": false,
+      "enabledMcpjsonServers": []
+    },
+    "permissions": {
+      "additionalDirectories": [],
+      "allow": [],
+      "ask": [],
+      "defaultMode": "default",
+      "deny": []
+    }
+  },
+  "skills": [
+    {
+      "name": "nemocode-config",
+      "source": "built-in"
+    }
+  ],
+  "warnings": []
+}

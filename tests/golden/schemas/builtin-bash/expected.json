@@ -1,0 +1,28 @@
+{
+  "description": "Executes a shell command (Git Bash on Windows, /bin/bash or /bin/sh elsewhere). Prefer the Read, Edit, Write, Glob and Grep tools over shell equivalents like cat, sed, find or grep for file operations: they are faster and give the user better visibility into what changed. Use the description field to say what the command does. stdout and stderr are combined and truncated if very large. Set run_in_background for long-running commands such as dev servers or watchers: the call returns an id at once, then use BashOutput to read new output and KillShell to stop it.",
+  "input_schema": {
+    "properties": {
+      "command": {
+        "description": "The shell command to execute.",
+        "type": "string"
+      },
+      "description": {
+        "description": "Short description of what the command does, for display.",
+        "type": "string"
+      },
+      "run_in_background": {
+        "description": "Run the command in the background and return an id (see BashOutput, KillShell).",
+        "type": "boolean"
+      },
+      "timeout": {
+        "description": "Timeout in milliseconds (max 600000, default 120000). Ignored for background commands.",
+        "type": "number"
+      }
+    },
+    "required": [
+      "command"
+    ],
+    "type": "object"
+  },
+  "name": "Bash"
+}

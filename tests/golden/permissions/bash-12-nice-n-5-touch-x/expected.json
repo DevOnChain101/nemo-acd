@@ -1,0 +1,34 @@
+[
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "acceptEdits mode: file commands inside workspace"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "auto mode: file commands inside workspace"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "Bash requires confirmation"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "dontAsk mode"
+      },
+      "plan": {
+        "decision": "classify",
+        "reason": "plan mode: classifier review"
+      }
+    },
+    "input": {
+      "command": "nice -n 5 touch x"
+    },
+    "tool": "Bash"
+  }
+]

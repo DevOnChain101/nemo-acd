@@ -1,0 +1,13 @@
+{
+  "additionalContext": [],
+  "blocked": false,
+  "results": [
+    {
+      "command": "printf '%s' 'ok'",
+      "exitCode": 0,
+      "stderr": "",
+      "stdout": "ok"
+    }
+  ],
+  "stop": false
+}

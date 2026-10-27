@@ -1,0 +1,34 @@
+{
+  "config": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "printf '%s' '{\"decision\":\"block\",\"reason\":\"why\"}'",
+            "type": "command"
+          }
+        ],
+        "matcher": "a"
+      },
+      {
+        "hooks": [
+          {
+            "command": "printf '%s' '{\"decision\":\"block\"}'",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ]
+  },
+  "event": "PreToolUse",
+  "op": "run",
+  "opts": {},
+  "payload": {
+    "tool_input": {
+      "command": "ls"
+    },
+    "tool_name": "Bash"
+  },
+  "target": "a"
+}

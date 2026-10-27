@@ -1,0 +1,9 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<NEMO_HOME>/nemo.json": "{\"apiKey\": \"sk-secret\", "
+  },
+  "home": "<NEMO_HOME>",
+  "op": "loadConfig"
+}

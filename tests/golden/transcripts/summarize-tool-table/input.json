@@ -1,0 +1,140 @@
+{
+  "calls": [
+    [
+      "Bash",
+      {
+        "command": "ls -la"
+      }
+    ],
+    [
+      "Bash",
+      {
+        "command": "ls",
+        "description": "List  files"
+      }
+    ],
+    [
+      "PowerShell",
+      {
+        "command": "dir"
+      }
+    ],
+    [
+      "Read",
+      {
+        "file_path": "/a/b/c.js"
+      }
+    ],
+    [
+      "Write",
+      {
+        "file_path": "C:\\x\\y.txt"
+      }
+    ],
+    [
+      "NotebookEdit",
+      {
+        "notebook_path": "/n/z.ipynb"
+      }
+    ],
+    [
+      "Grep",
+      {
+        "pattern": "foo.*"
+      }
+    ],
+    [
+      "Glob",
+      {
+        "pattern": "**/*.rs"
+      }
+    ],
+    [
+      "WebSearch",
+      {
+        "query": "rust"
+      }
+    ],
+    [
+      "WebFetch",
+      {
+        "url": "https://x.test"
+      }
+    ],
+    [
+      "Agent",
+      {
+        "description": "d"
+      }
+    ],
+    [
+      "Task",
+      {
+        "description": "plan it",
+        "subagent_type": "planner"
+      }
+    ],
+    [
+      "Skill",
+      {
+        "args": "a b",
+        "skill": "s"
+      }
+    ],
+    [
+      "TodoWrite",
+      {
+        "todos": [
+          1,
+          2
+        ]
+      }
+    ],
+    [
+      "TodoWrite",
+      {}
+    ],
+    [
+      "TaskCreate",
+      {
+        "subject": "S"
+      }
+    ],
+    [
+      "TaskUpdate",
+      {
+        "status": "completed",
+        "taskId": 3
+      }
+    ],
+    [
+      "TaskUpdate",
+      {}
+    ],
+    [
+      "SendMessage",
+      {
+        "summary": "s",
+        "to": "a"
+      }
+    ],
+    [
+      "mcp__x__y",
+      {
+        "bar": "baz",
+        "foo": 1
+      }
+    ],
+    [
+      "Other",
+      {}
+    ],
+    [
+      "Bash",
+      {
+        "command": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ]
+  ],
+  "op": "summarizeTool"
+}

@@ -1,0 +1,13 @@
+{
+  "models": [
+    {
+      "context_length": 400000,
+      "id": "gpt-5"
+    },
+    {
+      "id": "o3"
+    }
+  ],
+  "op": "listModels",
+  "provider": "openai"
+}

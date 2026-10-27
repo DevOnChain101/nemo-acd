@@ -1,0 +1,19 @@
+{
+  "additionalContext": [],
+  "blocked": false,
+  "results": [
+    {
+      "command": "printf '%s' 'x'",
+      "exitCode": 0,
+      "stderr": "",
+      "stdout": "x"
+    },
+    {
+      "command": "printf '%s' 'x'",
+      "exitCode": 0,
+      "stderr": "",
+      "stdout": "x"
+    }
+  ],
+  "stop": false
+}

@@ -1,0 +1,48 @@
+{
+  "allow": [
+    "Bash(ls:*)",
+    "Bash(git status:*)",
+    "Read"
+  ],
+  "ask": [
+    "Edit(a/**)"
+  ],
+  "deny": [
+    "Bash(rm:*)"
+  ],
+  "mode": "acceptEdits",
+  "returned_mode": "acceptEdits",
+  "then": [
+    {
+      "input": {
+        "command": "git status"
+      },
+      "result": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "tool": "Bash"
+    },
+    {
+      "input": {
+        "command": "rm x"
+      },
+      "result": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      },
+      "tool": "Bash"
+    },
+    {
+      "input": {
+        "file_path": "<TMP>/ws/a/x"
+      },
+      "result": {
+        "decision": "ask",
+        "reason": "matched an ask rule",
+        "rule": true
+      },
+      "tool": "Edit"
+    }
+  ]
+}

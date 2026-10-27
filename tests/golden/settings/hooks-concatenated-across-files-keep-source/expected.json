@@ -1,0 +1,69 @@
+{
+  "agents": [],
+  "autoMemoryDir": "<HOME>/.nemo/projects/<SANITIZED_CWD>/memory",
+  "claudeDir": "<HOME>/.claude",
+  "commands": [],
+  "mcpServers": [],
+  "memory": [],
+  "projectRoot": "<TMP>/ws",
+  "settings": {
+    "disableAllHooks": false,
+    "hooks": {
+      "PreToolUse": [
+        {
+          "hooks": [
+            {
+              "command": "echo user",
+              "source": "<HOME>/.nemo/settings.json",
+              "type": "command"
+            }
+          ],
+          "matcher": "Bash",
+          "source": "<HOME>/.nemo/settings.json"
+        },
+        {
+          "hooks": [
+            {
+              "command": "echo project",
+              "source": "<TMP>/ws/.nemo/settings.json",
+              "type": "command"
+            }
+          ],
+          "matcher": "Bash",
+          "source": "<TMP>/ws/.nemo/settings.json"
+        }
+      ],
+      "Stop": [
+        {
+          "hooks": [
+            {
+              "command": "echo stop",
+              "source": "<HOME>/.nemo/settings.json",
+              "type": "command"
+            }
+          ],
+          "source": "<HOME>/.nemo/settings.json"
+        }
+      ]
+    },
+    "mcpApproval": {
+      "disabledMcpjsonServers": [],
+      "enableAllProjectMcpServers": false,
+      "enabledMcpjsonServers": []
+    },
+    "permissions": {
+      "additionalDirectories": [],
+      "allow": [],
+      "ask": [],
+      "defaultMode": "default",
+      "deny": []
+    }
+  },
+  "skills": [
+    {
+      "name": "nemocode-config",
+      "source": "built-in"
+    }
+  ],
+  "warnings": []
+}

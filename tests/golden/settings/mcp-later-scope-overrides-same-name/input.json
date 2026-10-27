@@ -1,0 +1,31 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<HOME>/.claude.json": {
+      "mcpServers": {
+        "dup": {
+          "command": "user"
+        }
+      }
+    },
+    "<HOME>/.nemo/nemo.json": {
+      "claude": {
+        "readUserConfig": true
+      },
+      "mcpServers": {
+        "dup": {
+          "command": "nemo-user"
+        }
+      }
+    },
+    "<TMP>/ws/.nemo/config.json": {
+      "mcp": {
+        "dup": {
+          "command": "nemo-project"
+        }
+      }
+    }
+  },
+  "op": "workspace"
+}

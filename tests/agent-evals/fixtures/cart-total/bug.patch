@@ -1,0 +1,13 @@
+diff --git a/src/cart.js b/src/cart.js
+index 877affc..9c5dc72 100644
+--- a/src/cart.js
++++ b/src/cart.js
+@@ -3,7 +3,7 @@ export function cartTotalCents(items) {
+ }
+ 
+ export function renderTotal(items) {
+-  return `Total: $${(cartTotalCents(items) / 100).toFixed(2)}`;
++  return `Total: $${items.reduce((sum, i) => sum + i.price * i.qty, 0)}`;
+ }
+ 
+ export function renderCart(items) {

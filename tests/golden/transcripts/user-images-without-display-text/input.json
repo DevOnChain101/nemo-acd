@@ -1,0 +1,31 @@
+{
+  "entries": [
+    {
+      "message": {
+        "content": [
+          {
+            "text": "what is this",
+            "type": "text"
+          },
+          {
+            "source": {
+              "data": "AAAABBBBCCCC",
+              "media_type": "image/png",
+              "type": "base64"
+            },
+            "type": "image"
+          },
+          {
+            "source": {},
+            "type": "image"
+          }
+        ],
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:01.000Z",
+      "type": "user"
+    }
+  ],
+  "now": 1790899800000,
+  "op": "replay"
+}

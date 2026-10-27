@@ -1,0 +1,17 @@
+{
+  "steps": [
+    {
+      "content": "Note: this file exists but has empty contents.",
+      "isError": false,
+      "soft": false,
+      "tool": "Read"
+    }
+  ],
+  "tree_after": [
+    {
+      "content": "",
+      "path": "a.txt",
+      "type": "file"
+    }
+  ]
+}

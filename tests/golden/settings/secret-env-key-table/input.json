@@ -1,0 +1,22 @@
+{
+  "keys": [
+    "PATH",
+    "HOME",
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "NEMO_API_KEY",
+    "NEMO_AUTH_TOKEN",
+    "GITHUB_TOKEN",
+    "MY_SECRET",
+    "DB_PASSWORD",
+    "AWS_SECRET_ACCESS_KEY",
+    "api_key",
+    "Token",
+    "FOO",
+    "EDITOR",
+    "NODE_ENV",
+    "KEYBOARD",
+    "MONKEY"
+  ],
+  "op": "secretKeys"
+}

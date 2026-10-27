@@ -1,0 +1,4 @@
+# Release-tag allowlist, read by scripts/check-release-tag.sh from the tagged commit.
+# One tagger email per line (the address in the signed tag; GitHub verifies the signature against it).
+# FAIL CLOSED: with no entries (only comments/blank lines) every release is refused, unless the repository
+# variable NEMO_ALLOW_ANY_VERIFIED_TAGGER is exactly "true". Add maintainer emails BEFORE the first tag. See docs/RELEASE.md.

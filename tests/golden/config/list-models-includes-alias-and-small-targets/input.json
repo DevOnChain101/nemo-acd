@@ -1,0 +1,24 @@
+{
+  "config": {
+    "aliases": {
+      "x": "gateway/m-3"
+    },
+    "maxTokens": 32000,
+    "model": "gateway/m-9",
+    "profiles": {},
+    "providers": {
+      "gateway": {
+        "models": [
+          "m-1",
+          "m-2"
+        ]
+      },
+      "openai": {
+        "models": []
+      }
+    },
+    "smallModel": "m-1"
+  },
+  "op": "listModels",
+  "providerIds": null
+}

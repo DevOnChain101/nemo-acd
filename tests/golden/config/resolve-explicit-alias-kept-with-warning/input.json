@@ -1,0 +1,41 @@
+{
+  "config": {
+    "aliases": {
+      "fable": null,
+      "haiku": null,
+      "opus": "gateway/claude-opus-3",
+      "sonnet": null
+    },
+    "maxTokens": 32000,
+    "profiles": {},
+    "providers": {
+      "anthropic": {
+        "headers": {},
+        "models": [],
+        "type": "anthropic",
+        "typeSource": "id"
+      },
+      "openai": {
+        "models": [],
+        "type": "openai",
+        "typeSource": "id"
+      }
+    }
+  },
+  "discovered": {
+    "gateway": [
+      "claude-sonnet-4-5",
+      "claude-sonnet-5",
+      "claude-opus-4-1-20250805",
+      "claude-opus-5-5",
+      "claude-haiku-4-5",
+      "kr/claude-sonnet-9",
+      "combo-claude-sonnet-5"
+    ]
+  },
+  "explicitAliases": [
+    "opus"
+  ],
+  "modelExplicit": false,
+  "op": "resolveModelDefaults"
+}

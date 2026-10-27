@@ -1,0 +1,40 @@
+{
+  "autoMode": {},
+  "calls": [
+    {
+      "input": {
+        "file_path": "<HOME>/.ssh/id_rsa"
+      },
+      "tool": "Read"
+    },
+    {
+      "input": {
+        "file_path": "<HOME>/.bashrc"
+      },
+      "tool": "Read"
+    }
+  ],
+  "cwd": "<TMP>/ws",
+  "flags": {},
+  "fs": {
+    "dirs": [
+      "<TMP>/ws/sub"
+    ]
+  },
+  "home": "<HOME>",
+  "modes": [
+    "default",
+    "acceptEdits",
+    "plan",
+    "auto",
+    "dontAsk",
+    "bypassPermissions"
+  ],
+  "op": "check",
+  "rules": {
+    "deny": [
+      "Read(~/.ssh/**)"
+    ]
+  },
+  "suggestions": false
+}

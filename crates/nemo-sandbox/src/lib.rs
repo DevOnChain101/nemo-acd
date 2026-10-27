@@ -1,0 +1,634 @@
+//! OS-level sandboxing for commands the agent runs (design doc 5.7 / 5.12, ADR-010).
+//!
+//! This crate only *wraps* a command: `backend.wrap(policy, cmd)` returns a new
+//! [`SandboxedCommand`] (usually `sandbox-exec ...` or `bwrap ...` around the original).
+//! Integration point: `nemo-terminal` should build its `Command` from the wrapped
+//! `program/args/cwd/env` (and call `env_clear()` when `clear_env` is set) instead of the
+//! raw command. Callers MUST consult [`SandboxBackend::capabilities`] and tell the user
+//! what is enforced; `wrap` on a backend with `None` guarantees runs the command unconfined.
+//!
+//! `nemo-terminal` does this: `TerminalRuntime` wraps the shell command when a policy is set and
+//! (in its default `Enforce` mode) refuses to run when the backend is [`NullSandbox`]/unusable or
+//! `SandboxPolicy::required` is not met. [`detect`] itself still falls back to [`NullSandbox`];
+//! the caller decides whether that is acceptable.
+//!
+//! Guarantee model: nothing here is a container. Seatbelt is deprecated and best-effort,
+//! Landlock is allow-list only, Windows has no filesystem/network confinement yet.
+//!
+//! **`Guarantee::Weak` is defence in depth, NOT a security boundary.** Do not rely on a `Weak`
+//! backend (Seatbelt, bubblewrap filesystem, Landlock network) to contain a hostile process;
+//! treat it as a seat belt that stops accidents and lazy attacks. Only `Strong` is a boundary,
+//! and even that is not a container or VM.
+
+mod helper;
+mod linux;
+mod seatbelt;
+mod windows;
+
+use std::ffi::OsString;
+use std::fmt;
+use std::path::{Path, PathBuf};
+
+pub use helper::{HELPER_NAME, decode_policy, encode_policy, parse_helper_args};
+pub use linux::{BwrapBackend, LandlockRule, LinuxLandlockBackend, landlock_rules};
+#[cfg(target_os = "linux")]
+pub use linux::{landlock_abi, restrict_current_process};
+pub use seatbelt::{SeatbeltBackend, seatbelt_profile};
+pub use windows::WindowsJobBackend;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NetworkPolicy {
+    /// No network at all (default).
+    Deny,
+    /// Only loopback (127.0.0.0/8, ::1) TCP/UDP; everything else, and AF_UNIX, is denied.
+    /// Lets a dev server and its tests run inside one sandbox. Opt-in; the trade-off differs
+    /// per backend (ask [`SandboxBackend::network_guarantee`]):
+    /// - Seatbelt: the REAL host loopback. Sandboxed code can reach the user's local TCP
+    ///   services (databases, Redis, docker TCP, dev servers). A bind to `0.0.0.0` is also
+    ///   accepted by the kernel filter, so a listener there is reachable from the LAN.
+    /// - bubblewrap: a fresh network namespace whose `lo` bwrap brings up; the loopback is
+    ///   PRIVATE to the sandbox. Server and tests inside it work, host services are unreachable.
+    /// - Landlock: unsupported (it can filter TCP ports, not addresses); `wrap` refuses.
+    /// - Windows: no network confinement at all.
+    Loopback,
+    Allow,
+    /// No OS primitive here can filter by host; every backend rejects this (fail closed).
+    AllowHosts(Vec<String>),
+}
+
+#[derive(Clone, Debug)]
+pub struct SandboxPolicy {
+    pub readable_roots: Vec<PathBuf>,
+    pub writable_roots: Vec<PathBuf>,
+    /// Always inaccessible, even inside a root (e.g. `~/.ssh`).
+    pub deny_paths: Vec<PathBuf>,
+    /// Readable but never writable/renamable/removable, even inside a writable root
+    /// (e.g. `.git/hooks`, `.git/config`). Landlock cannot express this inside a writable root
+    /// and rejects such a policy (`Unsupported`); Seatbelt and bubblewrap enforce it.
+    pub readonly_paths: Vec<PathBuf>,
+    /// Private temp dir for the command: the only temp location it may write (the real
+    /// `/tmp`, `/var/folders`, `/run` are not granted). `TMPDIR` is forced to it. The caller
+    /// creates it (0700). `None` = no temp location at all.
+    pub tmp_dir: Option<PathBuf>,
+    pub network: NetworkPolicy,
+    /// false: only the initial program may run (no fork/exec of others) where enforceable.
+    pub allow_exec: bool,
+    /// Names copied from the current process env; everything else is dropped.
+    pub env_passthrough: Vec<String>,
+    /// Minimum guarantee the caller demands. The runtime refuses to run (instead of running
+    /// weaker) when the backend's filesystem guarantee, or its
+    /// [`network_guarantee`](SandboxBackend::network_guarantee) for `network` (`Deny` or
+    /// `Loopback`), is below this. Defaults to `Weak`, so an unusable backend
+    /// ([`NullSandbox`]) is refused; the terminal's `Enforce` mode never goes below `Weak`.
+    pub required: Guarantee,
+}
+
+impl Default for SandboxPolicy {
+    fn default() -> Self {
+        Self {
+            readable_roots: vec![],
+            writable_roots: vec![],
+            deny_paths: vec![],
+            readonly_paths: vec![],
+            tmp_dir: None,
+            network: NetworkPolicy::Deny,
+            allow_exec: true,
+            env_passthrough: vec![],
+            required: Guarantee::Weak,
+        }
+    }
+}
+
+impl SandboxPolicy {
+    /// Recommended policy for an agent session: writes only in `workspace_root` and `tmp_dir`
+    /// (private temp), network denied, hooks/config of the workspace's `.git` read-only, and
+    /// credential stores plus control sockets (docker, ssh-agent, tmux, `$XDG_RUNTIME_DIR`)
+    /// inaccessible. System dirs are added by the backends; add `readable_roots` for toolchains
+    /// installed under `$HOME`. Denied paths are resolved from the process env at call time.
+    ///
+    /// `Weak` backends (Seatbelt, bwrap filesystem) are defence in depth, not a security
+    /// boundary. Landlock rejects this policy (it cannot protect `.git/hooks` inside the
+    /// writable workspace); use bubblewrap or Seatbelt, or drop `readonly_paths` knowingly.
+    pub fn standard(workspace_root: &Path, tmp_dir: &Path) -> Self {
+        let env_path = |k: &str| {
+            std::env::var_os(k)
+                .map(PathBuf::from)
+                .filter(|p| p.is_absolute())
+        };
+        let mut deny = vec![
+            PathBuf::from("/var/run/docker.sock"),
+            PathBuf::from("/run/docker.sock"),
+            PathBuf::from("/var/run/podman"),
+            PathBuf::from("/run/podman"),
+        ];
+        if let Some(home) = env_path("HOME").or_else(|| env_path("USERPROFILE")) {
+            deny.extend(credential_paths(
+                &home,
+                env_path("APPDATA").as_deref(),
+                env_path("LOCALAPPDATA").as_deref(),
+            ));
+        }
+        // Socket directories: the whole runtime dir (docker, gpg-agent, ssh-agent live there)
+        // and the parent dirs of the agent / tmux sockets named in the environment.
+        deny.extend(env_path("XDG_RUNTIME_DIR"));
+        deny.extend(env_path("TMUX_TMPDIR"));
+        deny.extend(env_path("SSH_AUTH_SOCK").and_then(|p| p.parent().map(Path::to_path_buf)));
+        let tmux = std::env::var("TMUX").ok();
+        deny.extend(
+            tmux.as_deref()
+                .and_then(|t| t.split(',').next())
+                .map(PathBuf::from)
+                .filter(|p| p.is_absolute())
+                .and_then(|p| p.parent().map(Path::to_path_buf)),
+        );
+        // Never deny a root we are about to grant (misconfigured env); the grant would be moot.
+        deny.retain(|d| !workspace_root.starts_with(d) && !tmp_dir.starts_with(d));
+        deny.sort();
+        deny.dedup();
+        Self {
+            writable_roots: vec![workspace_root.to_path_buf()],
+            tmp_dir: Some(tmp_dir.to_path_buf()),
+            deny_paths: deny,
+            readonly_paths: vec![
+                workspace_root.join(".git/hooks"),
+                workspace_root.join(".git/config"),
+            ],
+            ..Self::default()
+        }
+    }
+
+    /// Validate an extra read root (`--sandbox-read`) and return its canonical form. Rejects a
+    /// missing path, a filesystem/drive root, `$HOME`/`%USERPROFILE%`, and any path that is, lies
+    /// inside, or is an ancestor of a denied path (symlinks resolved first), since a read grant
+    /// there would expose the credential stores in `deny_paths`.
+    pub fn check_read_root(&self, path: &Path) -> Result<PathBuf, String> {
+        let shown = path.display();
+        let c = std::fs::canonicalize(path).map_err(|e| format!("{shown}: {e}"))?;
+        if c.parent().is_none() {
+            return Err(format!("{shown}: a filesystem root cannot be granted"));
+        }
+        for k in ["HOME", "USERPROFILE"] {
+            let home = std::env::var_os(k).map(PathBuf::from);
+            if home.is_some_and(|h| canon_lossy(&h) == c) {
+                return Err(format!("{shown}: the home directory cannot be granted"));
+            }
+        }
+        for d in &self.deny_paths {
+            let d = canon_lossy(d);
+            if d.starts_with(&c) || c.starts_with(&d) {
+                return Err(format!(
+                    "{shown}: overlaps protected path {} (credentials or control sockets)",
+                    d.display()
+                ));
+            }
+        }
+        Ok(c)
+    }
+
+    /// Make `paths` read-only (never writable/renamable/removable), like `.git/hooks`. A path
+    /// inside a writable root also gets its ancestors guarded by [`parent_guards`](Self::parent_guards).
+    pub fn protect(&mut self, paths: impl IntoIterator<Item = PathBuf>) {
+        self.readonly_paths.extend(paths);
+    }
+
+    /// Fail unless `path` (compared after symlink resolution) lies outside every writable root
+    /// and the private tmp dir. For state the agent must never write by construction, e.g. the
+    /// main repo's `.git` when the workspace is a worktree: a `--sandbox-write` of the repo
+    /// would otherwise silently re-open it.
+    pub fn ensure_unwritable(&self, path: &Path) -> Result<(), SandboxError> {
+        let canon = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+        let target = canon(path);
+        match self
+            .writable_roots
+            .iter()
+            .chain(&self.tmp_dir)
+            .find(|r| target.starts_with(canon(r)))
+        {
+            Some(r) => Err(SandboxError::InvalidPolicy(format!(
+                "{} must not be writable but lies inside writable root {}",
+                path.display(),
+                r.display()
+            ))),
+            None => Ok(()),
+        }
+    }
+
+    /// Every path the policy names, for absolute-path validation.
+    fn all_paths(&self) -> impl Iterator<Item = &PathBuf> {
+        self.readable_roots
+            .iter()
+            .chain(&self.writable_roots)
+            .chain(&self.deny_paths)
+            .chain(&self.readonly_paths)
+            .chain(&self.tmp_dir)
+    }
+
+    /// Ancestors of denied/read-only paths that lie strictly inside a writable root. A process
+    /// that may rename or remove such a directory could move a protected path away (and plant
+    /// its own), so backends must also forbid writes to these directory entries themselves.
+    pub fn parent_guards(&self) -> Vec<PathBuf> {
+        let mut out: Vec<PathBuf> = vec![];
+        let protected = self.deny_paths.iter().chain(&self.readonly_paths);
+        for d in protected {
+            for a in d.ancestors().skip(1) {
+                let inside = self
+                    .writable_roots
+                    .iter()
+                    .chain(&self.tmp_dir)
+                    .any(|r| a != r && a.starts_with(r));
+                if inside && !out.iter().any(|o| o == a) {
+                    out.push(a.to_path_buf());
+                }
+            }
+        }
+        out
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Guarantee {
+    None,
+    Weak,
+    Strong,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SandboxCapabilities {
+    pub filesystem: Guarantee,
+    pub network: Guarantee,
+    /// Descendants stay confined / can be contained as a tree.
+    pub process_tree: Guarantee,
+    pub notes: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SandboxedCommand {
+    pub program: OsString,
+    pub args: Vec<OsString>,
+    pub env: Vec<(OsString, OsString)>,
+    pub cwd: Option<PathBuf>,
+    /// Output only: spawn with an empty environment plus `env`.
+    pub clear_env: bool,
+}
+
+#[derive(Debug)]
+pub enum SandboxError {
+    InvalidPolicy(String),
+    Unsupported(String),
+    Unavailable(String),
+}
+
+impl fmt::Display for SandboxError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidPolicy(m) => write!(f, "invalid sandbox policy: {m}"),
+            Self::Unsupported(m) => write!(f, "unsupported by this sandbox: {m}"),
+            Self::Unavailable(m) => write!(f, "sandbox unavailable: {m}"),
+        }
+    }
+}
+
+impl std::error::Error for SandboxError {}
+
+pub trait SandboxBackend: Send + Sync {
+    fn name(&self) -> &'static str;
+    fn capabilities(&self) -> SandboxCapabilities;
+    /// What this backend guarantees for `mode`. `None` = cannot honour it (the runtime refuses
+    /// under `Enforce`). `Allow` restricts nothing, so it is trivially `Strong`. The default
+    /// knows `Deny` only (`capabilities().network`); backends that can do `Loopback` override.
+    fn network_guarantee(&self, mode: &NetworkPolicy) -> Guarantee {
+        network_guarantee_for(mode, self.capabilities().network, Guarantee::None)
+    }
+    fn wrap(
+        &self,
+        policy: &SandboxPolicy,
+        command: &SandboxedCommand,
+    ) -> Result<SandboxedCommand, SandboxError>;
+}
+
+/// Per-mode guarantee from the backend's `Deny` and `Loopback` guarantees.
+pub(crate) fn network_guarantee_for(
+    mode: &NetworkPolicy,
+    deny: Guarantee,
+    loopback: Guarantee,
+) -> Guarantee {
+    match mode {
+        NetworkPolicy::Allow => Guarantee::Strong,
+        NetworkPolicy::Deny => deny,
+        NetworkPolicy::Loopback => loopback,
+        NetworkPolicy::AllowHosts(_) => Guarantee::None,
+    }
+}
+
+/// No confinement at all; `wrap` returns the command unchanged (plus env filtering).
+pub struct NullSandbox;
+
+impl SandboxBackend for NullSandbox {
+    fn name(&self) -> &'static str {
+        "none"
+    }
+    fn capabilities(&self) -> SandboxCapabilities {
+        SandboxCapabilities {
+            filesystem: Guarantee::None,
+            network: Guarantee::None,
+            process_tree: Guarantee::None,
+            notes: vec!["no sandbox: commands run with the agent's full privileges".into()],
+        }
+    }
+    fn wrap(
+        &self,
+        policy: &SandboxPolicy,
+        c: &SandboxedCommand,
+    ) -> Result<SandboxedCommand, SandboxError> {
+        validate(policy)?;
+        Ok(SandboxedCommand {
+            env: build_env(policy, c),
+            clear_env: true,
+            ..c.clone()
+        })
+    }
+}
+
+/// Best available backend for this OS, probed at call time. **Fails open**: with nothing usable
+/// it returns [`NullSandbox`] (`capabilities().filesystem == Guarantee::None`). Callers must
+/// check the capabilities; `nemo-terminal` refuses such a backend unless told otherwise.
+pub fn detect() -> Box<dyn SandboxBackend> {
+    #[cfg(target_os = "macos")]
+    if let Some(b) = SeatbeltBackend::detect() {
+        return Box::new(b);
+    }
+    #[cfg(target_os = "linux")]
+    if let Some(b) = linux::detect_linux() {
+        return b;
+    }
+    #[cfg(windows)]
+    return Box::new(WindowsJobBackend);
+    #[allow(unreachable_code)]
+    Box::new(NullSandbox)
+}
+
+/// Shared trust-boundary checks; every backend calls this first.
+/// Canonicalise the longest existing prefix of `p` and re-append the missing tail, so denied
+/// paths that do not exist yet still compare equal to their symlink-resolved spelling.
+fn canon_lossy(p: &Path) -> PathBuf {
+    let mut tail = vec![];
+    let mut cur = p;
+    loop {
+        if let Ok(c) = std::fs::canonicalize(cur) {
+            return tail.iter().rev().fold(c, |a, t| a.join(t));
+        }
+        match (cur.parent(), cur.file_name()) {
+            (Some(par), Some(n)) => {
+                tail.push(n);
+                cur = par;
+            }
+            _ => return p.to_path_buf(),
+        }
+    }
+}
+
+/// Credential / secret stores under a user profile that the standard policy hides.
+fn credential_paths(home: &Path, appdata: Option<&Path>, local: Option<&Path>) -> Vec<PathBuf> {
+    let mut v: Vec<PathBuf> = [
+        ".ssh",
+        ".aws",
+        ".gnupg",
+        ".config/gh",
+        ".docker/run",
+        ".netrc",
+        ".npmrc",
+        ".pypirc",
+        ".git-credentials",
+        ".config/git/credentials",
+        ".kube",
+        ".config/gcloud",
+        ".azure",
+        ".config/op",
+        ".password-store",
+        ".local/share/keyrings",
+        ".mozilla",
+        ".config/google-chrome",
+        ".config/chromium",
+        "Library/Application Support/Google/Chrome",
+        "Library/Application Support/Chromium",
+        "Library/Application Support/Firefox",
+        "Library/Keychains",
+        ".bash_history",
+        ".zsh_history",
+        ".nemo/auth.json",
+        ".nemo/settings.json",
+    ]
+    .iter()
+    .map(|d| home.join(d))
+    .collect();
+    v.extend(
+        appdata
+            .into_iter()
+            .flat_map(|a| ["gcloud", "Mozilla", "npm", "gh"].map(|d| a.join(d))),
+    );
+    v.extend(
+        local
+            .into_iter()
+            .flat_map(|a| ["Google/Chrome", "Chromium", "Microsoft/Edge"].map(|d| a.join(d))),
+    );
+    v
+}
+
+pub(crate) fn validate(p: &SandboxPolicy) -> Result<(), SandboxError> {
+    if let NetworkPolicy::AllowHosts(_) = p.network {
+        return Err(SandboxError::Unsupported(
+            "per-host network allowlists cannot be enforced by OS sandboxes".into(),
+        ));
+    }
+    for path in p.all_paths() {
+        if !path.is_absolute() {
+            return Err(SandboxError::InvalidPolicy(format!(
+                "path must be absolute: {path:?}"
+            )));
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn build_env(p: &SandboxPolicy, c: &SandboxedCommand) -> Vec<(OsString, OsString)> {
+    let mut env: Vec<_> = p
+        .env_passthrough
+        .iter()
+        .filter_map(|n| std::env::var_os(n).map(|v| (OsString::from(n), v)))
+        .collect();
+    env.extend(c.env.iter().cloned());
+    if let Some(t) = &p.tmp_dir {
+        env.retain(|(k, _)| k != "TMPDIR");
+        env.push(("TMPDIR".into(), t.clone().into_os_string())); // forced: private tmp only
+    }
+    env
+}
+
+/// Resolve to an absolute path using the command's PATH, else the process PATH.
+pub(crate) fn resolve_program(c: &SandboxedCommand) -> Option<PathBuf> {
+    let prog = Path::new(&c.program);
+    if prog.is_absolute() {
+        return Some(prog.to_path_buf());
+    }
+    let path = c
+        .env
+        .iter()
+        .find(|(k, _)| k == "PATH")
+        .map(|(_, v)| v.clone())
+        .or_else(|| std::env::var_os("PATH"))?;
+    std::env::split_paths(&path)
+        .map(|d| d.join(prog))
+        .find(|p| p.is_file())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_relative_and_host_allowlist() {
+        let mut p = SandboxPolicy {
+            readable_roots: vec!["rel".into()],
+            ..Default::default()
+        };
+        assert!(matches!(validate(&p), Err(SandboxError::InvalidPolicy(_))));
+        p.readable_roots.clear();
+        p.network = NetworkPolicy::AllowHosts(vec!["a".into()]);
+        assert!(matches!(validate(&p), Err(SandboxError::Unsupported(_))));
+    }
+
+    #[test]
+    fn default_requires_weak() {
+        assert_eq!(SandboxPolicy::default().required, Guarantee::Weak);
+    }
+
+    #[test]
+    fn standard_policy_shape() {
+        let p = SandboxPolicy::standard(Path::new("/ws"), Path::new("/ws-tmp"));
+        assert_eq!(p.network, NetworkPolicy::Deny);
+        assert_eq!(p.required, Guarantee::Weak);
+        assert_eq!(p.tmp_dir.as_deref(), Some(Path::new("/ws-tmp")));
+        assert!(p.readonly_paths.contains(&"/ws/.git/hooks".into()));
+        assert!(p.readonly_paths.contains(&"/ws/.git/config".into()));
+        assert!(p.deny_paths.contains(&"/run/docker.sock".into()));
+        validate(&p).unwrap();
+        // .git (ancestor of both read-only paths) is guarded against rename/removal; /ws is not.
+        assert_eq!(p.parent_guards(), vec![PathBuf::from("/ws/.git")]);
+    }
+
+    #[test]
+    fn credential_paths_cover_common_stores() {
+        let v = credential_paths(Path::new("/h"), Some(Path::new("/h/AD")), None);
+        for d in [
+            ".netrc",
+            ".npmrc",
+            ".git-credentials",
+            ".kube",
+            ".config/gcloud",
+            ".azure",
+            ".nemo/auth.json",
+            ".zsh_history",
+            ".mozilla",
+        ] {
+            assert!(v.contains(&Path::new("/h").join(d)), "{d}");
+        }
+        assert!(v.contains(&"/h/AD/gcloud".into()));
+    }
+
+    #[test]
+    fn check_read_root_rejects_ancestors_and_symlinks() {
+        let td = tempfile::tempdir().unwrap();
+        let t = td.path().to_path_buf();
+        let (ok, secret) = (t.join("tools"), t.join("home/.ssh"));
+        std::fs::create_dir_all(&ok).unwrap();
+        std::fs::create_dir_all(&secret).unwrap();
+        let p = SandboxPolicy {
+            deny_paths: vec![secret.clone(), t.join("home/.kube")],
+            ..Default::default()
+        };
+        assert!(p.check_read_root(&ok).is_ok());
+        for bad in [
+            &t.join("home"),
+            &secret,
+            &secret.join("..").join(".ssh"),
+            Path::new("/"),
+            &t.join("missing"),
+        ] {
+            assert!(p.check_read_root(bad).is_err(), "{bad:?}");
+        }
+        #[cfg(unix)]
+        {
+            let link = t.join("link");
+            std::os::unix::fs::symlink(&secret, &link).unwrap();
+            assert!(p.check_read_root(&link).is_err());
+        }
+    }
+
+    #[test]
+    fn protect_and_ensure_unwritable() {
+        let mut p = SandboxPolicy::standard(Path::new("/ws"), Path::new("/ws-tmp"));
+        p.protect([PathBuf::from("/ws/.git")]);
+        assert!(p.readonly_paths.contains(&"/ws/.git".into()));
+        p.ensure_unwritable(Path::new("/main/.git/worktrees/x"))
+            .unwrap();
+        for bad in ["/ws", "/ws/sub/.git", "/ws-tmp/a"] {
+            assert!(
+                matches!(
+                    p.ensure_unwritable(Path::new(bad)),
+                    Err(SandboxError::InvalidPolicy(_))
+                ),
+                "{bad}"
+            );
+        }
+    }
+
+    #[test]
+    fn tmpdir_is_forced() {
+        let p = SandboxPolicy {
+            tmp_dir: Some("/priv".into()),
+            ..Default::default()
+        };
+        let c = SandboxedCommand {
+            env: vec![("TMPDIR".into(), "/tmp".into())],
+            ..Default::default()
+        };
+        let env = build_env(&p, &c);
+        assert_eq!(
+            env.iter()
+                .filter(|(k, _)| k == "TMPDIR")
+                .collect::<Vec<_>>(),
+            [&("TMPDIR".into(), "/priv".into())]
+        );
+    }
+
+    #[test]
+    fn null_sandbox_reports_none_and_filters_env() {
+        let p = SandboxPolicy {
+            env_passthrough: vec!["NEMO_NOPE_UNSET".into()],
+            ..Default::default()
+        };
+        let c = SandboxedCommand {
+            program: "x".into(),
+            ..Default::default()
+        };
+        let w = NullSandbox.wrap(&p, &c).unwrap();
+        assert!(w.clear_env && w.env.is_empty());
+        assert_eq!(NullSandbox.capabilities().filesystem, Guarantee::None);
+    }
+
+    #[test]
+    fn loopback_unsupported_unless_backend_overrides() {
+        assert_eq!(
+            NullSandbox.network_guarantee(&NetworkPolicy::Loopback),
+            Guarantee::None
+        );
+        assert_eq!(
+            NullSandbox.network_guarantee(&NetworkPolicy::Allow),
+            Guarantee::Strong
+        );
+        assert_eq!(
+            NullSandbox.network_guarantee(&NetworkPolicy::Deny),
+            Guarantee::None
+        );
+    }
+}

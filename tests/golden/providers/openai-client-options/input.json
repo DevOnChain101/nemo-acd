@@ -1,0 +1,20 @@
+{
+  "cases": [
+    {},
+    {
+      "apiKey": "k",
+      "baseURL": "https://gw.test/v1"
+    },
+    {
+      "apiKey": "k",
+      "authToken": "t"
+    },
+    {
+      "headers": {
+        "A": "b"
+      }
+    }
+  ],
+  "op": "clientOptions",
+  "provider": "openai"
+}

@@ -1,0 +1,10 @@
+diff --git b/src/validate.js a/src/validate.js
+index fab2d5c..a60fa55 100644
+--- b/src/validate.js
++++ a/src/validate.js
+@@ -1,4 +1,4 @@
+-export const EMAIL_RE = /^[\w.]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
++export const EMAIL_RE = /^[\w.+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
+ 
+ export function isValidEmail(value) {
+   return typeof value === 'string' && EMAIL_RE.test(value.trim());

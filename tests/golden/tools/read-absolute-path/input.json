@@ -1,0 +1,14 @@
+{
+  "dirs": [],
+  "files": {
+    "<TMP>/ws/a.txt": "x\n"
+  },
+  "steps": [
+    {
+      "input": {
+        "file_path": "<TMP>/ws/a.txt"
+      },
+      "tool": "Read"
+    }
+  ]
+}

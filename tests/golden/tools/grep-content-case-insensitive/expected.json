@@ -1,0 +1,17 @@
+{
+  "steps": [
+    {
+      "content": "<TMP>/ws/a.js:1:const foo = 1;\n<TMP>/ws/a.js:3:FOO again",
+      "isError": false,
+      "soft": false,
+      "tool": "Grep"
+    }
+  ],
+  "tree_after": [
+    {
+      "content": "const foo = 1;\nfunction bar() {}\nFOO again\n",
+      "path": "a.js",
+      "type": "file"
+    }
+  ]
+}

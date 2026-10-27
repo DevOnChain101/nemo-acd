@@ -1,0 +1,15 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<HOME>/.nemo/settings.json": "{{",
+    "<TMP>/ws/.nemo/settings.json": {
+      "permissions": {
+        "allow": [
+          "Read"
+        ]
+      }
+    }
+  },
+  "op": "workspace"
+}

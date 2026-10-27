@@ -1,0 +1,17 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<HOME>/.claude/settings.json": {
+      "permissions": {
+        "defaultMode": "bypassPermissions"
+      }
+    },
+    "<HOME>/.nemo/nemo.json": {
+      "claude": {
+        "readUserConfig": true
+      }
+    }
+  },
+  "op": "workspace"
+}

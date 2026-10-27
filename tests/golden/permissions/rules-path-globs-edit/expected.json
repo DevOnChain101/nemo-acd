@@ -1,0 +1,98 @@
+[
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "plan": {
+        "decision": "deny",
+        "reason": "plan mode: read-only"
+      }
+    },
+    "input": {
+      "file_path": "<TMP>/ws/src/a/b.js"
+    },
+    "tool": "Edit"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      },
+      "auto": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      },
+      "bypassPermissions": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      },
+      "default": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      },
+      "plan": {
+        "decision": "deny",
+        "reason": "blocked by a deny rule"
+      }
+    },
+    "input": {
+      "file_path": "<TMP>/ws/src/k.secret"
+    },
+    "tool": "Edit"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "acceptEdits mode: path inside workspace"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "auto mode: path inside workspace"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "edit tool requires confirmation"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "dontAsk mode"
+      },
+      "plan": {
+        "decision": "deny",
+        "reason": "plan mode: read-only"
+      }
+    },
+    "input": {
+      "file_path": "<TMP>/ws/lib/a.js"
+    },
+    "tool": "Edit"
+  }
+]

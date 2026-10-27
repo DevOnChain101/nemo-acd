@@ -1,0 +1,23 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<NEMO_HOME>/nemo.json": {
+      "$schema": "config.json/v1",
+      "provider": {
+        "dup": {
+          "baseURL": "https://b.example.test",
+          "type": "anthropic"
+        }
+      },
+      "providers": {
+        "dup": {
+          "baseURL": "https://a.example.test",
+          "type": "openai"
+        }
+      }
+    }
+  },
+  "home": "<NEMO_HOME>",
+  "op": "loadConfig"
+}

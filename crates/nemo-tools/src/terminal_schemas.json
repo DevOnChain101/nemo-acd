@@ -1,0 +1,65 @@
+[
+  {
+    "name": "terminal_spawn",
+    "description": "Starts a long-running command (dev server, watcher, test runner) in the background and returns its process_id, pid, status, whether it is ready and a log cursor. Optionally waits until it is ready (a port accepts connections, an http:// URL answers 200, or a regex matches its output). Read output with terminal_logs, stop it with terminal_signal. The process ends with the session.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "command": { "type": "string", "description": "The shell command to run." },
+        "name": { "type": "string", "description": "Optional label shown in status listings." },
+        "cwd": { "type": "string", "description": "Working directory inside the workspace (default: the workspace root)." },
+        "env": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Extra environment variables for this process only." },
+        "tty": { "type": "boolean", "description": "Reserved: pseudo-terminals are not supported yet." },
+        "ready": {
+          "type": "object",
+          "description": "Wait for readiness before returning.",
+          "properties": {
+            "kind": { "enum": ["port", "http", "log"] },
+            "port": { "type": "integer", "description": "kind=port: TCP port on 127.0.0.1." },
+            "url": { "type": "string", "description": "kind=http: plain http:// URL that must answer 200." },
+            "pattern": { "type": "string", "description": "kind=log: regular expression matched against the output." },
+            "timeout_ms": { "type": "integer", "description": "Give up waiting after this long (default 30000, max 600000)." }
+          },
+          "required": ["kind"]
+        }
+      },
+      "required": ["command"]
+    }
+  },
+  {
+    "name": "terminal_logs",
+    "description": "Reads the output of a process started with terminal_spawn (or Bash run_in_background) after a cursor. Returns the text followed by a line with the process state and the cursor to pass next time. Optionally keep only lines matching a regular expression.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "process_id": { "type": "string" },
+        "cursor": { "type": "string", "description": "Cursor from a previous call (default: from the start)." },
+        "filter": { "type": "string", "description": "Optional regular expression: only matching lines are returned." },
+        "max_bytes": { "type": "integer", "description": "Maximum bytes to read (default 30000, max 1000000)." }
+      },
+      "required": ["process_id"]
+    }
+  },
+  {
+    "name": "terminal_signal",
+    "description": "Sends a signal (int, term or kill) to a process started with terminal_spawn; the whole process tree is signalled.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "process_id": { "type": "string" },
+        "signal": { "enum": ["int", "term", "kill"] }
+      },
+      "required": ["process_id", "signal"]
+    }
+  },
+  {
+    "name": "terminal_status",
+    "description": "Shows the state of one process, or lists all processes of this session when process_id is omitted.",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "process_id": { "type": "string" }
+      }
+    }
+  }
+]

@@ -1,0 +1,15 @@
+{
+  "dirs": [],
+  "files": {
+    "<TMP>/ws/a.js": "foo\n"
+  },
+  "steps": [
+    {
+      "input": {
+        "pattern": "foo",
+        "type": "nonsense"
+      },
+      "tool": "Grep"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "additionalContext": [],
+  "blocked": true,
+  "decision": "deny",
+  "reason": "why",
+  "results": [
+    {
+      "command": "printf '%s' '{\"decision\":\"block\",\"reason\":\"why\"}'",
+      "exitCode": 0,
+      "stderr": "",
+      "stdout": "{\"decision\":\"block\",\"reason\":\"why\"}"
+    },
+    {
+      "command": "printf '%s' '{\"decision\":\"block\"}'",
+      "exitCode": 0,
+      "stderr": "",
+      "stdout": "{\"decision\":\"block\"}"
+    }
+  ],
+  "stop": false
+}

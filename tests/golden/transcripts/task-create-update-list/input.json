@@ -1,0 +1,74 @@
+{
+  "entries": [
+    {
+      "message": {
+        "content": [
+          {
+            "id": "c1",
+            "input": {
+              "subject": "write tests"
+            },
+            "name": "TaskCreate",
+            "type": "tool_use"
+          }
+        ],
+        "id": "m1",
+        "model": "claude-opus-5.5"
+      },
+      "timestamp": "2026-10-02T00:00:01.000Z",
+      "type": "assistant"
+    },
+    {
+      "message": {
+        "content": [
+          {
+            "content": "ok",
+            "is_error": false,
+            "tool_use_id": "c1",
+            "type": "tool_result"
+          }
+        ],
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:02.000Z",
+      "toolUseResult": {
+        "task": {
+          "id": "7"
+        }
+      },
+      "type": "user"
+    },
+    {
+      "message": {
+        "content": [
+          {
+            "id": "u1",
+            "input": {
+              "activeForm": "Renaming",
+              "status": "completed",
+              "subject": "renamed",
+              "taskId": "7"
+            },
+            "name": "TaskUpdate",
+            "type": "tool_use"
+          },
+          {
+            "id": "u2",
+            "input": {
+              "id": "zz",
+              "status": "x"
+            },
+            "name": "TaskUpdate",
+            "type": "tool_use"
+          }
+        ],
+        "id": "m2",
+        "model": "claude-opus-5.5"
+      },
+      "timestamp": "2026-10-02T00:00:03.000Z",
+      "type": "assistant"
+    }
+  ],
+  "now": 1790899800000,
+  "op": "replay"
+}

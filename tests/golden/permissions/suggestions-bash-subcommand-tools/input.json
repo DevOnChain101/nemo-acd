@@ -1,0 +1,47 @@
+{
+  "calls": [
+    {
+      "input": {
+        "command": "git commit -m x"
+      },
+      "tool": "Bash"
+    },
+    {
+      "input": {
+        "command": "npm run build"
+      },
+      "tool": "Bash"
+    },
+    {
+      "input": {
+        "command": "ls -la"
+      },
+      "tool": "Bash"
+    },
+    {
+      "input": {
+        "command": "  docker   compose up "
+      },
+      "tool": "Bash"
+    },
+    {
+      "input": {
+        "command": ""
+      },
+      "tool": "Bash"
+    },
+    {
+      "input": {
+        "command": "cargo test --all"
+      },
+      "tool": "Bash"
+    },
+    {
+      "input": {
+        "command": "python3 -m pytest"
+      },
+      "tool": "Bash"
+    }
+  ],
+  "op": "suggestions"
+}

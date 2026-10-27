@@ -1,0 +1,30 @@
+{
+  "cases": [
+    [
+      "~/x.md",
+      "<TMP>/ws",
+      "<HOME>"
+    ],
+    [
+      "./a.md",
+      "<TMP>/ws/sub",
+      "<HOME>"
+    ],
+    [
+      "../b.md",
+      "<TMP>/ws/sub",
+      "<HOME>"
+    ],
+    [
+      "/abs/c.md",
+      "<TMP>/ws",
+      "<HOME>"
+    ],
+    [
+      "d/e.md",
+      "<TMP>/ws",
+      "<HOME>"
+    ]
+  ],
+  "op": "importPath"
+}

@@ -1,0 +1,30 @@
+[
+  {
+    "images": [],
+    "kind": "user",
+    "text": "first prompt",
+    "ts": 1790899201000
+  },
+  {
+    "kind": "text",
+    "text": "ok",
+    "ts": 1790899202000
+  },
+  {
+    "id": "t1",
+    "input": {
+      "command": "sleep"
+    },
+    "kind": "tool",
+    "name": "Bash",
+    "start": 1790899202000,
+    "status": "interrupted",
+    "ts": 1790899202000
+  },
+  {
+    "images": [],
+    "kind": "user",
+    "text": "é 日本 second",
+    "ts": 1790899203000
+  }
+]

@@ -1,0 +1,73 @@
+{
+  "op": "apply",
+  "rules": {
+    "allow": [
+      "Bash(ls:*)"
+    ]
+  },
+  "suggestions": [
+    {
+      "behavior": "allow",
+      "destination": "session",
+      "rules": [
+        {
+          "ruleContent": "ls:*",
+          "toolName": "Bash"
+        },
+        {
+          "ruleContent": "git status:*",
+          "toolName": "Bash"
+        },
+        {
+          "ruleContent": null,
+          "toolName": "Read"
+        }
+      ],
+      "type": "addRules"
+    },
+    {
+      "behavior": "deny",
+      "rules": [
+        {
+          "ruleContent": "rm:*",
+          "toolName": "Bash"
+        }
+      ],
+      "type": "addRules"
+    },
+    {
+      "behavior": "ask",
+      "rules": [
+        {
+          "ruleContent": "a/**",
+          "toolName": "Edit"
+        }
+      ],
+      "type": "addRules"
+    },
+    {
+      "mode": "acceptEdits",
+      "type": "setMode"
+    }
+  ],
+  "then": [
+    {
+      "input": {
+        "command": "git status"
+      },
+      "tool": "Bash"
+    },
+    {
+      "input": {
+        "command": "rm x"
+      },
+      "tool": "Bash"
+    },
+    {
+      "input": {
+        "file_path": "<TMP>/ws/a/x"
+      },
+      "tool": "Edit"
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "content": "{\"type\":\"user\",\"timestamp\":\"2026-10-02T00:00:01.000Z\",\"message\":{\"role\":\"user\",\"content\":\"<system-reminder>x</system-reminder>\"}}\n{\"type\":\"user\",\"timestamp\":\"2026-10-02T00:00:02.000Z\",\"message\":{\"role\":\"user\",\"content\":\"  fix\\n  the   bug \"},\"cwd\":\"/work/p\"}\n{\"type\":\"user\",\"timestamp\":\"2026-10-02T00:00:03.000Z\",\"message\":{\"role\":\"user\",\"content\":\"later\"}}\n",
+  "fn": "sessionMeta",
+  "op": "loadFile"
+}

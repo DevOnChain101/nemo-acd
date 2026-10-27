@@ -1,0 +1,22 @@
+{
+  "dirs": [],
+  "files": {
+    "<TMP>/ws/a.txt": "keep\nremove me\nkeep\n"
+  },
+  "steps": [
+    {
+      "input": {
+        "file_path": "a.txt"
+      },
+      "tool": "Read"
+    },
+    {
+      "input": {
+        "file_path": "a.txt",
+        "new_string": "",
+        "old_string": "remove me\n"
+      },
+      "tool": "Edit"
+    }
+  ]
+}

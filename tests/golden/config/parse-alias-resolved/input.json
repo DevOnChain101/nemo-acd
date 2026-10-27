@@ -1,0 +1,24 @@
+{
+  "config": {
+    "aliases": {
+      "fast": "gateway/m-1"
+    },
+    "maxTokens": 32000,
+    "profiles": {},
+    "providers": {
+      "anthropic": {
+        "headers": {},
+        "models": [],
+        "type": "anthropic",
+        "typeSource": "id"
+      },
+      "openai": {
+        "models": [],
+        "type": "openai",
+        "typeSource": "id"
+      }
+    }
+  },
+  "op": "parseModel",
+  "str": "fast"
+}

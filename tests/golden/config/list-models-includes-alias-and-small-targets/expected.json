@@ -1,0 +1,22 @@
+[
+  {
+    "model": "m-1",
+    "provider": "gateway",
+    "value": "gateway/m-1"
+  },
+  {
+    "model": "m-2",
+    "provider": "gateway",
+    "value": "gateway/m-2"
+  },
+  {
+    "model": "m-9",
+    "provider": "gateway",
+    "value": "gateway/m-9"
+  },
+  {
+    "model": "m-3",
+    "provider": "gateway",
+    "value": "gateway/m-3"
+  }
+]

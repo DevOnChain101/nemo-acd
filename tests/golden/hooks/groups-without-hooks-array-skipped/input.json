@@ -1,0 +1,32 @@
+{
+  "config": {
+    "PreToolUse": [
+      {
+        "matcher": "*"
+      },
+      {
+        "hooks": "nope",
+        "matcher": "*"
+      },
+      {
+        "hooks": [
+          {
+            "command": "printf '%s' 'ok'",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ]
+  },
+  "event": "PreToolUse",
+  "op": "run",
+  "opts": {},
+  "payload": {
+    "tool_input": {
+      "command": "ls"
+    },
+    "tool_name": "Bash"
+  },
+  "target": "Bash"
+}

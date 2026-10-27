@@ -1,0 +1,11 @@
+{
+  "op": "sanitize",
+  "paths": [
+    "/Users/a/b",
+    "C:\\Users\\a b\\proj",
+    "/tmp/x.y_z",
+    "",
+    "日本語/x",
+    "/a//b/"
+  ]
+}

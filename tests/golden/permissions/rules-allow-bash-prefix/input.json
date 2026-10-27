@@ -1,0 +1,53 @@
+{
+  "autoMode": {},
+  "calls": [
+    {
+      "input": {
+        "command": "npm test -- --watch"
+      },
+      "tool": "Bash"
+    },
+    {
+      "input": {
+        "command": "npm install"
+      },
+      "tool": "Bash"
+    },
+    {
+      "input": {
+        "command": "git commit -m x"
+      },
+      "tool": "Bash"
+    },
+    {
+      "input": {
+        "command": "npm test && rm -rf x"
+      },
+      "tool": "Bash"
+    }
+  ],
+  "cwd": "<TMP>/ws",
+  "flags": {},
+  "fs": {
+    "dirs": [
+      "<TMP>/ws/sub"
+    ]
+  },
+  "home": "<HOME>",
+  "modes": [
+    "default",
+    "acceptEdits",
+    "plan",
+    "auto",
+    "dontAsk",
+    "bypassPermissions"
+  ],
+  "op": "check",
+  "rules": {
+    "allow": [
+      "Bash(npm test:*)",
+      "Bash(git commit:*)"
+    ]
+  },
+  "suggestions": false
+}

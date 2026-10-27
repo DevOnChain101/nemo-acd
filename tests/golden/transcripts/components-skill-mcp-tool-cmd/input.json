@@ -1,0 +1,79 @@
+{
+  "entries": [
+    {
+      "message": {
+        "content": "<command-name>/review</command-name>",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:01.000Z",
+      "type": "user"
+    },
+    {
+      "message": {
+        "content": [
+          {
+            "id": "t1",
+            "input": {
+              "title": "x"
+            },
+            "name": "mcp__github__create_issue",
+            "type": "tool_use"
+          },
+          {
+            "id": "t2",
+            "input": {
+              "args": "full",
+              "skill": "ponytail"
+            },
+            "name": "Skill",
+            "type": "tool_use"
+          },
+          {
+            "id": "t3",
+            "input": {
+              "pattern": "foo"
+            },
+            "name": "Grep",
+            "type": "tool_use"
+          }
+        ],
+        "id": "m1",
+        "model": "claude-opus-5.5"
+      },
+      "timestamp": "2026-10-02T00:00:02.000Z",
+      "type": "assistant"
+    },
+    {
+      "message": {
+        "content": [
+          {
+            "content": "ok",
+            "is_error": false,
+            "tool_use_id": "t1",
+            "type": "tool_result"
+          }
+        ],
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:03.000Z",
+      "type": "user"
+    },
+    {
+      "message": {
+        "content": [
+          {
+            "content": "e",
+            "is_error": true,
+            "tool_use_id": "t2",
+            "type": "tool_result"
+          }
+        ],
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:03.000Z",
+      "type": "user"
+    }
+  ],
+  "now": 1790899800000,
+  "op": "replay"
+}

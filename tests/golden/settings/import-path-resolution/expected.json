@@ -1,0 +1,27 @@
+[
+  {
+    "base": "<TMP>/ws",
+    "out": "<HOME>/x.md",
+    "token": "~/x.md"
+  },
+  {
+    "base": "<TMP>/ws/sub",
+    "out": "<TMP>/ws/sub/a.md",
+    "token": "./a.md"
+  },
+  {
+    "base": "<TMP>/ws/sub",
+    "out": "<TMP>/ws/b.md",
+    "token": "../b.md"
+  },
+  {
+    "base": "<TMP>/ws",
+    "out": "/abs/c.md",
+    "token": "/abs/c.md"
+  },
+  {
+    "base": "<TMP>/ws",
+    "out": "<TMP>/ws/d/e.md",
+    "token": "d/e.md"
+  }
+]

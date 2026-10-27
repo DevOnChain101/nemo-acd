@@ -1,0 +1,91 @@
+{
+  "items": [],
+  "phase": {
+    "phase": "idle",
+    "running": [],
+    "runningAgents": []
+  },
+  "session": {
+    "activity": [],
+    "agents": {},
+    "components": {
+      "hook:PreToolUse:Bash": {
+        "blocked": 1,
+        "count": 2,
+        "error": true,
+        "event": "PreToolUse",
+        "firstSeen": 1790899201000,
+        "key": "hook:PreToolUse:Bash",
+        "kind": "hook",
+        "lastBlockedAt": 1790899202000,
+        "lastEnd": 1790899202000,
+        "lastStart": 1790899202000,
+        "name": "PreToolUse:Bash",
+        "open": 0,
+        "sub": "PreToolUse · exit 2"
+      },
+      "hook:hook_cancelled": {
+        "blocked": 1,
+        "count": 1,
+        "error": true,
+        "event": "hook_cancelled",
+        "firstSeen": 1790899203000,
+        "key": "hook:hook_cancelled",
+        "kind": "hook",
+        "lastBlockedAt": 1790899203000,
+        "lastEnd": 1790899203000,
+        "lastStart": 1790899203000,
+        "name": "hook_cancelled",
+        "open": 0,
+        "sub": "hook"
+      }
+    },
+    "contextUsed": 0,
+    "cwd": "",
+    "errors": 0,
+    "feed": [
+      {
+        "kind": "hook",
+        "text": "Hook PreToolUse:Bash blocking_error",
+        "ts": 1790899202000
+      },
+      {
+        "kind": "hook",
+        "text": "Hook hook_cancelled cancelled",
+        "ts": 1790899203000
+      }
+    ],
+    "gitBranch": "",
+    "hookCounts": {
+      "PreToolUse:Bash": 2,
+      "hook_cancelled": 1
+    },
+    "id": "sess",
+    "lastActivity": 1790899204000,
+    "lastAssistantAt": null,
+    "lastPrompt": "",
+    "lastPromptAt": null,
+    "lastStopReason": null,
+    "lastUserAt": null,
+    "lastVerify": null,
+    "memoryWrites": 0,
+    "model": "",
+    "prompts": 0,
+    "skills": {},
+    "startedAt": 1790899201000,
+    "timeline": [],
+    "todos": [],
+    "tokens": {
+      "cacheCreate": 0,
+      "cacheRead": 0,
+      "input": 0,
+      "output": 0
+    },
+    "toolCounts": {},
+    "tools": {},
+    "turnReplied": false,
+    "usageById": {},
+    "version": ""
+  },
+  "total_tokens": 0
+}

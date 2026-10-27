@@ -1,0 +1,21 @@
+{
+  "description": "Writes content to a file, creating it (and any parent directories) if needed, or overwriting it if it already exists. If the file already exists you must Read it first in this conversation, so you never overwrite changes you have not seen.",
+  "input_schema": {
+    "properties": {
+      "content": {
+        "description": "The full content to write to the file.",
+        "type": "string"
+      },
+      "file_path": {
+        "description": "Absolute or cwd-relative path to the file to write.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "file_path",
+      "content"
+    ],
+    "type": "object"
+  },
+  "name": "Write"
+}

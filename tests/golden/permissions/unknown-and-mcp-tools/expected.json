@@ -1,0 +1,90 @@
+[
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "unknown tool requires confirmation"
+      },
+      "auto": {
+        "decision": "classify",
+        "reason": "mcp__srv__do: classifier review"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "unknown tool requires confirmation"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "dontAsk mode"
+      },
+      "plan": {
+        "decision": "ask",
+        "reason": "unknown tool requires confirmation"
+      }
+    },
+    "input": {
+      "a": 1
+    },
+    "suggestions": [
+      {
+        "behavior": "allow",
+        "destination": "session",
+        "rules": [
+          {
+            "ruleContent": null,
+            "toolName": "mcp__srv__do"
+          }
+        ],
+        "type": "addRules"
+      }
+    ],
+    "tool": "mcp__srv__do"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "unknown tool requires confirmation"
+      },
+      "auto": {
+        "decision": "classify",
+        "reason": "Bogus: classifier review"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "unknown tool requires confirmation"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "dontAsk mode"
+      },
+      "plan": {
+        "decision": "ask",
+        "reason": "unknown tool requires confirmation"
+      }
+    },
+    "input": {},
+    "suggestions": [
+      {
+        "behavior": "allow",
+        "destination": "session",
+        "rules": [
+          {
+            "ruleContent": null,
+            "toolName": "Bogus"
+          }
+        ],
+        "type": "addRules"
+      }
+    ],
+    "tool": "Bogus"
+  }
+]

@@ -1,0 +1,45 @@
+[
+  {
+    "in": {},
+    "out": {
+      "baseURL": "https://api.openai.com/v1",
+      "maxRetries": 4
+    }
+  },
+  {
+    "in": {
+      "apiKey": "k",
+      "baseURL": "https://gw.test/v1"
+    },
+    "out": {
+      "apiKey": "k",
+      "baseURL": "https://gw.test/v1",
+      "maxRetries": 4
+    }
+  },
+  {
+    "in": {
+      "apiKey": "k",
+      "authToken": "t"
+    },
+    "out": {
+      "apiKey": "t",
+      "baseURL": "https://api.openai.com/v1",
+      "maxRetries": 4
+    }
+  },
+  {
+    "in": {
+      "headers": {
+        "A": "b"
+      }
+    },
+    "out": {
+      "baseURL": "https://api.openai.com/v1",
+      "defaultHeaders": {
+        "A": "b"
+      },
+      "maxRetries": 4
+    }
+  }
+]

@@ -1,0 +1,30 @@
+{
+  "description": "Performs an exact string replacement in a file. The file must have been Read in this conversation first (and not changed on disk since). `old_string` must match exactly once unless `replace_all` is set, and must be different from `new_string`. Include enough surrounding context in `old_string` to make it unique rather than reaching for `replace_all` for a targeted change.",
+  "input_schema": {
+    "properties": {
+      "file_path": {
+        "description": "Absolute or cwd-relative path to the file to edit.",
+        "type": "string"
+      },
+      "new_string": {
+        "description": "The text to replace it with.",
+        "type": "string"
+      },
+      "old_string": {
+        "description": "The exact text to replace.",
+        "type": "string"
+      },
+      "replace_all": {
+        "description": "Replace every occurrence of old_string instead of requiring a single match.",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "file_path",
+      "old_string",
+      "new_string"
+    ],
+    "type": "object"
+  },
+  "name": "Edit"
+}

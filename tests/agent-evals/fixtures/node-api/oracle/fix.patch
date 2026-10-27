@@ -1,0 +1,13 @@
+diff --git b/src/server.js a/src/server.js
+index acb0b4d..9251b75 100644
+--- b/src/server.js
++++ a/src/server.js
+@@ -3,7 +3,7 @@ import http from 'node:http';
+ const ITEMS = Array.from({ length: 25 }, (_, i) => ({ id: i + 1 }));
+ 
+ export function paginate(items, page, size) {
+-  const start = Math.max(0, (page - 1) * size - 1);
++  const start = (page - 1) * size;
+   return items.slice(start, start + size);
+ }
+ 

@@ -1,0 +1,26 @@
+{
+  "dirs": [],
+  "files": {
+    "<TMP>/ws/a.txt": "start\nmiddle\nend\nstart\nx\n"
+  },
+  "steps": [
+    {
+      "input": {
+        "multiline": true,
+        "output_mode": "content",
+        "path": "a.txt",
+        "pattern": "start.*?end"
+      },
+      "tool": "Grep"
+    },
+    {
+      "input": {
+        "multiline": true,
+        "output_mode": "count",
+        "path": "a.txt",
+        "pattern": "start.*?end"
+      },
+      "tool": "Grep"
+    }
+  ]
+}

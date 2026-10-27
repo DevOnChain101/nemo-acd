@@ -1,0 +1,11 @@
+{
+  "steps": [
+    {
+      "content": "Edit: cannot access <TMP>/ws/nope.txt: ENOENT: no such file or directory, stat '<TMP>/ws/nope.txt'",
+      "isError": true,
+      "soft": true,
+      "tool": "Edit"
+    }
+  ],
+  "tree_after": []
+}

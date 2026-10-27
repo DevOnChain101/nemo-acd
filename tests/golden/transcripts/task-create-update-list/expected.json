@@ -1,0 +1,177 @@
+{
+  "items": [
+    {
+      "end": 1790899202000,
+      "id": "c1",
+      "input": {
+        "subject": "write tests"
+      },
+      "kind": "tool",
+      "name": "TaskCreate",
+      "result": "ok",
+      "soft": false,
+      "start": 1790899201000,
+      "status": "done",
+      "ts": 1790899201000
+    },
+    {
+      "id": "u1",
+      "input": {
+        "activeForm": "Renaming",
+        "status": "completed",
+        "subject": "renamed",
+        "taskId": "7"
+      },
+      "kind": "tool",
+      "name": "TaskUpdate",
+      "start": 1790899203000,
+      "status": "interrupted",
+      "ts": 1790899203000
+    },
+    {
+      "id": "u2",
+      "input": {
+        "id": "zz",
+        "status": "x"
+      },
+      "kind": "tool",
+      "name": "TaskUpdate",
+      "start": 1790899203000,
+      "status": "interrupted",
+      "ts": 1790899203000
+    }
+  ],
+  "phase": {
+    "phase": "tool",
+    "running": [
+      "u1",
+      "u2"
+    ],
+    "runningAgents": []
+  },
+  "session": {
+    "activity": [],
+    "agents": {},
+    "components": {
+      "tool:TaskCreate": {
+        "count": 1,
+        "error": false,
+        "firstSeen": 1790899201000,
+        "key": "tool:TaskCreate",
+        "kind": "tool",
+        "lastEnd": 1790899202000,
+        "lastStart": 1790899201000,
+        "name": "TaskCreate",
+        "open": 0,
+        "sub": "write tests"
+      },
+      "tool:TaskUpdate": {
+        "count": 2,
+        "error": false,
+        "firstSeen": 1790899203000,
+        "key": "tool:TaskUpdate",
+        "kind": "tool",
+        "lastEnd": null,
+        "lastStart": 1790899203000,
+        "name": "TaskUpdate",
+        "open": 2,
+        "sub": "#zz → x"
+      }
+    },
+    "contextUsed": 0,
+    "cwd": "",
+    "errors": 0,
+    "feed": [
+      {
+        "kind": "tool",
+        "text": "TaskCreate write tests",
+        "ts": 1790899201000
+      },
+      {
+        "kind": "tool",
+        "text": "TaskUpdate #7 → completed",
+        "ts": 1790899203000
+      },
+      {
+        "kind": "tool",
+        "text": "TaskUpdate #zz → x",
+        "ts": 1790899203000
+      }
+    ],
+    "gitBranch": "",
+    "hookCounts": {},
+    "id": "sess",
+    "lastActivity": 1790899203000,
+    "lastAssistantAt": 1790899203000,
+    "lastPrompt": "",
+    "lastPromptAt": null,
+    "lastStopReason": null,
+    "lastUserAt": 1790899202000,
+    "lastVerify": null,
+    "memoryWrites": 0,
+    "model": "claude-opus-5.5",
+    "prompts": 0,
+    "skills": {},
+    "startedAt": 1790899201000,
+    "timeline": [
+      {
+        "total": 0,
+        "ts": 1790899201000
+      }
+    ],
+    "todos": [
+      {
+        "activeForm": "Renaming",
+        "content": "renamed",
+        "id": "7",
+        "status": "completed"
+      }
+    ],
+    "tokens": {
+      "cacheCreate": 0,
+      "cacheRead": 0,
+      "input": 0,
+      "output": 0
+    },
+    "toolCounts": {
+      "TaskCreate": 1,
+      "TaskUpdate": 2
+    },
+    "tools": {
+      "c1": {
+        "cat": "plan",
+        "compKey": "tool:TaskCreate",
+        "end": 1790899202000,
+        "id": "c1",
+        "isError": false,
+        "name": "TaskCreate",
+        "start": 1790899201000,
+        "summary": "write tests"
+      },
+      "u1": {
+        "cat": "plan",
+        "compKey": "tool:TaskUpdate",
+        "end": null,
+        "id": "u1",
+        "isError": false,
+        "name": "TaskUpdate",
+        "start": 1790899203000,
+        "summary": "#7 → completed"
+      },
+      "u2": {
+        "cat": "plan",
+        "compKey": "tool:TaskUpdate",
+        "end": null,
+        "id": "u2",
+        "isError": false,
+        "name": "TaskUpdate",
+        "start": 1790899203000,
+        "summary": "#zz → x"
+      }
+    },
+    "turnReplied": false,
+    "usageById": {},
+    "version": ""
+  },
+  "total_tokens": 0
+}

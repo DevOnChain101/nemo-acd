@@ -1,0 +1,21 @@
+{
+  "config": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "printf '%s' 'remember: be concise'",
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  },
+  "event": "UserPromptSubmit",
+  "op": "run",
+  "opts": {},
+  "payload": {
+    "prompt": "hi"
+  },
+  "target": null
+}

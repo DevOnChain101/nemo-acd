@@ -1,0 +1,16 @@
+{
+  "dirs": [],
+  "files": {
+    "<TMP>/ws/b.bin": {
+      "base64": "AAECAwQ="
+    }
+  },
+  "steps": [
+    {
+      "input": {
+        "file_path": "b.bin"
+      },
+      "tool": "Read"
+    }
+  ]
+}

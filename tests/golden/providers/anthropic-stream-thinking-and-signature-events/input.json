@@ -1,0 +1,47 @@
+{
+  "chunks": [
+    {
+      "content_block": {
+        "thinking": "",
+        "type": "thinking"
+      },
+      "index": 0,
+      "type": "content_block_start"
+    },
+    {
+      "delta": {
+        "thinking": "hmm",
+        "type": "thinking_delta"
+      },
+      "index": 0,
+      "type": "content_block_delta"
+    },
+    {
+      "delta": {
+        "signature": "sig",
+        "type": "signature_delta"
+      },
+      "index": 0,
+      "type": "content_block_delta"
+    },
+    {
+      "index": 0,
+      "type": "content_block_stop"
+    },
+    {
+      "type": "ping"
+    }
+  ],
+  "op": "stream",
+  "provider": "anthropic",
+  "req": {
+    "maxTokens": 100,
+    "messages": [
+      {
+        "content": "hi",
+        "role": "user"
+      }
+    ],
+    "model": "claude-sonnet-5"
+  }
+}

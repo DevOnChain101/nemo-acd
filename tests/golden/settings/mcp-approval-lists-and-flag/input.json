@@ -1,0 +1,24 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<HOME>/.nemo/settings.json": {
+      "disabledMcpjsonServers": [
+        "c"
+      ],
+      "enableAllProjectMcpServers": true,
+      "enabledMcpjsonServers": [
+        "a",
+        "b"
+      ]
+    },
+    "<TMP>/ws/.nemo/settings.json": {
+      "enableAllProjectMcpServers": false,
+      "enabledMcpjsonServers": [
+        "b",
+        "d"
+      ]
+    }
+  },
+  "op": "workspace"
+}

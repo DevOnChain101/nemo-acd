@@ -1,0 +1,72 @@
+{
+  "autoMode": {},
+  "calls": [
+    {
+      "input": {},
+      "tool": "Read"
+    },
+    {
+      "input": {},
+      "tool": "Glob"
+    },
+    {
+      "input": {},
+      "tool": "Grep"
+    },
+    {
+      "input": {},
+      "tool": "LS"
+    },
+    {
+      "input": {},
+      "tool": "BashOutput"
+    },
+    {
+      "input": {},
+      "tool": "TodoWrite"
+    },
+    {
+      "input": {},
+      "tool": "TaskCreate"
+    },
+    {
+      "input": {},
+      "tool": "Skill"
+    },
+    {
+      "input": {},
+      "tool": "Task"
+    },
+    {
+      "input": {},
+      "tool": "Agent"
+    },
+    {
+      "input": {},
+      "tool": "AskUserQuestion"
+    },
+    {
+      "input": {},
+      "tool": "ExitPlanMode"
+    }
+  ],
+  "cwd": "<TMP>/ws",
+  "flags": {},
+  "fs": {
+    "dirs": [
+      "<TMP>/ws/sub"
+    ]
+  },
+  "home": "<HOME>",
+  "modes": [
+    "default",
+    "acceptEdits",
+    "plan",
+    "auto",
+    "dontAsk",
+    "bypassPermissions"
+  ],
+  "op": "check",
+  "rules": {},
+  "suggestions": false
+}

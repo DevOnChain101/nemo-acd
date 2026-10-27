@@ -1,0 +1,10 @@
+{
+  "files": {
+    "<NEMO_HOME>/settings.json": {
+      "permissions": {
+        "blockReadsOutsideWorkingDirectories": true
+      }
+    }
+  },
+  "op": "blockOutside"
+}

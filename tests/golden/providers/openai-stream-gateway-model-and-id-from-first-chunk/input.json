@@ -1,0 +1,54 @@
+{
+  "chunks": [
+    {
+      "choices": [
+        {
+          "delta": {
+            "content": "a"
+          }
+        }
+      ],
+      "id": "gw-1",
+      "model": "corp/claude"
+    },
+    {
+      "choices": [
+        {
+          "delta": {
+            "content": "b"
+          }
+        }
+      ],
+      "id": "gw-2",
+      "model": "other"
+    },
+    {
+      "choices": [
+        {
+          "delta": {},
+          "finish_reason": "stop"
+        }
+      ],
+      "id": "gw-2"
+    },
+    {
+      "choices": [],
+      "usage": {
+        "completion_tokens": 1,
+        "prompt_tokens": 1
+      }
+    }
+  ],
+  "op": "stream",
+  "provider": "openai",
+  "req": {
+    "maxTokens": 100,
+    "messages": [
+      {
+        "content": "hi",
+        "role": "user"
+      }
+    ],
+    "model": "gpt-5"
+  }
+}

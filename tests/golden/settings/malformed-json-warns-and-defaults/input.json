@@ -1,0 +1,8 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<TMP>/ws/.nemo/settings.json": "{ not valid json"
+  },
+  "op": "workspace"
+}

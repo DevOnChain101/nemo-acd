@@ -1,0 +1,22 @@
+{
+  "dirs": [],
+  "files": {
+    "<TMP>/ws/a.txt": "price $1 (x)\n"
+  },
+  "steps": [
+    {
+      "input": {
+        "file_path": "a.txt"
+      },
+      "tool": "Read"
+    },
+    {
+      "input": {
+        "file_path": "a.txt",
+        "new_string": "$& $$ \\n",
+        "old_string": "$1 (x)"
+      },
+      "tool": "Edit"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "description": "Creates a new tracked task (shows up in the Tasks panel). Use subject in imperative form (e.g. \"Run tests\") and activeForm in present continuous form (e.g. \"Running tests\").",
+  "input_schema": {
+    "properties": {
+      "activeForm": {
+        "type": "string"
+      },
+      "description": {
+        "type": "string"
+      },
+      "subject": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "subject"
+    ],
+    "type": "object"
+  },
+  "name": "TaskCreate"
+}

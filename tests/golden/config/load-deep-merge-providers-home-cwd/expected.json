@@ -1,0 +1,44 @@
+{
+  "value": {
+    "$schema": "config.json/v1",
+    "_explicitAliases": [],
+    "_modelExplicit": false,
+    "_warnings": [],
+    "aliases": {
+      "fable": null,
+      "haiku": null,
+      "opus": null,
+      "sonnet": null
+    },
+    "maxTokens": 32000,
+    "profiles": {},
+    "providers": {
+      "anthropic": {
+        "headers": {},
+        "models": [],
+        "type": "anthropic",
+        "typeSource": "id"
+      },
+      "extra": {
+        "type": "anthropic",
+        "typeSource": "explicit"
+      },
+      "gateway": {
+        "apiKey": "sk-test-inline",
+        "apiKeySource": "inline",
+        "baseURL": "https://proj.example.test/v1",
+        "models": [
+          "m-1",
+          "m-2"
+        ],
+        "type": "openai",
+        "typeSource": "default"
+      },
+      "openai": {
+        "models": [],
+        "type": "openai",
+        "typeSource": "id"
+      }
+    }
+  }
+}

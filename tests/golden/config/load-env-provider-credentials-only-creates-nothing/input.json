@@ -1,0 +1,10 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {
+    "NEMO_API_KEY": "k",
+    "NEMO_PROVIDER": "corp"
+  },
+  "files": {},
+  "home": "<NEMO_HOME>",
+  "op": "loadConfig"
+}

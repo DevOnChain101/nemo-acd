@@ -1,0 +1,74 @@
+{
+  "agents": [],
+  "autoMemoryDir": "<HOME>/.claude/projects/<SANITIZED_CWD>/memory",
+  "claudeDir": "<HOME>/.claude",
+  "commands": [],
+  "mcpServers": [
+    {
+      "command": "u",
+      "disabledReason": "disabled",
+      "enabled": false,
+      "name": "u1",
+      "scope": "user",
+      "source": "<HOME>/.claude.json",
+      "type": "stdio"
+    },
+    {
+      "args": [
+        "a.js"
+      ],
+      "command": "node",
+      "enabled": true,
+      "name": "alpha",
+      "scope": "project",
+      "source": "<TMP>/ws/.mcp.json",
+      "type": "stdio"
+    },
+    {
+      "disabledReason": "not approved",
+      "enabled": false,
+      "name": "remote",
+      "scope": "project",
+      "source": "<TMP>/ws/.mcp.json",
+      "type": "http",
+      "url": "https://h.example.test/mcp"
+    },
+    {
+      "args": [
+        "1",
+        "2"
+      ],
+      "command": "l",
+      "enabled": true,
+      "name": "l1",
+      "scope": "local",
+      "source": "<HOME>/.claude.json",
+      "type": "stdio"
+    }
+  ],
+  "memory": [],
+  "projectRoot": "<TMP>/ws",
+  "settings": {
+    "disableAllHooks": false,
+    "hooks": {},
+    "mcpApproval": {
+      "disabledMcpjsonServers": [],
+      "enableAllProjectMcpServers": false,
+      "enabledMcpjsonServers": []
+    },
+    "permissions": {
+      "additionalDirectories": [],
+      "allow": [],
+      "ask": [],
+      "defaultMode": "default",
+      "deny": []
+    }
+  },
+  "skills": [
+    {
+      "name": "nemocode-config",
+      "source": "built-in"
+    }
+  ],
+  "warnings": []
+}

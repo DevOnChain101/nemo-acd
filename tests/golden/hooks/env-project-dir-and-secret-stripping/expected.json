@@ -1,0 +1,15 @@
+{
+  "additionalContext": [
+    "<TMP>/ws|<TMP>/ws|absent|absent"
+  ],
+  "blocked": false,
+  "results": [
+    {
+      "command": "printf '%s|%s|%s|%s' \"$CLAUDE_PROJECT_DIR\" \"$NEMO_PROJECT_DIR\" \"${NEMO_API_KEY:-absent}\" \"${NEMO_ANTHROPIC_API_KEY:-absent}\"",
+      "exitCode": 0,
+      "stderr": "",
+      "stdout": "<TMP>/ws|<TMP>/ws|absent|absent"
+    }
+  ],
+  "stop": false
+}

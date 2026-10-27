@@ -1,0 +1,33 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<HOME>/.claude/settings.json": {
+      "hooks": {
+        "Stop": [
+          {
+            "hooks": [
+              {
+                "command": "echo c",
+                "type": "command"
+              }
+            ]
+          }
+        ]
+      },
+      "permissions": {
+        "allow": [
+          "ClaudeOnly"
+        ]
+      }
+    },
+    "<HOME>/.nemo/settings.json": {
+      "permissions": {
+        "allow": [
+          "Read"
+        ]
+      }
+    }
+  },
+  "op": "workspace"
+}

@@ -1,0 +1,28 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {
+    "CLAUDE_CONFIG_DIR": "<TMP>/outside/claude"
+  },
+  "files": {
+    "<HOME>/.claude/settings.json": {
+      "permissions": {
+        "allow": [
+          "HomeClaude"
+        ]
+      }
+    },
+    "<HOME>/.nemo/nemo.json": {
+      "claude": {
+        "readUserConfig": true
+      }
+    },
+    "<TMP>/outside/claude/settings.json": {
+      "permissions": {
+        "allow": [
+          "FromEnvDir"
+        ]
+      }
+    }
+  },
+  "op": "workspace"
+}

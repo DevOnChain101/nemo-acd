@@ -1,0 +1,35 @@
+{
+  "items": [
+    {
+      "kind": "user",
+      "text": "a"
+    },
+    {
+      "kind": "user",
+      "text": " a "
+    },
+    {
+      "kind": "text",
+      "text": "x"
+    },
+    {
+      "auto": true,
+      "kind": "user",
+      "text": "b"
+    },
+    {
+      "kind": "user",
+      "text": "   "
+    },
+    {
+      "kind": "user",
+      "text": "c"
+    },
+    {
+      "kind": "user",
+      "text": "a"
+    }
+  ],
+  "max": 200,
+  "op": "promptsOfItems"
+}

@@ -1,0 +1,33 @@
+{
+  "models": [
+    {
+      "capabilities": {
+        "vision": true
+      },
+      "context_length": 128000,
+      "id": "gw/a",
+      "max_output_tokens": 8192,
+      "object": "model",
+      "owned_by": "x"
+    },
+    {
+      "id": "b",
+      "max_input_tokens": 1000
+    },
+    {
+      "context_window": 5,
+      "displayName": "C!",
+      "id": "c"
+    },
+    {
+      "context_length": 0,
+      "id": "d"
+    },
+    {
+      "context_length": null,
+      "id": "e",
+      "max_input_tokens": 7
+    }
+  ],
+  "op": "normalizeModels"
+}

@@ -1,0 +1,40 @@
+{
+  "entries": [
+    {
+      "attachment": {
+        "exitCode": 0,
+        "hookEvent": "PreToolUse",
+        "hookName": "PreToolUse:Bash",
+        "type": "hook_success"
+      },
+      "timestamp": "2026-10-02T00:00:01.000Z",
+      "type": "attachment"
+    },
+    {
+      "attachment": {
+        "exitCode": 2,
+        "hookEvent": "PreToolUse",
+        "hookName": "PreToolUse:Bash",
+        "type": "hook_blocking_error"
+      },
+      "timestamp": "2026-10-02T00:00:02.000Z",
+      "type": "attachment"
+    },
+    {
+      "attachment": {
+        "type": "hook_cancelled"
+      },
+      "timestamp": "2026-10-02T00:00:03.000Z",
+      "type": "attachment"
+    },
+    {
+      "attachment": {
+        "type": "other"
+      },
+      "timestamp": "2026-10-02T00:00:04.000Z",
+      "type": "attachment"
+    }
+  ],
+  "now": 1790899800000,
+  "op": "replay"
+}

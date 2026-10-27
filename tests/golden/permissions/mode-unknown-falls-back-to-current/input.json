@@ -1,0 +1,26 @@
+{
+  "autoMode": {},
+  "calls": [
+    {
+      "input": {
+        "command": "npm test"
+      },
+      "tool": "Bash"
+    }
+  ],
+  "cwd": "<TMP>/ws",
+  "flags": {},
+  "fs": {
+    "dirs": [
+      "<TMP>/ws/sub"
+    ]
+  },
+  "home": "<HOME>",
+  "modes": [
+    "default",
+    "bogus"
+  ],
+  "op": "check",
+  "rules": {},
+  "suggestions": false
+}

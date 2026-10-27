@@ -1,0 +1,25 @@
+{
+  "additionalContext": [],
+  "blocked": false,
+  "results": [
+    {
+      "command": "printf 'o1'; printf 'e1' >&2",
+      "exitCode": 0,
+      "stderr": "e1",
+      "stdout": "o1"
+    },
+    {
+      "command": "printf 'o2'; exit 3",
+      "exitCode": 3,
+      "stderr": "",
+      "stdout": "o2"
+    },
+    {
+      "command": "exit 0",
+      "exitCode": 0,
+      "stderr": "",
+      "stdout": ""
+    }
+  ],
+  "stop": false
+}

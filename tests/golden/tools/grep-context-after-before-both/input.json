@@ -1,0 +1,35 @@
+{
+  "dirs": [],
+  "files": {
+    "<TMP>/ws/a.txt": "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\n"
+  },
+  "steps": [
+    {
+      "input": {
+        "-A": 1,
+        "output_mode": "content",
+        "path": "a.txt",
+        "pattern": "line 5"
+      },
+      "tool": "Grep"
+    },
+    {
+      "input": {
+        "-B": 2,
+        "output_mode": "content",
+        "path": "a.txt",
+        "pattern": "line 5"
+      },
+      "tool": "Grep"
+    },
+    {
+      "input": {
+        "-C": 1,
+        "output_mode": "content",
+        "path": "a.txt",
+        "pattern": "line 5"
+      },
+      "tool": "Grep"
+    }
+  ]
+}

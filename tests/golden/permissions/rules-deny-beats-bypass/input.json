@@ -1,0 +1,40 @@
+{
+  "autoMode": {},
+  "calls": [
+    {
+      "input": {
+        "command": "rm -rf ~"
+      },
+      "tool": "Bash"
+    },
+    {
+      "input": {
+        "command": "rm -rf x"
+      },
+      "tool": "Bash"
+    }
+  ],
+  "cwd": "<TMP>/ws",
+  "flags": {},
+  "fs": {
+    "dirs": [
+      "<TMP>/ws/sub"
+    ]
+  },
+  "home": "<HOME>",
+  "modes": [
+    "default",
+    "acceptEdits",
+    "plan",
+    "auto",
+    "dontAsk",
+    "bypassPermissions"
+  ],
+  "op": "check",
+  "rules": {
+    "deny": [
+      "Bash(rm:*)"
+    ]
+  },
+  "suggestions": false
+}

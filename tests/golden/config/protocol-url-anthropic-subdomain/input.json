@@ -1,0 +1,7 @@
+{
+  "args": {
+    "baseURL": "https://eu.anthropic.com/v1",
+    "id": "x"
+  },
+  "op": "detectProtocol"
+}

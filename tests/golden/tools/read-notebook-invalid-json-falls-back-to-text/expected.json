@@ -1,0 +1,17 @@
+{
+  "steps": [
+    {
+      "content": "     1\tnot json",
+      "isError": false,
+      "soft": false,
+      "tool": "Read"
+    }
+  ],
+  "tree_after": [
+    {
+      "content": "not json\n",
+      "path": "n.ipynb",
+      "type": "file"
+    }
+  ]
+}

@@ -1,0 +1,223 @@
+# CI for Nemo-ACD. Also reusable: release.yml calls it (workflow_call) so a tag cannot ship on a red commit.
+# Third-party actions are pinned to commit SHAs (docs/RELEASE.md "Action pinning"); Dependabot proposes updates.
+name: CI
+
+on:
+  push:
+    branches: [main]     # tags are handled by release.yml, which calls this workflow
+  pull_request:
+  workflow_call:
+  schedule:
+    - cron: "17 5 * * 1" # weekly: new RustSec advisories / toolchain drift
+
+# Called from release.yml, event_name is the caller's, so groups never collide with a direct run.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: "1"
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      # Toolchain + components come from rust-toolchain.toml.
+      - name: Install Rust toolchain (rust-toolchain.toml)
+        run: rustup toolchain install && rustc -Vv
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      # Fixture-based tests need git, Node and Python 3.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.x"
+      - name: Tool versions
+        run: git --version && node --version && python3 --version || python --version
+      - name: Git identity (fixture repos commit)
+        run: |
+          git config --global user.email ci@example.invalid
+          git config --global user.name ci
+          git config --global init.defaultBranch main
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      # test-provider only exists in debug builds (compile_error! in release). This also runs the
+      # nemo-cli binary tests (apps/cli/tests/*), which need it for the scripted model.
+      - run: cargo test --workspace --locked --features nemo-cli/test-provider
+
+  evals-selftest:
+    name: eval selftest (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.x"
+      - run: |
+          git config --global user.email ci@example.invalid
+          git config --global user.name ci
+      - run: node tests/agent-evals/harness/selftest.js
+
+  browser:
+    # Real Chrome from browser-actions/setup-chrome (stable channel). Nemo never downloads a browser,
+    # so NEMO_BROWSER_PATH points at the one installed here.
+    name: browser (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - id: chrome
+        uses: browser-actions/setup-chrome@c785b87e244131f27c9f19c1a33e2ead956ab7ce # v1
+        with:
+          chrome-version: stable
+      - name: Browser tests
+        env:
+          NEMO_BROWSER_PATH: ${{ steps.chrome.outputs.chrome-path }}
+        run: |
+          echo "Chrome: $NEMO_BROWSER_PATH"
+          # Hosted Linux runners forbid the Chrome sandbox (AppArmor userns restriction); the test
+          # hook adds --no-sandbox for the test fixture server only.
+          if [ "$RUNNER_OS" = Linux ]; then export NEMO_BROWSER_TEST_NO_SANDBOX=1; fi
+          cargo test -p nemo-browser --locked -- --nocapture 2>&1 | tee browser.log
+          # The suite prints SKIP and passes without a browser: make skipping a failure here.
+          if grep -q "SKIP" browser.log; then echo "::error::browser tests were skipped"; exit 1; fi
+
+  sandbox-linux:
+    # Landlock + bubblewrap integration tests (cfg linux). Ubuntu 24.04 blocks unprivileged user
+    # namespaces via AppArmor, which breaks bwrap; relax it for this job only.
+    name: sandbox (linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: Install bubblewrap and relax AppArmor userns restriction
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          bwrap --ro-bind / / --unshare-net true && echo "bwrap works"
+      - name: Require Landlock (otherwise the tests silently skip)
+        run: |
+          cat /sys/kernel/security/lsm; echo
+          grep -q landlock /sys/kernel/security/lsm || { echo "::error::Landlock not enabled on this runner kernel"; exit 1; }
+      - run: cargo test -p nemo-sandbox -p nemo-terminal --locked -- --nocapture
+      - name: doctor reports the Linux backends
+        run: cargo run -q --locked -p nemo-cli -- doctor --cwd "$RUNNER_TEMP"
+
+  msrv:
+    name: msrv (1.89)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      RUSTUP_TOOLCHAIN: "1.89" # overrides rust-toolchain.toml
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install 1.89 --profile minimal
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - run: cargo check --workspace --all-targets --locked
+
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RUSTDOCFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - run: cargo doc --workspace --no-deps --locked
+
+  deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
+        with:
+          command: check licenses bans sources advisories
+
+  audit:
+    name: cargo-audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2
+        with:
+          tool: cargo-audit
+      - run: cargo audit --deny warnings
+
+  shell-scripts:
+    # Lints the installer and runs actionlint over the workflows.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - run: shellcheck packaging/install.sh scripts/*.sh
+      - name: Release tag policy tests (local origin + stub gh)
+        run: bash scripts/test-check-release-tag.sh
+      - uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2
+
+  ci-ok:
+    # Single required status check for branch protection.
+    if: always()
+    needs: [test, evals-selftest, browser, sandbox-linux, msrv, docs, deny, audit, shell-scripts]
+    runs-on: ubuntu-latest
+    env:
+      NEEDS: ${{ toJSON(needs) }}
+    steps:
+      - run: |
+          echo "$NEEDS"
+          if echo "$NEEDS" | grep -Eq '"result": "(failure|cancelled|skipped)"'; then exit 1; fi

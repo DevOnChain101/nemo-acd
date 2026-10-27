@@ -1,0 +1,130 @@
+[
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      },
+      "plan": {
+        "decision": "allow",
+        "reason": "matched an allow rule"
+      }
+    },
+    "input": {
+      "command": "make build"
+    },
+    "tool": "Bash"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "Bash requires confirmation"
+      },
+      "auto": {
+        "decision": "classify",
+        "reason": "Bash: classifier review"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "Bash requires confirmation"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "dontAsk mode"
+      },
+      "plan": {
+        "decision": "classify",
+        "reason": "plan mode: classifier review"
+      }
+    },
+    "input": {
+      "command": "make build2"
+    },
+    "tool": "Bash"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "read-only command"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "read-only command"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "read-only command"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "read-only command"
+      },
+      "plan": {
+        "decision": "allow",
+        "reason": "plan mode: read-only command"
+      }
+    },
+    "input": {
+      "command": "echo hello"
+    },
+    "tool": "Bash"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "Bash requires confirmation"
+      },
+      "auto": {
+        "decision": "classify",
+        "reason": "Bash: classifier review"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "Bash requires confirmation"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "dontAsk mode"
+      },
+      "plan": {
+        "decision": "classify",
+        "reason": "plan mode: classifier review"
+      }
+    },
+    "input": {
+      "command": "echo a; make clean"
+    },
+    "tool": "Bash"
+  }
+]

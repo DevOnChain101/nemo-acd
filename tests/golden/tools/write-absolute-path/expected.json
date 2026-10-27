@@ -1,0 +1,21 @@
+{
+  "steps": [
+    {
+      "content": "Created <TMP>/ws/abs.txt (3 bytes).",
+      "isError": false,
+      "meta": {
+        "bytes": 3,
+        "created": true
+      },
+      "soft": false,
+      "tool": "Write"
+    }
+  ],
+  "tree_after": [
+    {
+      "content": "abs",
+      "path": "abs.txt",
+      "type": "file"
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "config": {
+    "aliases": {
+      "fable": null,
+      "haiku": null,
+      "opus": null,
+      "sonnet": null
+    },
+    "maxTokens": 32000,
+    "profiles": {},
+    "providers": {
+      "anthropic": {
+        "headers": {},
+        "models": [],
+        "type": "anthropic",
+        "typeSource": "id"
+      },
+      "openai": {
+        "models": [],
+        "type": "openai",
+        "typeSource": "id"
+      }
+    }
+  },
+  "discovered": {
+    "gateway": [
+      "b",
+      "a"
+    ]
+  },
+  "op": "pickDefaultModel",
+  "usableProviderIds": [
+    "gateway"
+  ]
+}

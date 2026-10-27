@@ -1,0 +1,23 @@
+{
+  "steps": [
+    {
+      "content": "Read: \"file_path\" is required.",
+      "isError": true,
+      "soft": false,
+      "tool": "Read"
+    },
+    {
+      "content": "Read: \"file_path\" is required.",
+      "isError": true,
+      "soft": false,
+      "tool": "Read"
+    },
+    {
+      "content": "Read: \"file_path\" is required.",
+      "isError": true,
+      "soft": false,
+      "tool": "Read"
+    }
+  ],
+  "tree_after": []
+}

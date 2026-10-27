@@ -1,0 +1,27 @@
+{
+  "op": "broad",
+  "rules": [
+    "Task",
+    "Agent",
+    "*",
+    "Bash",
+    "Bash(*)",
+    "Bash(ls)",
+    "Bash(ls:*)",
+    "Bash(python:*)",
+    "Bash(python3 script.py)",
+    "Bash(py*)",
+    "Bash(p*)",
+    "Bash(npm run:*)",
+    "Bash(npm test:*)",
+    "Bash(npm:*)",
+    "Bash(yarn dlx:*)",
+    "Bash(bash -c:*)",
+    "Bash(sudo:*)",
+    "Bash(git status:*)",
+    "Bash(:*)",
+    "Read",
+    "Write",
+    "WebFetch(domain:x.test)"
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "entries": [
+    {
+      "subtype": "compact_boundary",
+      "summary": "S1",
+      "timestamp": "2026-10-02T00:00:01.000Z",
+      "trigger": "auto",
+      "type": "system"
+    },
+    {
+      "subtype": "compact_boundary",
+      "timestamp": "2026-10-02T00:00:02.000Z",
+      "trigger": "manual",
+      "type": "system"
+    },
+    {
+      "bootstrap": true,
+      "subtype": "handoff",
+      "summary": "H",
+      "timestamp": "2026-10-02T00:00:03.000Z",
+      "type": "system"
+    },
+    {
+      "subtype": "other",
+      "timestamp": "2026-10-02T00:00:04.000Z",
+      "type": "system"
+    }
+  ],
+  "now": 1790899800000,
+  "op": "replay"
+}

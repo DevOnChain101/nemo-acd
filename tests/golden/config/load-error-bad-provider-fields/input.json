@@ -1,0 +1,23 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<NEMO_HOME>/nemo.json": {
+      "$schema": "config.json/v1",
+      "providers": {
+        "p": {
+          "apiKey": "",
+          "authHeader": "basic",
+          "discover": "yes",
+          "extra": 1,
+          "headers": {
+            "a": 1
+          },
+          "type": "gemini"
+        }
+      }
+    }
+  },
+  "home": "<NEMO_HOME>",
+  "op": "loadConfig"
+}

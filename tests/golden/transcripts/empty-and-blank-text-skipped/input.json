@@ -1,0 +1,36 @@
+{
+  "entries": [
+    {
+      "message": {
+        "content": [
+          {
+            "text": "(empty)",
+            "type": "text"
+          },
+          {
+            "text": "  ",
+            "type": "text"
+          },
+          {
+            "text": "",
+            "type": "text"
+          },
+          {
+            "thinking": "",
+            "type": "thinking"
+          },
+          {
+            "text": "real",
+            "type": "text"
+          }
+        ],
+        "id": "m1",
+        "model": "claude-opus-5.5"
+      },
+      "timestamp": "2026-10-02T00:00:01.000Z",
+      "type": "assistant"
+    }
+  ],
+  "now": 1790899800000,
+  "op": "replay"
+}

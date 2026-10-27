@@ -1,0 +1,55 @@
+{
+  "entries": [
+    {
+      "message": {
+        "content": "<local-command-stdout>x</local-command-stdout>",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:01.000Z",
+      "type": "user"
+    },
+    {
+      "message": {
+        "content": "Caveat: messages below were generated",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:02.000Z",
+      "type": "user"
+    },
+    {
+      "message": {
+        "content": "<command-message>foo</command-message>",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:03.000Z",
+      "type": "user"
+    },
+    {
+      "message": {
+        "content": "   ",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:04.000Z",
+      "type": "user"
+    },
+    {
+      "message": {
+        "content": "real",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:05.000Z",
+      "type": "user"
+    },
+    {
+      "isMeta": true,
+      "message": {
+        "content": "meta",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:06.000Z",
+      "type": "user"
+    }
+  ],
+  "now": 1790899800000,
+  "op": "replay"
+}

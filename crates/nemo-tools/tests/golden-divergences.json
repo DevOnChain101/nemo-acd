@@ -1,0 +1,87 @@
+{
+  "_doc": "Allow-list of intentional differences from the Node golden fixtures (tests/golden.rs). 'cases.<id>.steps.<n>' replaces the expected content of step n with an exact 'content' or a 'content_prefix'; all other fields of that step and the tree_after are still compared. 'mtime_order.<id>' is the capture-time file creation order (relative to ws), which input.json lost by sorting its keys (README says input.json order); files get mtime 1700000000+index in that order.",
+  "validation_stricter": {
+    "tools": ["Read", "Write", "Edit", "Glob", "Grep", "Bash", "BashOutput", "KillShell", "terminal_spawn", "terminal_logs", "terminal_signal", "terminal_status"],
+    "reason": "Security review F11: the registry validator rejects unknown properties for the fs and shell tools as if additionalProperties were false (e.g. Glob {pattern, path: '.env', file_path: 'ok.txt'} is invalid_input instead of silently ignoring file_path). The schema text in schemas.json stays verbatim; Node ignored extra keys. Covered by tests/registry.rs fs_tools_reject_unknown_properties."
+  },
+  "mtime_order": {
+    "glob-recursive-sorted-by-mtime-newest-first": [
+      "src/a.js",
+      "src/b.js",
+      "src/deep/c.js",
+      "src/d.ts",
+      "README.md",
+      "node_modules/p/i.js",
+      ".git/config",
+      "lib/e.js"
+    ],
+    "glob-excludes-node_modules-and-git": [
+      "src/a.js",
+      "src/b.js",
+      "src/deep/c.js",
+      "src/d.ts",
+      "README.md",
+      "node_modules/p/i.js",
+      ".git/config",
+      "lib/e.js"
+    ],
+    "glob-pattern-naming-node_modules-includes-it": [
+      "src/a.js",
+      "src/b.js",
+      "src/deep/c.js",
+      "src/d.ts",
+      "README.md",
+      "node_modules/p/i.js",
+      ".git/config",
+      "lib/e.js"
+    ],
+    "glob-path-argument": [
+      "src/a.js",
+      "src/b.js",
+      "src/deep/c.js",
+      "src/d.ts",
+      "README.md",
+      "node_modules/p/i.js",
+      ".git/config",
+      "lib/e.js"
+    ],
+    "glob-no-match": [
+      "src/a.js",
+      "src/b.js",
+      "src/deep/c.js",
+      "src/d.ts",
+      "README.md",
+      "node_modules/p/i.js",
+      ".git/config",
+      "lib/e.js"
+    ],
+    "glob-braces-and-question-mark": [
+      "src/a.js",
+      "src/b.js",
+      "src/deep/c.js",
+      "src/d.ts",
+      "README.md",
+      "node_modules/p/i.js",
+      ".git/config",
+      "lib/e.js"
+    ]
+  },
+  "cases": {
+    "grep-invalid-regex": {
+      "reason": "Error text comes from the Rust regex crate, not V8 ('Invalid regular expression: /(unclosed/m: Unterminated group'). Regex dialect also differs from JS RegExp (no lookaround/backrefs; \\d, \\w, \\b are Unicode-aware).",
+      "steps": {
+        "0": {
+          "content_prefix": "Grep: invalid pattern: "
+        }
+      }
+    },
+    "grep-line-numbers-flag-ignored-by-js-fallback": {
+      "reason": "Decision: honour -n:false (the schema promises it and Node with ripgrep installed does). Output is 'path:text' for matches and 'path-text' for context lines; the JS fallback ignores the flag.",
+      "steps": {
+        "0": {
+          "content": "<TMP>/ws/a.txt:foo"
+        }
+      }
+    }
+  }
+}

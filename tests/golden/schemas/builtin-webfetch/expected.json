@@ -1,0 +1,21 @@
+{
+  "description": "Fetches a URL and returns its content as text. HTML is stripped down to readable text (this tool does not summarize it, so read the result for what the prompt asks about). Upgrades http:// to https://. Limited to 5MB and 30 seconds.",
+  "input_schema": {
+    "properties": {
+      "prompt": {
+        "description": "What you are looking for on this page (echoed back in the result as a reminder).",
+        "type": "string"
+      },
+      "url": {
+        "description": "The URL to fetch.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "url",
+      "prompt"
+    ],
+    "type": "object"
+  },
+  "name": "WebFetch"
+}

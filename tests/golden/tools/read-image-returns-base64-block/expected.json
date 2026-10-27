@@ -1,0 +1,46 @@
+{
+  "steps": [
+    {
+      "content": [
+        {
+          "source": {
+            "data": "iVBORw0KGgo=",
+            "media_type": "image/png",
+            "type": "base64"
+          },
+          "type": "image"
+        }
+      ],
+      "isError": false,
+      "soft": false,
+      "tool": "Read"
+    },
+    {
+      "content": [
+        {
+          "source": {
+            "data": "/9j/4A==",
+            "media_type": "image/jpeg",
+            "type": "base64"
+          },
+          "type": "image"
+        }
+      ],
+      "isError": false,
+      "soft": false,
+      "tool": "Read"
+    }
+  ],
+  "tree_after": [
+    {
+      "content": "����",
+      "path": "j.JPG",
+      "type": "file"
+    },
+    {
+      "content": "�PNG\r\n\u001a\n",
+      "path": "p.png",
+      "type": "file"
+    }
+  ]
+}

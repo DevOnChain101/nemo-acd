@@ -1,0 +1,65 @@
+{
+  "items": [
+    {
+      "kind": "compact",
+      "summary": "S1",
+      "trigger": "auto",
+      "ts": 1790899201000
+    },
+    {
+      "kind": "compact",
+      "summary": "",
+      "trigger": "restored",
+      "ts": 1790899202000
+    },
+    {
+      "bootstrap": true,
+      "kind": "handoff",
+      "text": "H",
+      "ts": 1790899203000
+    }
+  ],
+  "phase": {
+    "phase": "idle",
+    "running": [],
+    "runningAgents": []
+  },
+  "session": {
+    "activity": [],
+    "agents": {},
+    "components": {},
+    "contextUsed": 0,
+    "cwd": "",
+    "errors": 0,
+    "feed": [],
+    "gitBranch": "",
+    "hookCounts": {},
+    "id": "sess",
+    "lastActivity": 1790899204000,
+    "lastAssistantAt": null,
+    "lastPrompt": "",
+    "lastPromptAt": null,
+    "lastStopReason": null,
+    "lastUserAt": null,
+    "lastVerify": null,
+    "memoryWrites": 0,
+    "model": "",
+    "prompts": 0,
+    "skills": {},
+    "startedAt": 1790899201000,
+    "timeline": [],
+    "todos": [],
+    "tokens": {
+      "cacheCreate": 0,
+      "cacheRead": 0,
+      "input": 0,
+      "output": 0
+    },
+    "toolCounts": {},
+    "tools": {},
+    "turnReplied": false,
+    "usageById": {},
+    "version": ""
+  },
+  "total_tokens": 0
+}

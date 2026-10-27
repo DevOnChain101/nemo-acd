@@ -1,0 +1,54 @@
+{
+  "value": {
+    "$schema": "config.json/v1",
+    "_explicitAliases": [],
+    "_modelExplicit": false,
+    "_warnings": [],
+    "aliases": {
+      "fable": null,
+      "haiku": null,
+      "opus": null,
+      "sonnet": null
+    },
+    "maxTokens": 32000,
+    "profiles": {},
+    "providers": {
+      "anthropic": {
+        "headers": {},
+        "models": [],
+        "type": "anthropic",
+        "typeSource": "id"
+      },
+      "oc": {
+        "apiKey": "sk-oc",
+        "apiKeySource": "inline",
+        "baseURL": "https://oc.example.test",
+        "headers": {
+          "X-A": "a"
+        },
+        "models": [
+          "claude-x"
+        ],
+        "modelsMeta": {
+          "claude-x": {
+            "capabilities": {},
+            "contextWindow": 200000,
+            "family": null,
+            "maxOutput": 8192,
+            "name": "Claude X",
+            "vendor": null
+          }
+        },
+        "name": "OpenCode GW",
+        "npm": "@ai-sdk/anthropic",
+        "type": "anthropic",
+        "typeSource": "npm"
+      },
+      "openai": {
+        "models": [],
+        "type": "openai",
+        "typeSource": "id"
+      }
+    }
+  }
+}

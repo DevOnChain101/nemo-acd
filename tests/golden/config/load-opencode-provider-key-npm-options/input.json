@@ -1,0 +1,33 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<NEMO_HOME>/nemo.json": {
+      "$schema": "config.json/v1",
+      "provider": {
+        "oc": {
+          "models": {
+            "claude-x": {
+              "limit": {
+                "context": 200000,
+                "output": 8192
+              },
+              "name": "Claude X"
+            }
+          },
+          "name": "OpenCode GW",
+          "npm": "@ai-sdk/anthropic",
+          "options": {
+            "apiKey": "sk-oc",
+            "baseURL": "https://oc.example.test",
+            "headers": {
+              "X-A": "a"
+            }
+          }
+        }
+      }
+    }
+  },
+  "home": "<NEMO_HOME>",
+  "op": "loadConfig"
+}

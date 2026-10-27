@@ -1,0 +1,19 @@
+[package]
+name = "nemo-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+nemo-events = { path = "../nemo-events" }
+nemo-platform = { path = "../nemo-platform" }
+serde = { version = "1.0.229", features = ["derive"] }
+# CancellationToken only; no runtime features.
+tokio-util = { version = "0.7", default-features = false }
+
+[dev-dependencies]
+tempfile = "3"

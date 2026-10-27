@@ -1,0 +1,14 @@
+{
+  "entries": [
+    {
+      "message": {
+        "content": "<command-message>x</command-message><command-name> /review </command-name><command-args> src/a.js </command-args>",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:01.000Z",
+      "type": "user"
+    }
+  ],
+  "now": 1790899800000,
+  "op": "replay"
+}

@@ -1,0 +1,25 @@
+{
+  "dirs": [],
+  "files": {
+    "<TMP>/ws/j.JPG": {
+      "base64": "/9j/4A=="
+    },
+    "<TMP>/ws/p.png": {
+      "base64": "iVBORw0KGgo="
+    }
+  },
+  "steps": [
+    {
+      "input": {
+        "file_path": "p.png"
+      },
+      "tool": "Read"
+    },
+    {
+      "input": {
+        "file_path": "j.JPG"
+      },
+      "tool": "Read"
+    }
+  ]
+}

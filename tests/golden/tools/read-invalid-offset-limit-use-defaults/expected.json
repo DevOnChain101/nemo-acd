@@ -1,0 +1,23 @@
+{
+  "steps": [
+    {
+      "content": "     1\tline 1\n     2\tline 2\n     3\tline 3",
+      "isError": false,
+      "soft": false,
+      "tool": "Read"
+    },
+    {
+      "content": "     1\tline 1\n     2\tline 2\n     3\tline 3",
+      "isError": false,
+      "soft": false,
+      "tool": "Read"
+    }
+  ],
+  "tree_after": [
+    {
+      "content": "line 1\nline 2\nline 3\n",
+      "path": "a.txt",
+      "type": "file"
+    }
+  ]
+}

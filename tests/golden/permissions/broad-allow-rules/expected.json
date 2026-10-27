@@ -1,0 +1,90 @@
+[
+  {
+    "broad": true,
+    "rule": "Task"
+  },
+  {
+    "broad": true,
+    "rule": "Agent"
+  },
+  {
+    "broad": true,
+    "rule": "*"
+  },
+  {
+    "broad": true,
+    "rule": "Bash"
+  },
+  {
+    "broad": true,
+    "rule": "Bash(*)"
+  },
+  {
+    "broad": false,
+    "rule": "Bash(ls)"
+  },
+  {
+    "broad": false,
+    "rule": "Bash(ls:*)"
+  },
+  {
+    "broad": true,
+    "rule": "Bash(python:*)"
+  },
+  {
+    "broad": false,
+    "rule": "Bash(python3 script.py)"
+  },
+  {
+    "broad": true,
+    "rule": "Bash(py*)"
+  },
+  {
+    "broad": true,
+    "rule": "Bash(p*)"
+  },
+  {
+    "broad": true,
+    "rule": "Bash(npm run:*)"
+  },
+  {
+    "broad": false,
+    "rule": "Bash(npm test:*)"
+  },
+  {
+    "broad": true,
+    "rule": "Bash(npm:*)"
+  },
+  {
+    "broad": true,
+    "rule": "Bash(yarn dlx:*)"
+  },
+  {
+    "broad": true,
+    "rule": "Bash(bash -c:*)"
+  },
+  {
+    "broad": true,
+    "rule": "Bash(sudo:*)"
+  },
+  {
+    "broad": false,
+    "rule": "Bash(git status:*)"
+  },
+  {
+    "broad": true,
+    "rule": "Bash(:*)"
+  },
+  {
+    "broad": false,
+    "rule": "Read"
+  },
+  {
+    "broad": false,
+    "rule": "Write"
+  },
+  {
+    "broad": false,
+    "rule": "WebFetch(domain:x.test)"
+  }
+]

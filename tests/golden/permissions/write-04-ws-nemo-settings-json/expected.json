@@ -1,0 +1,80 @@
+[
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "protected path requires confirmation"
+      },
+      "auto": {
+        "decision": "classify",
+        "reason": "protected path: classifier review"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "protected path requires confirmation"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "dontAsk mode: protected path"
+      },
+      "plan": {
+        "decision": "deny",
+        "reason": "plan mode: read-only"
+      }
+    },
+    "input": {
+      "file_path": "<TMP>/ws/.nemo/settings.json"
+    },
+    "suggestions": [
+      {
+        "destination": "session",
+        "mode": "acceptEdits",
+        "type": "setMode"
+      }
+    ],
+    "tool": "Write"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "protected path requires confirmation"
+      },
+      "auto": {
+        "decision": "classify",
+        "reason": "protected path: classifier review"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "protected path requires confirmation"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "dontAsk mode: protected path"
+      },
+      "plan": {
+        "decision": "deny",
+        "reason": "plan mode: read-only"
+      }
+    },
+    "input": {
+      "file_path": "<TMP>/ws/.nemo/settings.json"
+    },
+    "suggestions": [
+      {
+        "destination": "session",
+        "mode": "acceptEdits",
+        "type": "setMode"
+      }
+    ],
+    "tool": "Edit"
+  }
+]

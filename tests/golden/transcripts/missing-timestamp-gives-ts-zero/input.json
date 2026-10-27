@@ -1,0 +1,27 @@
+{
+  "entries": [
+    {
+      "message": {
+        "content": "no ts",
+        "role": "user"
+      },
+      "type": "user"
+    },
+    {
+      "message": {
+        "content": [
+          {
+            "id": "t1",
+            "input": {},
+            "name": "Bash",
+            "type": "tool_use"
+          }
+        ],
+        "id": "m"
+      },
+      "type": "assistant"
+    }
+  ],
+  "now": 1790899800000,
+  "op": "replay"
+}

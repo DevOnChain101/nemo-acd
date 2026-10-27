@@ -1,0 +1,13 @@
+{
+  "dirs": [],
+  "files": {},
+  "steps": [
+    {
+      "input": {
+        "content": "hello",
+        "file_path": "deep/er/new.txt"
+      },
+      "tool": "Write"
+    }
+  ]
+}

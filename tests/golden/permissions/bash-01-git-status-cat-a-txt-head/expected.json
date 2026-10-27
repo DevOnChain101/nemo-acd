@@ -1,0 +1,34 @@
+[
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "read-only command"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "read-only command"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "read-only command"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "read-only command"
+      },
+      "plan": {
+        "decision": "allow",
+        "reason": "plan mode: read-only command"
+      }
+    },
+    "input": {
+      "command": "git status && cat a.txt | head"
+    },
+    "tool": "Bash"
+  }
+]

@@ -1,0 +1,63 @@
+{
+  "autoMode": {},
+  "calls": [
+    {
+      "input": {
+        "command": "touch escape/new.txt"
+      },
+      "tool": "Bash"
+    },
+    {
+      "input": {
+        "command": "rm escape/victim.txt"
+      },
+      "tool": "Bash"
+    },
+    {
+      "input": {
+        "command": "mv a.txt escape/a.txt"
+      },
+      "tool": "Bash"
+    },
+    {
+      "input": {
+        "command": "sed -i s/x/y/ escape/victim.txt"
+      },
+      "tool": "Bash"
+    },
+    {
+      "input": {
+        "file_path": "<TMP>/ws/escape/new.txt"
+      },
+      "tool": "Write"
+    },
+    {
+      "input": {
+        "file_path": "<TMP>/ws/escape/victim.txt"
+      },
+      "tool": "Read"
+    }
+  ],
+  "cwd": "<TMP>/ws",
+  "flags": {},
+  "fs": {
+    "dirs": [
+      "<TMP>/ws/sub"
+    ],
+    "files": {
+      "<TMP>/outside/victim.txt": "x"
+    },
+    "symlinks": {
+      "<TMP>/ws/escape": "<TMP>/outside"
+    }
+  },
+  "home": "<HOME>",
+  "modes": [
+    "acceptEdits",
+    "auto",
+    "default"
+  ],
+  "op": "check",
+  "rules": {},
+  "suggestions": false
+}

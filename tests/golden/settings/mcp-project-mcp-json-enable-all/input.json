@@ -1,0 +1,35 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<HOME>/.nemo/nemo.json": {
+      "claude": {
+        "readUserConfig": true
+      }
+    },
+    "<TMP>/ws/.mcp.json": {
+      "mcpServers": {
+        "alpha": {
+          "args": [
+            "a.js"
+          ],
+          "command": "node",
+          "env": {
+            "SECRET": "x"
+          }
+        },
+        "remote": {
+          "headers": {
+            "Authorization": "Bearer z"
+          },
+          "type": "http",
+          "url": "https://user:pw@h.example.test/mcp?token=abc"
+        }
+      }
+    },
+    "<TMP>/ws/.nemo/settings.json": {
+      "enableAllProjectMcpServers": true
+    }
+  },
+  "op": "workspace"
+}

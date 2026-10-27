@@ -1,0 +1,72 @@
+[
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "deny",
+        "message": "Reads outside the working directories are blocked (permissions.blockReadsOutsideWorkingDirectories). Add the directory with /add-dir or remove the setting.",
+        "reason": "reads outside the working directories are blocked"
+      },
+      "auto": {
+        "decision": "deny",
+        "message": "Reads outside the working directories are blocked (permissions.blockReadsOutsideWorkingDirectories). Add the directory with /add-dir or remove the setting.",
+        "reason": "reads outside the working directories are blocked"
+      },
+      "bypassPermissions": {
+        "decision": "deny",
+        "message": "Reads outside the working directories are blocked (permissions.blockReadsOutsideWorkingDirectories). Add the directory with /add-dir or remove the setting.",
+        "reason": "reads outside the working directories are blocked"
+      },
+      "default": {
+        "decision": "deny",
+        "message": "Reads outside the working directories are blocked (permissions.blockReadsOutsideWorkingDirectories). Add the directory with /add-dir or remove the setting.",
+        "reason": "reads outside the working directories are blocked"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "message": "Reads outside the working directories are blocked (permissions.blockReadsOutsideWorkingDirectories). Add the directory with /add-dir or remove the setting.",
+        "reason": "reads outside the working directories are blocked"
+      },
+      "plan": {
+        "decision": "deny",
+        "message": "Reads outside the working directories are blocked (permissions.blockReadsOutsideWorkingDirectories). Add the directory with /add-dir or remove the setting.",
+        "reason": "reads outside the working directories are blocked"
+      }
+    },
+    "input": {
+      "file_path": "<TMP>/outside/f.txt"
+    },
+    "tool": "Read"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "auto": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "dontAsk": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      },
+      "plan": {
+        "decision": "allow",
+        "reason": "read-only tool"
+      }
+    },
+    "input": {
+      "file_path": "<TMP>/ws/ok.txt"
+    },
+    "tool": "Read"
+  }
+]

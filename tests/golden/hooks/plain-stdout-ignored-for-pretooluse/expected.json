@@ -1,0 +1,13 @@
+{
+  "additionalContext": [],
+  "blocked": false,
+  "results": [
+    {
+      "command": "printf '%s' 'remember'",
+      "exitCode": 0,
+      "stderr": "",
+      "stdout": "remember"
+    }
+  ],
+  "stop": false
+}

@@ -1,0 +1,14 @@
+{
+  "additionalContext": [],
+  "blocked": false,
+  "decision": "allow",
+  "results": [
+    {
+      "command": "printf '%s' '{\"decision\":\"approve\"}'",
+      "exitCode": 0,
+      "stderr": "",
+      "stdout": "{\"decision\":\"approve\"}"
+    }
+  ],
+  "stop": false
+}

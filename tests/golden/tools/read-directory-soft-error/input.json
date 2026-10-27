@@ -1,0 +1,14 @@
+{
+  "dirs": [
+    "<TMP>/ws/sub"
+  ],
+  "files": {},
+  "steps": [
+    {
+      "input": {
+        "file_path": "sub"
+      },
+      "tool": "Read"
+    }
+  ]
+}

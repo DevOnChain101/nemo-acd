@@ -1,0 +1,26 @@
+{
+  "steps": [
+    {
+      "content": "     1\tkeep\n     2\tremove me\n     3\tkeep",
+      "isError": false,
+      "soft": false,
+      "tool": "Read"
+    },
+    {
+      "content": "Edited <TMP>/ws/a.txt:\n     1\tkeep\n     2\tkeep\n     3\t",
+      "isError": false,
+      "meta": {
+        "replacements": 1
+      },
+      "soft": false,
+      "tool": "Edit"
+    }
+  ],
+  "tree_after": [
+    {
+      "content": "keep\nkeep\n",
+      "path": "a.txt",
+      "type": "file"
+    }
+  ]
+}

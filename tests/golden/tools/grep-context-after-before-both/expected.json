@@ -1,0 +1,29 @@
+{
+  "steps": [
+    {
+      "content": "<TMP>/ws/a.txt:5:line 5\n<TMP>/ws/a.txt:6-line 6\n--",
+      "isError": false,
+      "soft": false,
+      "tool": "Grep"
+    },
+    {
+      "content": "<TMP>/ws/a.txt:3-line 3\n<TMP>/ws/a.txt:4-line 4\n<TMP>/ws/a.txt:5:line 5\n--",
+      "isError": false,
+      "soft": false,
+      "tool": "Grep"
+    },
+    {
+      "content": "<TMP>/ws/a.txt:4-line 4\n<TMP>/ws/a.txt:5:line 5\n<TMP>/ws/a.txt:6-line 6\n--",
+      "isError": false,
+      "soft": false,
+      "tool": "Grep"
+    }
+  ],
+  "tree_after": [
+    {
+      "content": "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\n",
+      "path": "a.txt",
+      "type": "file"
+    }
+  ]
+}

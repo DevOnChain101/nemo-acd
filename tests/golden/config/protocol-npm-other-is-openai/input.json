@@ -1,0 +1,7 @@
+{
+  "args": {
+    "id": "x",
+    "npm": "whatever"
+  },
+  "op": "detectProtocol"
+}

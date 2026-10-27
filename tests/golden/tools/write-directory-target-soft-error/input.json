@@ -1,0 +1,15 @@
+{
+  "dirs": [
+    "<TMP>/ws/sub"
+  ],
+  "files": {},
+  "steps": [
+    {
+      "input": {
+        "content": "x",
+        "file_path": "sub"
+      },
+      "tool": "Write"
+    }
+  ]
+}

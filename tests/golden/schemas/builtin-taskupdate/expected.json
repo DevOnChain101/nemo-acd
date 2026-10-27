@@ -1,0 +1,32 @@
+{
+  "description": "Updates a tracked task by id: status, subject, activeForm and/or description.",
+  "input_schema": {
+    "properties": {
+      "activeForm": {
+        "type": "string"
+      },
+      "description": {
+        "type": "string"
+      },
+      "status": {
+        "enum": [
+          "pending",
+          "in_progress",
+          "completed"
+        ],
+        "type": "string"
+      },
+      "subject": {
+        "type": "string"
+      },
+      "taskId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "taskId"
+    ],
+    "type": "object"
+  },
+  "name": "TaskUpdate"
+}

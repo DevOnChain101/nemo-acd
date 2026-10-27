@@ -1,0 +1,7 @@
+{
+  "args": {
+    "id": "x",
+    "npm": "@ai-sdk/anthropic"
+  },
+  "op": "detectProtocol"
+}

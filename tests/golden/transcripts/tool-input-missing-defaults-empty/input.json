@@ -1,0 +1,21 @@
+{
+  "entries": [
+    {
+      "message": {
+        "content": [
+          {
+            "id": "t1",
+            "name": "Bash",
+            "type": "tool_use"
+          }
+        ],
+        "id": "m1",
+        "model": "claude-opus-5.5"
+      },
+      "timestamp": "2026-10-02T00:00:01.000Z",
+      "type": "assistant"
+    }
+  ],
+  "now": 1790899800000,
+  "op": "replay"
+}

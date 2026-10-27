@@ -1,0 +1,28 @@
+{
+  "description": "Reads a file from the filesystem and returns its contents with line numbers (like `cat -n`), as an image for png/jpg/jpeg/gif/webp files, as text for PDF files (use `pages` for a range), and cell by cell for .ipynb notebooks. Always Read a file before using Edit or Write on it. Defaults to the first 2000 lines; pass offset and limit to read a specific range of a large file. Use Glob or Bash `ls` to list a directory instead of pointing Read at it.",
+  "input_schema": {
+    "properties": {
+      "file_path": {
+        "description": "Absolute or cwd-relative path to the file to read.",
+        "type": "string"
+      },
+      "limit": {
+        "description": "The number of lines to read (default 2000).",
+        "type": "number"
+      },
+      "offset": {
+        "description": "The line number to start reading from (1-based).",
+        "type": "number"
+      },
+      "pages": {
+        "description": "For PDF files: the pages to read, e.g. \"3\" or \"2-5\" (1-based). Reads the whole file when omitted.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "file_path"
+    ],
+    "type": "object"
+  },
+  "name": "Read"
+}

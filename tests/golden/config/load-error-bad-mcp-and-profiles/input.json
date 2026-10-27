@@ -1,0 +1,27 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<NEMO_HOME>/nemo.json": {
+      "$schema": "config.json/v1",
+      "mcp": {
+        "s": {
+          "command": 5,
+          "type": "weird"
+        }
+      },
+      "profiles": {
+        "p": {
+          "candidates": "x"
+        },
+        "q": [
+          {
+            "model": ""
+          }
+        ]
+      }
+    }
+  },
+  "home": "<NEMO_HOME>",
+  "op": "loadConfig"
+}

@@ -1,0 +1,16 @@
+[
+  {
+    "capabilities": {},
+    "contextWindow": 400000,
+    "displayName": "gpt-5",
+    "id": "gpt-5",
+    "maxOutput": null
+  },
+  {
+    "capabilities": {},
+    "contextWindow": null,
+    "displayName": "o3",
+    "id": "o3",
+    "maxOutput": null
+  }
+]

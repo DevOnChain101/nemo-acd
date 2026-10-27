@@ -1,0 +1,5 @@
+{
+  "content": "{\"type\":\"user\",\"timestamp\":\"2026-10-02T00:00:01.000Z\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"x\",\"content\":\"ok\",\"is_error\":false}]}}\n{\"type\":\"user\",\"timestamp\":\"2026-10-02T00:00:02.000Z\",\"message\":{\"role\":\"user\",\"content\":\"meta\"},\"isMeta\":true}\n{\"type\":\"user\",\"timestamp\":\"2026-10-02T00:00:03.000Z\",\"message\":{\"role\":\"user\",\"content\":\"ok\"},\"displayText\":\"/cmd arg\"}\n",
+  "fn": "sessionMeta",
+  "op": "loadFile"
+}

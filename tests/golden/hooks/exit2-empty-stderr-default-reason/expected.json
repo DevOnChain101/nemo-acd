@@ -1,0 +1,15 @@
+{
+  "additionalContext": [],
+  "blocked": true,
+  "decision": "deny",
+  "reason": "blocked by hook",
+  "results": [
+    {
+      "command": "exit 2",
+      "exitCode": 2,
+      "stderr": "",
+      "stdout": ""
+    }
+  ],
+  "stop": false
+}

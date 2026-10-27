@@ -1,0 +1,33 @@
+{
+  "calls": [
+    {
+      "input": {},
+      "tool": "Write"
+    },
+    {
+      "input": {},
+      "tool": "MultiEdit"
+    },
+    {
+      "input": {
+        "url": "https://docs.example.com/a?b"
+      },
+      "tool": "WebFetch"
+    },
+    {
+      "input": {
+        "url": "nope"
+      },
+      "tool": "WebFetch"
+    },
+    {
+      "input": {},
+      "tool": "Read"
+    },
+    {
+      "input": {},
+      "tool": "mcp__a__b"
+    }
+  ],
+  "op": "suggestions"
+}

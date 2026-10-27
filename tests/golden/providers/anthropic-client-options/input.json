@@ -1,0 +1,23 @@
+{
+  "cases": [
+    {},
+    {
+      "apiKey": "k",
+      "baseURL": "https://gw.test/v1"
+    },
+    {
+      "apiKey": "k",
+      "authToken": "t",
+      "baseURL": "https://gw.test/v1/"
+    },
+    {
+      "baseURL": "https://gw.test/prefix/v1",
+      "headers": {
+        "A": "b"
+      }
+    },
+    {}
+  ],
+  "op": "clientOptions",
+  "provider": "anthropic"
+}

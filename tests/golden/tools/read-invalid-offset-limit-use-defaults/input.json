@@ -1,0 +1,24 @@
+{
+  "dirs": [],
+  "files": {
+    "<TMP>/ws/a.txt": "line 1\nline 2\nline 3\n"
+  },
+  "steps": [
+    {
+      "input": {
+        "file_path": "a.txt",
+        "limit": 0,
+        "offset": -4
+      },
+      "tool": "Read"
+    },
+    {
+      "input": {
+        "file_path": "a.txt",
+        "limit": "x",
+        "offset": 1.5
+      },
+      "tool": "Read"
+    }
+  ]
+}

@@ -1,0 +1,286 @@
+{
+  "items": [
+    {
+      "images": [],
+      "kind": "user",
+      "text": "build it",
+      "ts": 1790899200000
+    },
+    {
+      "end": 1790899202000,
+      "id": "t1",
+      "input": {
+        "skill": "scout"
+      },
+      "kind": "tool",
+      "name": "Skill",
+      "result": "ok",
+      "soft": false,
+      "start": 1790899201000,
+      "status": "done",
+      "ts": 1790899201000
+    },
+    {
+      "end": 1790899203000,
+      "id": "t2",
+      "input": {
+        "description": "find files",
+        "subagent_type": "explorer"
+      },
+      "kind": "tool",
+      "name": "Agent",
+      "result": "ok",
+      "soft": false,
+      "start": 1790899201000,
+      "status": "done",
+      "ts": 1790899201000
+    },
+    {
+      "end": 1790899203000,
+      "id": "t3",
+      "input": {
+        "todos": [
+          {
+            "content": "a",
+            "status": "completed"
+          },
+          {
+            "activeForm": "Doing b",
+            "content": "b",
+            "status": "in_progress"
+          }
+        ]
+      },
+      "kind": "tool",
+      "name": "TodoWrite",
+      "result": "ok",
+      "soft": false,
+      "start": 1790899201000,
+      "status": "done",
+      "ts": 1790899201000
+    },
+    {
+      "end": 1790899203000,
+      "id": "t4",
+      "input": {
+        "command": "false"
+      },
+      "kind": "tool",
+      "name": "Bash",
+      "result": "exit 1",
+      "soft": false,
+      "start": 1790899201000,
+      "status": "error",
+      "ts": 1790899201000
+    }
+  ],
+  "phase": {
+    "phase": "thinking",
+    "running": [],
+    "runningAgents": []
+  },
+  "session": {
+    "activity": [
+      {
+        "kind": "prompt",
+        "text": "build it",
+        "ts": 1790899200000
+      }
+    ],
+    "agents": {
+      "t2": {
+        "agentId": null,
+        "background": true,
+        "contextUsed": 0,
+        "currentTool": null,
+        "description": "find files",
+        "end": 1790899203000,
+        "lastActivity": 1790899201000,
+        "start": 1790899201000,
+        "status": "done",
+        "tokens": {
+          "cacheCreate": 0,
+          "cacheRead": 0,
+          "input": 0,
+          "output": 0
+        },
+        "toolCount": 0,
+        "toolUseId": "t2",
+        "type": "explorer",
+        "usageById": {}
+      }
+    },
+    "components": {
+      "skill:scout": {
+        "count": 1,
+        "error": false,
+        "firstSeen": 1790899201000,
+        "key": "skill:scout",
+        "kind": "skill",
+        "lastEnd": 1790899202000,
+        "lastStart": 1790899201000,
+        "name": "scout",
+        "open": 0,
+        "sub": "scout"
+      },
+      "tool:Bash": {
+        "count": 1,
+        "error": true,
+        "firstSeen": 1790899201000,
+        "key": "tool:Bash",
+        "kind": "tool",
+        "lastEnd": 1790899203000,
+        "lastStart": 1790899201000,
+        "name": "Bash",
+        "open": 0,
+        "sub": "false"
+      },
+      "tool:TodoWrite": {
+        "count": 1,
+        "error": false,
+        "firstSeen": 1790899201000,
+        "key": "tool:TodoWrite",
+        "kind": "tool",
+        "lastEnd": 1790899203000,
+        "lastStart": 1790899201000,
+        "name": "TodoWrite",
+        "open": 0,
+        "sub": "2 todos"
+      }
+    },
+    "contextUsed": 0,
+    "cwd": "",
+    "errors": 1,
+    "feed": [
+      {
+        "kind": "prompt",
+        "text": "build it",
+        "ts": 1790899200000
+      },
+      {
+        "kind": "skill",
+        "text": "Skill scout",
+        "ts": 1790899201000
+      },
+      {
+        "kind": "agent",
+        "text": "Delegate → explorer: find files",
+        "ts": 1790899201000
+      },
+      {
+        "kind": "tool",
+        "text": "TodoWrite 2 todos",
+        "ts": 1790899201000
+      },
+      {
+        "kind": "tool",
+        "text": "Bash false",
+        "ts": 1790899201000
+      },
+      {
+        "kind": "agent",
+        "text": "explorer finished",
+        "ts": 1790899203000
+      },
+      {
+        "kind": "error",
+        "text": "Bash failed: exit 1",
+        "ts": 1790899203000
+      }
+    ],
+    "gitBranch": "",
+    "hookCounts": {},
+    "id": "sess",
+    "lastActivity": 1790899203000,
+    "lastAssistantAt": 1790899201000,
+    "lastPrompt": "build it",
+    "lastPromptAt": 1790899200000,
+    "lastStopReason": "tool_use",
+    "lastUserAt": 1790899203000,
+    "lastVerify": null,
+    "memoryWrites": 0,
+    "model": "claude-opus-5.5",
+    "prompts": 1,
+    "skills": {
+      "scout": 1
+    },
+    "startedAt": 1790899200000,
+    "timeline": [
+      {
+        "total": 0,
+        "ts": 1790899201000
+      }
+    ],
+    "todos": [
+      {
+        "activeForm": "",
+        "content": "a",
+        "id": "1",
+        "status": "completed"
+      },
+      {
+        "activeForm": "Doing b",
+        "content": "b",
+        "id": "2",
+        "status": "in_progress"
+      }
+    ],
+    "tokens": {
+      "cacheCreate": 0,
+      "cacheRead": 0,
+      "input": 0,
+      "output": 0
+    },
+    "toolCounts": {
+      "Agent": 1,
+      "Bash": 1,
+      "Skill": 1,
+      "TodoWrite": 1
+    },
+    "tools": {
+      "t1": {
+        "cat": "orchestrate",
+        "compKey": "skill:scout",
+        "end": 1790899202000,
+        "id": "t1",
+        "isError": false,
+        "name": "Skill",
+        "start": 1790899201000,
+        "summary": "scout"
+      },
+      "t2": {
+        "cat": "orchestrate",
+        "end": 1790899203000,
+        "id": "t2",
+        "isError": false,
+        "name": "Agent",
+        "start": 1790899201000,
+        "summary": "explorer: find files"
+      },
+      "t3": {
+        "cat": "plan",
+        "compKey": "tool:TodoWrite",
+        "end": 1790899203000,
+        "id": "t3",
+        "isError": false,
+        "name": "TodoWrite",
+        "start": 1790899201000,
+        "summary": "2 todos"
+      },
+      "t4": {
+        "cat": "execute",
+        "compKey": "tool:Bash",
+        "end": 1790899203000,
+        "id": "t4",
+        "isError": true,
+        "name": "Bash",
+        "start": 1790899201000,
+        "summary": "false"
+      }
+    },
+    "turnReplied": false,
+    "usageById": {},
+    "version": ""
+  },
+  "total_tokens": 0
+}

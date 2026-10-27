@@ -1,0 +1,73 @@
+{
+  "entries": [
+    {
+      "message": {
+        "content": "real one",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:01.000Z",
+      "type": "user"
+    },
+    {
+      "message": {
+        "content": "<system-reminder>x</system-reminder>",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:02.000Z",
+      "type": "user"
+    },
+    {
+      "message": {
+        "content": "[Request interrupted by user]",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:03.000Z",
+      "type": "user"
+    },
+    {
+      "message": {
+        "content": "Caveat: x",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:04.000Z",
+      "type": "user"
+    },
+    {
+      "message": {
+        "content": "<command-name>/x</command-name>",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:05.000Z",
+      "type": "user"
+    },
+    {
+      "isMeta": false,
+      "message": {
+        "content": "second",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:06.000Z",
+      "type": "user"
+    },
+    {
+      "isMeta": true,
+      "message": {
+        "content": "meta",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:07.000Z",
+      "type": "user"
+    },
+    {
+      "isSidechain": true,
+      "message": {
+        "content": "side",
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:08.000Z",
+      "type": "user"
+    }
+  ],
+  "now": 1790899800000,
+  "op": "replay"
+}

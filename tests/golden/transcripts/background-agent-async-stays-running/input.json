@@ -1,0 +1,43 @@
+{
+  "entries": [
+    {
+      "message": {
+        "content": [
+          {
+            "id": "t1",
+            "input": {
+              "description": "bg"
+            },
+            "name": "Agent",
+            "type": "tool_use"
+          }
+        ],
+        "id": "m1",
+        "model": "claude-opus-5.5"
+      },
+      "timestamp": "2026-10-02T00:00:01.000Z",
+      "type": "assistant"
+    },
+    {
+      "message": {
+        "content": [
+          {
+            "content": "x",
+            "is_error": false,
+            "tool_use_id": "t1",
+            "type": "tool_result"
+          }
+        ],
+        "role": "user"
+      },
+      "timestamp": "2026-10-02T00:00:02.000Z",
+      "toolUseResult": {
+        "agentId": "abc",
+        "status": "async_launched"
+      },
+      "type": "user"
+    }
+  ],
+  "now": 1790899800000,
+  "op": "replay"
+}

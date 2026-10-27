@@ -1,0 +1,15 @@
+{
+  "additionalContext": [
+    "ctx-from-session-start"
+  ],
+  "blocked": false,
+  "results": [
+    {
+      "command": "printf '%s' 'ctx-from-session-start'",
+      "exitCode": 0,
+      "stderr": "",
+      "stdout": "ctx-from-session-start"
+    }
+  ],
+  "stop": false
+}

@@ -1,0 +1,96 @@
+[
+  {
+    "input": {},
+    "suggestions": [
+      {
+        "destination": "session",
+        "mode": "acceptEdits",
+        "type": "setMode"
+      }
+    ],
+    "tool": "Write"
+  },
+  {
+    "input": {},
+    "suggestions": [
+      {
+        "destination": "session",
+        "mode": "acceptEdits",
+        "type": "setMode"
+      }
+    ],
+    "tool": "MultiEdit"
+  },
+  {
+    "input": {
+      "url": "https://docs.example.com/a?b"
+    },
+    "suggestions": [
+      {
+        "behavior": "allow",
+        "destination": "session",
+        "rules": [
+          {
+            "ruleContent": "domain:docs.example.com",
+            "toolName": "WebFetch"
+          }
+        ],
+        "type": "addRules"
+      }
+    ],
+    "tool": "WebFetch"
+  },
+  {
+    "input": {
+      "url": "nope"
+    },
+    "suggestions": [
+      {
+        "behavior": "allow",
+        "destination": "session",
+        "rules": [
+          {
+            "ruleContent": "domain:",
+            "toolName": "WebFetch"
+          }
+        ],
+        "type": "addRules"
+      }
+    ],
+    "tool": "WebFetch"
+  },
+  {
+    "input": {},
+    "suggestions": [
+      {
+        "behavior": "allow",
+        "destination": "session",
+        "rules": [
+          {
+            "ruleContent": null,
+            "toolName": "Read"
+          }
+        ],
+        "type": "addRules"
+      }
+    ],
+    "tool": "Read"
+  },
+  {
+    "input": {},
+    "suggestions": [
+      {
+        "behavior": "allow",
+        "destination": "session",
+        "rules": [
+          {
+            "ruleContent": null,
+            "toolName": "mcp__a__b"
+          }
+        ],
+        "type": "addRules"
+      }
+    ],
+    "tool": "mcp__a__b"
+  }
+]

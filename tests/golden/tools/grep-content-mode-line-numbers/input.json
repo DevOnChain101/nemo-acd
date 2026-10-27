@@ -1,0 +1,16 @@
+{
+  "dirs": [],
+  "files": {
+    "<TMP>/ws/a.js": "const foo = 1;\nfunction bar() {}\nFOO again\n"
+  },
+  "steps": [
+    {
+      "input": {
+        "output_mode": "content",
+        "path": "a.js",
+        "pattern": "foo"
+      },
+      "tool": "Grep"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "dirs": [],
+  "files": {},
+  "steps": [
+    {
+      "input": {
+        "file_path": "nope.txt"
+      },
+      "tool": "Read"
+    }
+  ]
+}

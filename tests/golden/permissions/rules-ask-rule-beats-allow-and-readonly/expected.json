@@ -1,0 +1,38 @@
+[
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "matched an ask rule",
+        "rule": true
+      },
+      "auto": {
+        "decision": "ask",
+        "reason": "matched an ask rule",
+        "rule": true
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "matched an ask rule",
+        "rule": true
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "dontAsk mode: ask rule becomes deny"
+      },
+      "plan": {
+        "decision": "ask",
+        "reason": "matched an ask rule",
+        "rule": true
+      }
+    },
+    "input": {
+      "command": "ls -la"
+    },
+    "tool": "Bash"
+  }
+]

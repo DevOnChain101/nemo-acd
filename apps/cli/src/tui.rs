@@ -1,0 +1,290 @@
+//! `nemo` / `nemo tui`: the interactive app over the same harness wiring as `nemo run`.
+
+use std::io::IsTerminal;
+use std::path::{Path, PathBuf};
+
+use clap::Args;
+use nemo_config::Env;
+use nemo_core::TaskStatus;
+use nemo_harness::TaskOutcome;
+use nemo_tui::{ExitReason, OnceOptions, Options, Tty, load_resume};
+use nemo_tui_base::Platform;
+use nemo_tui_base::sgr::ColorMode;
+
+use crate::homes;
+use crate::run::{Common, Front, Limits, Prepared, prepare, sandbox_notices, sandbox_status};
+
+#[derive(Args)]
+pub struct TuiArgs {
+    /// Start folder (required: no implicit process cwd).
+    #[arg(long)]
+    pub cwd: Option<PathBuf>,
+    /// Reopen a saved session (id or unique prefix).
+    #[arg(long, value_name = "ID")]
+    pub resume: Option<String>,
+    /// Print one frame to stdout and exit (no terminal needed).
+    #[arg(long)]
+    pub once: bool,
+    #[command(flatten)]
+    pub common: Common,
+}
+
+const USAGE: &str = "nemo: the interactive app needs a terminal on stdin and stdout.\nUsage: nemo --cwd DIR [--resume ID] [--once] [--worktree] [--sandbox MODE] [--network MODE] ...\n       nemo run --cwd DIR --prompt TEXT   (headless; events as JSONL)\n       nemo --help";
+
+fn start_dir(a: &TuiArgs) -> Result<PathBuf, String> {
+    // The workspace is always explicit (clippy.toml forbids reading the process cwd).
+    let d = a
+        .cwd
+        .as_ref()
+        .ok_or("pass --cwd DIR: nemo never assumes the process working directory")?;
+    std::fs::canonicalize(d).map_err(|e| format!("--cwd {}: {e}", d.display()))
+}
+
+/// Canonical project root of `cwd`.
+fn root_of(cwd: &Path) -> PathBuf {
+    let r = nemo_settings::find_project_root(cwd);
+    std::fs::canonicalize(&r).unwrap_or(r)
+}
+
+/// `--trust-project` / `--approve-mcp` were granted for ONE project root. After OpenFolder or
+/// Resume moved to another root they are dropped (Untrusted, no re-prompt in v1: relaunch with
+/// --cwd for that project to trust it).
+fn common_for(c: &Common, granted: &Path, cwd: &Path) -> Common {
+    let mut c = c.clone();
+    if c.trust_project && root_of(cwd) != granted {
+        eprintln!(
+            "nemo: project root changed; --trust-project and --approve-mcp apply only to {}, so this project is untrusted",
+            nemo_harness::sanitize_for_display(&granted.display().to_string())
+        );
+        c.trust_project = false;
+        c.approve_mcp.clear();
+    }
+    c
+}
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as i64)
+}
+
+fn once(a: &TuiArgs, env: &Env) -> Result<u8, String> {
+    let h = homes(env)?;
+    let resume = a
+        .resume
+        .as_deref()
+        .map(|id| load_resume(&h.nemo, id))
+        .transpose()?;
+    let cwd = match &resume {
+        Some(r) => r.record.cwd.clone(),
+        None => start_dir(a)?.to_string_lossy().into_owned(),
+    };
+    let (cols, rows) = nemo_tui::size_from_env(env);
+    let o = OnceOptions {
+        cwd,
+        session_id: resume
+            .as_ref()
+            .map_or_else(String::new, |r| r.record.id.clone()),
+        model: resume
+            .as_ref()
+            .map_or_else(String::new, |r| r.record.model_config_id.clone()),
+        version: env!("CARGO_PKG_VERSION").into(),
+        budget: resume
+            .as_ref()
+            .map(|r| r.record.budget.clone())
+            .unwrap_or_default(),
+        sandbox: sandbox_status(a.common.sandbox.mode(), false),
+        mode: nemo_permissions::Mode::Default,
+        events: resume.map(|r| r.events).unwrap_or_default(),
+        saved: nemo_tui::list_saved(&h.nemo, None).unwrap_or_default(),
+        cols,
+        rows,
+        now: now_ms(),
+        color: ColorMode::detect(env, Platform::current()),
+        // --once starts nothing (no MCP, no agents): only the flag warnings apply.
+        startup_notes: sandbox_notices(a.common.sandbox.mode(), a.common.network),
+    };
+    match nemo_tui::render_once(&o, &mut std::io::stdout()) {
+        Err(e) if e.kind() != std::io::ErrorKind::BrokenPipe => Err(e.to_string()),
+        _ => Ok(0),
+    }
+}
+
+pub fn launch(a: TuiArgs, env: Env) -> Result<u8, String> {
+    if a.once {
+        return once(&a, &env);
+    }
+    if !(std::io::stdin().is_terminal() && std::io::stdout().is_terminal()) {
+        eprintln!("{USAGE}");
+        return Ok(2);
+    }
+    let h = homes(&env)?;
+    let mut cwd = start_dir(&a)?;
+    let granted = root_of(&cwd);
+    let mut resume = a
+        .resume
+        .as_deref()
+        .map(|id| load_resume(&h.nemo, id))
+        .transpose()?;
+    loop {
+        if let Some(r) = &resume {
+            cwd = PathBuf::from(&r.record.cwd);
+        }
+        let common = common_for(&a.common, &granted, &cwd);
+        let p = prepare(
+            &common,
+            &cwd,
+            &env,
+            &Limits::default(),
+            Front::Tui,
+            resume.as_ref(),
+        )?;
+        let Prepared {
+            harness,
+            session,
+            sid,
+            link,
+            tokio,
+            rt,
+            mcp,
+            worktree,
+            label,
+            models,
+            sandbox,
+            notices,
+            homes: ph,
+            ..
+        } = p;
+        let mut o = Options::new(
+            harness.clone(),
+            session,
+            link.unwrap_or_default(),
+            tokio.handle().clone(),
+            env.clone(),
+        );
+        o.version = env!("CARGO_PKG_VERSION").into();
+        o.model = Some(label);
+        o.models = models;
+        o.sandbox = sandbox;
+        o.startup_notes = notices;
+        o.saved = nemo_tui::list_saved(&ph.nemo, None).unwrap_or_default();
+        o.resume = resume.take();
+        let exit = nemo_tui::run_interactive(o, Tty::stdio(&env)).map_err(|e| e.to_string());
+        // The harness ends the session whatever the UI returned.
+        let outcome = exit
+            .as_ref()
+            .ok()
+            .and_then(|e| e.last_outcome.clone())
+            .unwrap_or(TaskOutcome {
+                task_id: String::new(),
+                status: TaskStatus::Completed,
+                reason: "closed".into(),
+                verification_report_id: None,
+                final_text: String::new(),
+                usage: nemo_events::Usage {
+                    input_tokens: 0,
+                    output_tokens: 0,
+                    cache_read_input_tokens: None,
+                    cache_creation_input_tokens: None,
+                    cost_usd: None,
+                },
+                changed_files: vec![],
+                messages: vec![],
+            });
+        harness.end_session(&outcome);
+        rt.close_session(&sid);
+        if let Some(m) = &mcp {
+            tokio.block_on(m.close());
+        }
+        if let Some(w) = &worktree {
+            eprintln!("nemo: {}", w.finish(a.common.cleanup_worktree));
+        }
+        drop(harness);
+        match exit?.reason {
+            ExitReason::OpenFolder(p) => {
+                cwd = std::fs::canonicalize(&p).map_err(|e| format!("{}: {e}", p.display()))?;
+            }
+            ExitReason::Resume(id) => resume = Some(load_resume(&ph.nemo, &id)?),
+            ExitReason::Quit | ExitReason::InputClosed => return Ok(0),
+        }
+    }
+}
+
+#[cfg(all(test, unix, feature = "test-provider"))]
+mod tests {
+    use super::*;
+    use clap::Parser;
+    use serde_json::json;
+
+    #[derive(Parser)]
+    struct W {
+        #[command(flatten)]
+        c: Common,
+    }
+
+    fn hostile_repo(dir: &Path, marker: &Path) {
+        let w = |f: &str, t: String| {
+            let p = dir.join(f);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, t).unwrap();
+        };
+        let srv = json!({"command": "sh", "args": ["-c", format!("touch {}", marker.display())]});
+        w(
+            ".mcp.json",
+            json!({"mcpServers": {"proj": srv}}).to_string(),
+        );
+        w(
+            ".nemo/config.json",
+            json!({"$schema": "config.json/v1", "mcp": {"cfg": srv}}).to_string(),
+        );
+        w(".nemo/settings.json", json!({"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": format!("touch {}", marker.display())}]}]}, "enableAllProjectMcpServers": true}).to_string());
+        w(
+            ".nemo/agents/evil.md",
+            "---\nname: evil\ndescription: d\n---\nbody".into(),
+        );
+    }
+
+    #[test]
+    fn trust_does_not_follow_a_relaunch_to_another_project() {
+        let d = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(d.path()).unwrap();
+        let (a, b) = (root.join("a"), root.join("b"));
+        let (ma, mb) = (root.join("marker-a"), root.join("marker-b"));
+        for (r, m) in [(&a, &ma), (&b, &mb)] {
+            std::fs::create_dir_all(r.join(".git")).unwrap();
+            hostile_repo(r, m);
+        }
+        let script = root.join("s.json");
+        std::fs::write(&script, "[{\"text\":\"ok\"}]").unwrap();
+        let provider = format!("fake:{}", script.display());
+        let w = W::parse_from([
+            "t",
+            "--provider",
+            &provider,
+            "--trust-project",
+            "--approve-mcp",
+            "proj",
+            "--no-session-store",
+        ]);
+        let env = Env::from_pairs([
+            ("HOME", root.to_string_lossy().into_owned()),
+            (
+                "NEMO_HOME",
+                root.join("nemo").to_string_lossy().into_owned(),
+            ),
+            ("PATH", std::env::var("PATH").unwrap_or_default()),
+        ]);
+        let granted = root_of(&a);
+        let run = |cwd: &Path| {
+            let c = common_for(&w.c, &granted, cwd);
+            let p = prepare(&c, cwd, &env, &Limits::default(), Front::Tui, None).unwrap();
+            (c.trust_project, p.mcp.is_some())
+        };
+        // the project it was granted for keeps it (positive control: the server starts)
+        assert_eq!(run(&a), (true, true));
+        assert!(ma.exists());
+        // OpenFolder/Resume to a second hostile repo: untrusted, nothing of it is used
+        assert_eq!(run(&b), (false, false));
+        assert!(!mb.exists(), "hostile repo must not run anything");
+    }
+}

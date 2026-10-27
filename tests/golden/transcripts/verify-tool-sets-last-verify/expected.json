@@ -1,0 +1,138 @@
+{
+  "items": [
+    {
+      "end": 1790899202000,
+      "id": "t1",
+      "input": {
+        "command": "npm test",
+        "description": "run tests"
+      },
+      "kind": "tool",
+      "name": "Bash",
+      "result": "fail",
+      "soft": false,
+      "start": 1790899201000,
+      "status": "error",
+      "ts": 1790899201000
+    },
+    {
+      "end": 1790899204000,
+      "id": "t2",
+      "input": {
+        "command": "cargo test"
+      },
+      "kind": "tool",
+      "name": "Bash",
+      "result": "ok",
+      "soft": false,
+      "start": 1790899203000,
+      "status": "done",
+      "ts": 1790899203000
+    }
+  ],
+  "phase": {
+    "phase": "idle",
+    "running": [],
+    "runningAgents": []
+  },
+  "session": {
+    "activity": [],
+    "agents": {},
+    "components": {
+      "tool:Bash": {
+        "count": 2,
+        "error": false,
+        "firstSeen": 1790899201000,
+        "key": "tool:Bash",
+        "kind": "tool",
+        "lastEnd": 1790899204000,
+        "lastStart": 1790899203000,
+        "name": "Bash",
+        "open": 0,
+        "sub": "cargo test"
+      }
+    },
+    "contextUsed": 0,
+    "cwd": "",
+    "errors": 1,
+    "feed": [
+      {
+        "kind": "tool",
+        "text": "Bash run tests",
+        "ts": 1790899201000
+      },
+      {
+        "kind": "error",
+        "text": "Bash failed: fail",
+        "ts": 1790899202000
+      },
+      {
+        "kind": "tool",
+        "text": "Bash cargo test",
+        "ts": 1790899203000
+      }
+    ],
+    "gitBranch": "",
+    "hookCounts": {},
+    "id": "sess",
+    "lastActivity": 1790899204000,
+    "lastAssistantAt": 1790899203000,
+    "lastPrompt": "",
+    "lastPromptAt": null,
+    "lastStopReason": null,
+    "lastUserAt": 1790899204000,
+    "lastVerify": {
+      "name": "Bash",
+      "ok": true,
+      "summary": "cargo test",
+      "ts": 1790899204000
+    },
+    "memoryWrites": 0,
+    "model": "claude-opus-5.5",
+    "prompts": 0,
+    "skills": {},
+    "startedAt": 1790899201000,
+    "timeline": [
+      {
+        "total": 0,
+        "ts": 1790899201000
+      }
+    ],
+    "todos": [],
+    "tokens": {
+      "cacheCreate": 0,
+      "cacheRead": 0,
+      "input": 0,
+      "output": 0
+    },
+    "toolCounts": {
+      "Bash": 2
+    },
+    "tools": {
+      "t1": {
+        "cat": "verify",
+        "compKey": "tool:Bash",
+        "end": 1790899202000,
+        "id": "t1",
+        "isError": true,
+        "name": "Bash",
+        "start": 1790899201000,
+        "summary": "run tests"
+      },
+      "t2": {
+        "cat": "verify",
+        "compKey": "tool:Bash",
+        "end": 1790899204000,
+        "id": "t2",
+        "isError": false,
+        "name": "Bash",
+        "start": 1790899203000,
+        "summary": "cargo test"
+      }
+    },
+    "turnReplied": false,
+    "usageById": {},
+    "version": ""
+  },
+  "total_tokens": 0
+}

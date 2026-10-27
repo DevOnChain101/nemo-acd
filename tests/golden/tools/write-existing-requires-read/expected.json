@@ -1,0 +1,17 @@
+{
+  "steps": [
+    {
+      "content": "Write: <TMP>/ws/a.txt exists and has not been read in this conversation (or changed since). Read it first.",
+      "isError": true,
+      "soft": true,
+      "tool": "Write"
+    }
+  ],
+  "tree_after": [
+    {
+      "content": "old",
+      "path": "a.txt",
+      "type": "file"
+    }
+  ]
+}

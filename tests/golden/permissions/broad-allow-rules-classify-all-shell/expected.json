@@ -1,0 +1,22 @@
+[
+  {
+    "broad": true,
+    "rule": "Bash"
+  },
+  {
+    "broad": true,
+    "rule": "Bash(ls:*)"
+  },
+  {
+    "broad": true,
+    "rule": "Bash(ls)"
+  },
+  {
+    "broad": false,
+    "rule": "Read"
+  },
+  {
+    "broad": true,
+    "rule": "Task"
+  }
+]

@@ -1,0 +1,15 @@
+{
+  "additionalContext": [
+    "remember: be concise"
+  ],
+  "blocked": false,
+  "results": [
+    {
+      "command": "printf '%s' 'remember: be concise'",
+      "exitCode": 0,
+      "stderr": "",
+      "stdout": "remember: be concise"
+    }
+  ],
+  "stop": false
+}

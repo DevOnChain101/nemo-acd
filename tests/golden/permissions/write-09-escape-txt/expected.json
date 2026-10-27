@@ -1,0 +1,80 @@
+[
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "edit tool requires confirmation"
+      },
+      "auto": {
+        "decision": "classify",
+        "reason": "edit outside the workspace: classifier review"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "edit tool requires confirmation"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "dontAsk mode"
+      },
+      "plan": {
+        "decision": "deny",
+        "reason": "plan mode: read-only"
+      }
+    },
+    "input": {
+      "file_path": "../escape.txt"
+    },
+    "suggestions": [
+      {
+        "destination": "session",
+        "mode": "acceptEdits",
+        "type": "setMode"
+      }
+    ],
+    "tool": "Write"
+  },
+  {
+    "by_mode": {
+      "acceptEdits": {
+        "decision": "ask",
+        "reason": "edit tool requires confirmation"
+      },
+      "auto": {
+        "decision": "classify",
+        "reason": "edit outside the workspace: classifier review"
+      },
+      "bypassPermissions": {
+        "decision": "allow",
+        "reason": "bypassPermissions mode"
+      },
+      "default": {
+        "decision": "ask",
+        "reason": "edit tool requires confirmation"
+      },
+      "dontAsk": {
+        "decision": "deny",
+        "reason": "dontAsk mode"
+      },
+      "plan": {
+        "decision": "deny",
+        "reason": "plan mode: read-only"
+      }
+    },
+    "input": {
+      "file_path": "../escape.txt"
+    },
+    "suggestions": [
+      {
+        "destination": "session",
+        "mode": "acceptEdits",
+        "type": "setMode"
+      }
+    ],
+    "tool": "Edit"
+  }
+]

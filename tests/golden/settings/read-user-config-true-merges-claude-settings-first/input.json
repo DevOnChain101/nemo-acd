@@ -1,0 +1,54 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<HOME>/.claude/settings.json": {
+      "hooks": {
+        "Stop": [
+          {
+            "hooks": [
+              {
+                "command": "echo c",
+                "type": "command"
+              }
+            ]
+          }
+        ]
+      },
+      "permissions": {
+        "allow": [
+          "ClaudeOnly"
+        ],
+        "defaultMode": "acceptEdits"
+      }
+    },
+    "<HOME>/.nemo/nemo.json": {
+      "claude": {
+        "readUserConfig": true
+      }
+    },
+    "<HOME>/.nemo/settings.json": {
+      "permissions": {
+        "allow": [
+          "Read"
+        ],
+        "defaultMode": "plan"
+      }
+    },
+    "<TMP>/ws/.nemo/settings.json": {
+      "hooks": {
+        "Stop": [
+          {
+            "hooks": [
+              {
+                "command": "echo p",
+                "type": "command"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "op": "workspace"
+}

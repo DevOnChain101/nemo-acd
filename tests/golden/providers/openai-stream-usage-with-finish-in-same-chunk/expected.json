@@ -1,0 +1,66 @@
+{
+  "create_call_option_keys": [
+    "signal"
+  ],
+  "events": [
+    {
+      "message": {
+        "id": "chatcmpl-1",
+        "model": "gpt-5",
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      "type": "message_start"
+    },
+    {
+      "content_block": {
+        "text": "",
+        "type": "text"
+      },
+      "index": 0,
+      "type": "content_block_start"
+    },
+    {
+      "delta": {
+        "text": "x",
+        "type": "text_delta"
+      },
+      "index": 0,
+      "type": "content_block_delta"
+    },
+    {
+      "index": 0,
+      "type": "content_block_stop"
+    },
+    {
+      "delta": {
+        "stop_reason": "end_turn"
+      },
+      "type": "message_delta",
+      "usage": {
+        "input_tokens": 3,
+        "output_tokens": 4
+      }
+    },
+    {
+      "type": "message_stop"
+    }
+  ],
+  "provider_type": "openai",
+  "wire_body": {
+    "max_completion_tokens": 100,
+    "messages": [
+      {
+        "content": "hi",
+        "role": "user"
+      }
+    ],
+    "model": "gpt-5",
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    }
+  }
+}
