@@ -1,4 +1,4 @@
-# Spec: Configuration, layering, env vars, credentials — draft 0.1
+# Spec: Configuration, layering, env vars, credentials — reviewed 0.1
 
 Tags as in events.md. "Faithful port" means golden-tested equality with Node (eval-and-golden.md §B.2).
 

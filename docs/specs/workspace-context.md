@@ -1,4 +1,4 @@
-# Spec: WorkspaceContext, AgentSession, ToolContext, session state machine — draft 0.1
+# Spec: WorkspaceContext, AgentSession, ToolContext, session state machine — reviewed 0.1
 
 Rust below is illustrative (serde-derived, not compiled). Extends doc §5.2 / §7.1. Tags as in events.md.
 

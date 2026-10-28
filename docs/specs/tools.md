@@ -1,4 +1,4 @@
-# Spec: Tool registry, schemas and execution pipeline — draft 0.1
+# Spec: Tool registry, schemas and execution pipeline — reviewed 0.1
 
 Tags as in events.md. Exact `description` strings are not copied here; they are captured verbatim into `tests/golden/tools/schemas.<os>.json` (eval-and-golden.md §B), because Node varies them per OS (Bash text differs on win32 [from-node tools/bash.js:131]).
 

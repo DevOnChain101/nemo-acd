@@ -1,4 +1,4 @@
-# Spec: Eval harness and golden fixtures — draft 0.1
+# Spec: Eval harness and golden fixtures — reviewed 0.1
 
 Tags as in events.md. Eval and golden tooling may be non-Rust (ADR-010). Nothing here edits `~/Vibe/nemo-cli`; capture scripts `require()` its modules read-only through `NEMO_NODE_REF=/path/to/nemo-cli`, and every fixture records the reference commit.
 

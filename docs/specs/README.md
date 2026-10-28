@@ -4,15 +4,17 @@ Phase R1 deliverable (design doc §10 Phase 0, §14). Base: `../Nemo_Solution_Co
 
 | Spec | Covers | Status |
 |---|---|---|
-| [events.md](events.md) | JSONL envelope, event taxonomy, redaction, artifact refs, versioning, headless exit codes | draft 0.1 |
-| [workspace-context.md](workspace-context.md) | `WorkspaceContext`, `AgentSession`, `ToolContext`, state machine, path invariants | draft 0.1 |
-| [tools.md](tools.md) | registry contract, side-effect classes, pipeline, 20 ported schemas, new tool drafts | draft 0.1 |
-| [session-store.md](session-store.md) | Node transcript format, SQLite schema, two-way compatibility plan | draft 0.1 |
-| [config.md](config.md) | files, layering, env vars, `$schema` rules, credential policy (user-managed API keys, ADR-011) | draft 0.1 |
-| [verification.md](verification.md) | `VerificationReport`, status rules, completion gate, self-correction, budgets | draft 0.1 |
-| [eval-and-golden.md](eval-and-golden.md) | eval harness, task manifest, 6+2 scenarios, scoring, golden capture plan | draft 0.1 |
+| [events.md](events.md) | JSONL envelope, event taxonomy, redaction, artifact refs, versioning, headless exit codes | reviewed 0.1 |
+| [workspace-context.md](workspace-context.md) | `WorkspaceContext`, `AgentSession`, `ToolContext`, state machine, path invariants | reviewed 0.1 |
+| [tools.md](tools.md) | registry contract, side-effect classes, pipeline, 20 ported schemas, new tool drafts | reviewed 0.1 |
+| [session-store.md](session-store.md) | Node transcript format, SQLite schema, two-way compatibility plan | reviewed 0.1 |
+| [config.md](config.md) | files, layering, env vars, `$schema` rules, credential policy (user-managed API keys, ADR-011) | reviewed 0.1 |
+| [verification.md](verification.md) | `VerificationReport`, status rules, completion gate, self-correction, budgets | reviewed 0.1 |
+| [eval-and-golden.md](eval-and-golden.md) | eval harness, task manifest, 6+2 scenarios, scoring, golden capture plan | reviewed 0.1 |
 
 Status values: draft → reviewed (product owner + one engineer) → frozen (changes need a `v` bump or an ADR).
+
+Review record: all seven specs were reviewed and approved by the product owner on 2026-10-28 (chat approval; no second engineer reviewer). They stay `reviewed`, not `frozen`. Golden cases are a separate review: every `reviewed_by` in the golden `meta.json` files is still null.
 
 ## Decisions taken in these drafts (challenge them here)
 1. Ported tools keep their Node/Claude names (`Read`, `Bash`, …). Doc §5.6 ids map onto them; new tools use `_` instead of `.` on the wire (dots are not valid in provider tool names). tools.md §1.

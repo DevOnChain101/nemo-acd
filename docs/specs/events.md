@@ -1,6 +1,6 @@
-# Spec: Event stream (JSONL) — v1 draft
+# Spec: Event stream (JSONL) — v1 reviewed
 
-Status: draft 0.1 (R1). Normative words: MUST / SHOULD / MAY. Tags: `[from-node file:line]` = derived from the frozen Node reference (`~/Vibe/nemo-cli`), `[new]` = new design per the design doc §5.12 / §7.3.
+Status: reviewed 0.1 (R1). Normative words: MUST / SHOULD / MAY. Tags: `[from-node file:line]` = derived from the frozen Node reference (`~/Vibe/nemo-cli`), `[new]` = new design per the design doc §5.12 / §7.3.
 
 ## 1. Purpose
 One typed, append-only event stream per session. It is the only interface between the core and every client (TUI, headless CLI, eval harness, future GPUI). It replaces Node's untyped `EventEmitter` + `'update'` repaint signal [from-node agent.js:450-4027]. The same records are persisted (session-store.md `events` table) and streamed on stdout in headless mode.

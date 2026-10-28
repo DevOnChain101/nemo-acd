@@ -1,4 +1,4 @@
-# Spec: Session store and transcript compatibility — draft 0.1
+# Spec: Session store and transcript compatibility — reviewed 0.1
 
 Tags as in events.md. Two formats: (A) the Node transcript JSONL that Rust must READ and, during the parallel run, also WRITE; (B) the new SQLite store (doc §7.2).
 

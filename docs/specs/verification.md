@@ -1,4 +1,4 @@
-# Spec: Verification, completion gate, self-correction, budgets — draft 0.1
+# Spec: Verification, completion gate, self-correction, budgets — reviewed 0.1
 
 Tags as in events.md. Node has no verification engine (doc Appendix C #11). The closest Node piece is the `/goal` judge: a small model reads a summary and decides whether a condition is met [from-node agent.js:1881-1946]. That is a model opinion, not evidence, and it is NOT a verification check here.
 
