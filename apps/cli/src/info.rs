@@ -114,6 +114,24 @@ fn network_support(b: &dyn SandboxBackend) -> String {
         .join(" ")
 }
 
+/// Linux backend availability; `bwrap` is the cached real probe (exact command arguments, run
+/// on `true`): Ok(network support) or the precise failure with its remedy.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn linux_backend_lines(
+    landlock_net: Option<String>,
+    bwrap: Result<String, &String>,
+) -> Vec<String> {
+    let l = match landlock_net {
+        Some(s) => format!("  landlock available: true; network {s}"),
+        None => "  landlock available: false".into(),
+    };
+    let w = match bwrap {
+        Ok(s) => format!("  bwrap available: true (probe ran /bin/true); network {s}"),
+        Err(e) => format!("  bwrap available: false: {}", san(e)),
+    };
+    vec![l, w]
+}
+
 fn git_version(env: &Env) -> Option<String> {
     let path = env.get_nonempty("PATH")?;
     let exe = std::env::split_paths(path)
@@ -166,10 +184,7 @@ pub fn doctor(env: &Env, cwd: Option<&Path>) -> Result<u8, String> {
     }
     if best.name() == "landlock" {
         out!(
-            "  hint: only Landlock is available. It cannot make .git/hooks and .git/config read-only inside the writable workspace, so --sandbox enforce needs bubblewrap (bwrap) with unprivileged user namespaces."
-        );
-        out!(
-            "  hint: on Ubuntu 24.04+ AppArmor restricts them: `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`, or install an AppArmor profile that allows /usr/bin/bwrap to create user namespaces; or run with --sandbox best-effort (unconfined)."
+            "  hint: only Landlock is usable. It cannot make read-only paths (.git/hooks, .git/config) inside the writable workspace, so --sandbox enforce needs a working bubblewrap (see the bwrap line below)."
         );
     }
     out!("  selected {}", guarantees(&*nemo_sandbox::detect()));
@@ -187,18 +202,13 @@ pub fn doctor(env: &Env, cwd: Option<&Path>) -> Result<u8, String> {
         out!("  seatbelt available: false");
     }
     #[cfg(target_os = "linux")]
-    {
-        let l = nemo_sandbox::LinuxLandlockBackend::detect();
-        let w = nemo_sandbox::BwrapBackend::detect();
-        for (n, b) in [
-            ("landlock", l.as_ref().map(|b| network_support(b))),
-            ("bwrap", w.as_ref().map(|b| network_support(b))),
-        ] {
-            match b {
-                Some(s) => out!("  {n} available: true; network {s}"),
-                None => out!("  {n} available: false"),
-            }
-        }
+    for l in linux_backend_lines(
+        nemo_sandbox::LinuxLandlockBackend::detect().map(|b| network_support(&b)),
+        nemo_sandbox::bwrap_probe()
+            .as_ref()
+            .map(|_| network_support(&nemo_sandbox::BwrapBackend::detect().unwrap())),
+    ) {
+        out!("{l}");
     }
     out!(
         "  loopback: macOS exposes HOST loopback services; bwrap = private loopback; landlock/windows unsupported"
@@ -384,4 +394,29 @@ fn report_discovery(env: &Env, h: &crate::Homes, cfg: &Config, cwd: Option<&Path
         ag.project,
         ag.skipped.len()
     );
+    crate::import::doctor_report(&h.nemo, root);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn doctor_lines_show_the_probe_failure_and_remedy() {
+        let why = "bubblewrap not usable: /usr/bin/bwrap failed its probe: bwrap: Can't mount proc on /newroot/proc: Operation not permitted; remedy: --security-opt systempaths=unconfined".to_string();
+        let v = linux_backend_lines(Some("deny=Weak".into()), Err(&why)).join("\n");
+        assert!(
+            v.contains("bwrap available: false") && v.contains("Can't mount proc"),
+            "{v}"
+        );
+        assert!(
+            v.contains("systempaths=unconfined") && v.contains("landlock available: true"),
+            "{v}"
+        );
+        let ok = linux_backend_lines(None, Ok("deny=Strong".into())).join("\n");
+        assert!(
+            ok.contains("bwrap available: true") && ok.contains("landlock available: false"),
+            "{ok}"
+        );
+    }
 }

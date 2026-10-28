@@ -25,6 +25,7 @@ mod ctx;
 mod events;
 #[cfg(feature = "test-provider")]
 mod fake;
+mod import;
 mod info;
 mod mcp;
 mod run;
@@ -76,6 +77,11 @@ enum Cmd {
     Mcp {
         #[command(subcommand)]
         cmd: mcp::McpCmd,
+    },
+    /// Copy/convert another tool's setup into Nemo's own files (dry run unless --apply).
+    Import {
+        #[command(subcommand)]
+        cmd: import::ImportCmd,
     },
 }
 
@@ -141,6 +147,7 @@ fn main() -> ExitCode {
         Some(Cmd::Models(a)) => info::models(&env, &a),
         Some(Cmd::Doctor(a)) => info::doctor(&env, a.cwd.as_deref()),
         Some(Cmd::Mcp { cmd }) => mcp::run_cmd(&env, cmd),
+        Some(Cmd::Import { cmd }) => import::run_cmd(&env, cmd),
     };
     match r {
         Ok(code) => ExitCode::from(code),

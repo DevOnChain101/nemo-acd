@@ -1,0 +1,20 @@
+{
+  "model": "sonnet",
+  "theme": "dark",
+  "statusLine": {"type": "command", "command": "echo hi"},
+  "enabledPlugins": {"x@y": true},
+  "apiKeyHelper": "echo fake",
+  "permissions": {
+    "allow": ["Bash(npm test:*)", "Read(//tmp/**)", "Bash", "PowerShell(ls)", "mcp__srv__tool", "WebFetch(domain:example.com)"],
+    "ask": ["Bash(git push:*)"],
+    "deny": ["Read(./.env)", "Bash(rm -rf:*)", "Monitor(x)"],
+    "defaultMode": "bypassPermissions",
+    "additionalDirectories": ["~/shared"]
+  },
+  "hooks": {
+    "SessionStart": [{"hooks": [{"type": "command", "command": "echo start", "timeout": 5, "statusMessage": "hi"}]}],
+    "PreToolUse": [{"matcher": "Write|Edit", "hooks": [{"type": "command", "command": "check.sh --token ghp_FAKEFAKEFAKEFAKEFAKE0123"}]}],
+    "SubagentStart": [{"hooks": [{"type": "command", "command": "echo sub"}]}]
+  },
+  "env": {"SAFE_FLAG": "1", "EDITOR_THEME": "dark", "MY_API_KEY": "fake-key-value", "DB_PASSWORD": "fake-pass", "ANTHROPIC_BASE_URL": "https://x.example", "CLAUDE_CODE_FOO": "1", "CODEX_HOME": "/x"}
+}

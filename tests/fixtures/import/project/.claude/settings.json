@@ -1,0 +1,5 @@
+{
+  "permissions": {"allow": ["Bash(make:*)"], "deny": ["Read(./secrets/**)"], "defaultMode": "auto"},
+  "hooks": {"PostToolUse": [{"matcher": "Edit", "hooks": [{"type": "command", "command": "fmt.sh"}]}]},
+  "env": {"PROJECT_MODE": "ci", "SLACK_TOKEN": "fake"}
+}

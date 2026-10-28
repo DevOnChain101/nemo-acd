@@ -1,0 +1,15 @@
+{
+  "numStartups": 3,
+  "cachedGrowthBookFeatures": {"a": 1},
+  "oauthAccount": {"emailAddress": "fake@example.com"},
+  "mcpServers": {
+    "fs": {"type": "stdio", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"], "env": {}},
+    "gh": {"type": "http", "url": "https://api.example.com/mcp", "headers": {"Authorization": "Bearer fakefakefake0123456789abcdef", "X-Team": "core"}},
+    "legacy": {"type": "sse", "url": "https://sse.example.com/sse?token=fakeQueryToken0123456789&mode=ro"},
+    "db": {"command": "db-mcp", "args": ["--password", "fakeDbPassw0rd"], "env": {"DB_TOKEN": "ghp_FAKEFAKEFAKEFAKEFAKE0123", "REGION": "eu", "REF": "${REF_VAR}"}},
+    "cloud": {"type": "oauth", "url": "https://cloud.example.com/mcp"}
+  },
+  "projects": {
+    "__PROJECT__": {"allowedTools": [], "mcpServers": {"localsrv": {"command": "local-mcp", "args": ["--port", "1"]}}}
+  }
+}
