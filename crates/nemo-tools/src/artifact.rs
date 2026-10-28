@@ -63,7 +63,7 @@ fn locate(root: &Dir, ctx: &ToolContext, id: &str) -> Result<PathBuf, String> {
     let p = Path::new(id);
     let outside = || format!("\"{id}\" is outside the artifact root.");
     if p.is_absolute() {
-        let base = std::fs::canonicalize(&ctx.workspace.artifact_root)
+        let base = nemo_core::canonicalize(&ctx.workspace.artifact_root)
             .map_err(|_| "this session has no artifacts yet.".to_string())?;
         let abs = lexical_normalize(p);
         if !contains(&base, &abs, ctx.workspace.path_policy) {

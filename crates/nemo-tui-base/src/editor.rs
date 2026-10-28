@@ -29,6 +29,29 @@ pub fn normalized_input(text: &str, max: usize) -> Option<Vec<char>> {
     Some(out)
 }
 
+#[derive(PartialEq)]
+enum Class {
+    Space,
+    Word,
+    Punct,
+}
+
+/// readline word classes. shortcut: combining marks are recognised by block, not by the full
+/// Unicode Mark category; upgrade if a script shows up that splits words wrongly.
+fn class(c: char) -> Class {
+    if is_js_space(c) {
+        Class::Space
+    } else if c.is_alphanumeric()
+        || c == '_'
+        || matches!(c, '\u{300}'..='\u{36f}' | '\u{1ab0}'..='\u{1aff}' | '\u{1dc0}'..='\u{1dff}'
+            | '\u{200d}' | '\u{20d0}'..='\u{20ff}' | '\u{fe00}'..='\u{fe0f}' | '\u{fe20}'..='\u{fe2f}')
+    {
+        Class::Word
+    } else {
+        Class::Punct
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct LineEditor {
     pub chars: Vec<char>,
@@ -155,6 +178,40 @@ impl LineEditor {
         self.chars.drain(self.cur..end);
     }
 
+    /// Alt+Backspace (readline backward-kill-word): spaces, then one run of word characters or
+    /// of punctuation.
+    pub fn kill_word_left(&mut self) {
+        let mut i = self.cur;
+        while i > 0 && class(self.chars[i - 1]) == Class::Space {
+            i -= 1;
+        }
+        if i > 0 {
+            let run = class(self.chars[i - 1]);
+            while i > 0 && class(self.chars[i - 1]) == run {
+                i -= 1;
+            }
+        }
+        self.chars.drain(i..self.cur);
+        self.cur = i;
+    }
+
+    /// Alt+D / Alt+Delete (readline kill-word): spaces, then one run, ahead of the cursor.
+    pub fn kill_word_right(&mut self) {
+        let n = self.chars.len();
+        let mut i = self.cur;
+        while i < n && class(self.chars[i]) == Class::Space {
+            i += 1;
+        }
+        if i < n {
+            let run = class(self.chars[i]);
+            while i < n && class(self.chars[i]) == run {
+                i += 1;
+            }
+        }
+        self.chars.drain(self.cur..i);
+    }
+
+    /// Ctrl+W (unix-word-rubout): whitespace-delimited.
     pub fn kill_word(&mut self) {
         let end = self.cur;
         self.word_left();
@@ -254,6 +311,70 @@ mod tests {
         e.clear();
         e.insert("a\nb");
         assert!(e.multiline());
+    }
+
+    fn ed(text: &str, cur: usize) -> LineEditor {
+        let mut e = LineEditor::new();
+        e.insert(text);
+        e.cur = cur;
+        e
+    }
+
+    #[test]
+    fn alt_backspace_is_readline_backward_kill_word() {
+        let mut e = ed("foo bar_baz  ", 13);
+        e.kill_word_left(); // trailing spaces, then the word run (underscore is a word char)
+        assert_eq!(e.text(), "foo ");
+        e.kill_word_left();
+        assert_eq!(e.text(), "");
+        e.kill_word_left(); // nothing to do at the start
+        assert_eq!(e.text(), "");
+        // punctuation is its own run, unlike Ctrl+W
+        let mut e = ed("cd ~/src/nemo-acd", 17);
+        e.kill_word_left();
+        assert_eq!(e.text(), "cd ~/src/nemo-");
+        e.kill_word_left();
+        assert_eq!(e.text(), "cd ~/src/nemo");
+        let mut w = ed("cd ~/src/nemo-acd", 17);
+        w.kill_word();
+        assert_eq!(w.text(), "cd ");
+        // cursor in the middle: the tail stays
+        let mut e = ed("alpha beta gamma", 10);
+        e.kill_word_left();
+        assert_eq!((e.text().as_str(), e.cur), ("alpha  gamma", 6));
+    }
+
+    #[test]
+    fn word_kills_are_unicode_and_multiline_aware() {
+        let mut e = ed("xin chào việt nam", 17);
+        e.kill_word_left();
+        assert_eq!(e.text(), "xin chào việt ");
+        let mut e = ed("a\nnaïve cafe\u{301}", 13);
+        e.kill_word_left(); // combining accent stays inside the word
+        assert_eq!(e.text(), "a\nnaïve ");
+        e.kill_word_left();
+        e.kill_word_left(); // crosses the newline like readline crosses whitespace
+        assert_eq!(e.text(), "");
+        let mut e = ed("日本語 text", 3);
+        e.kill_word_left();
+        assert_eq!((e.text().as_str(), e.cur), (" text", 0));
+    }
+
+    #[test]
+    fn alt_d_kills_forward() {
+        let mut e = ed("foo  bar.baz", 0);
+        e.kill_word_right();
+        assert_eq!((e.text().as_str(), e.cur), ("  bar.baz", 0));
+        e.kill_word_right();
+        assert_eq!(e.text(), ".baz");
+        e.kill_word_right();
+        assert_eq!(e.text(), "baz");
+        e.kill_word_right();
+        e.kill_word_right();
+        assert_eq!(e.text(), "");
+        let mut e = ed("one two", 3);
+        e.kill_word_right();
+        assert_eq!(e.text(), "one");
     }
 
     #[test]

@@ -6,9 +6,11 @@ use std::collections::HashMap;
 
 use nemo_events::{Envelope, Event, TaskStatus, ToolStatus};
 use nemo_tui_render::agent::{Agent, Item};
+use nemo_tui_render::model::parse_ts;
 use serde_json::Value;
 
 use crate::sanitize::{clean_input_lines, clean_line, clean_text};
+use crate::status::ContextStatus;
 
 /// Running totals the status line shows (`BudgetUsage` only exists at task end).
 #[derive(Clone, Debug, Default)]
@@ -33,9 +35,12 @@ pub struct Chat {
     tools: HashMap<String, usize>,
     text: Option<usize>,
     think: Option<usize>,
+    /// Event time (ms) of the first delta of the open thinking block.
+    think_t0: Option<i64>,
     turn_text: bool,
     pub totals: Totals,
     pub verification: Option<Verification>,
+    pub ctx: ContextStatus,
     /// Task counters start fresh with every task.
     pub task_started: Option<i64>,
     /// Startup notes whose `Notice` event has not come through the event channel yet.
@@ -43,8 +48,23 @@ pub struct Chat {
     startup: Vec<(String, String)>,
 }
 
+/// Most live output text kept per running tool row (the tail).
+const MAX_LIVE: usize = 256 * 1024;
+
 fn touch(it: &mut Item) {
     it.rev += 1;
+}
+
+/// `tool.completed.diff` with every text made safe to draw (file content is untrusted).
+fn clean_diff(d: &Value) -> Value {
+    match d {
+        Value::String(s) => Value::String(clean_text(s)),
+        Value::Array(a) => Value::Array(a.iter().map(clean_diff).collect()),
+        Value::Object(o) => {
+            Value::Object(o.iter().map(|(k, v)| (k.clone(), clean_diff(v))).collect())
+        }
+        v => v.clone(),
+    }
 }
 
 fn note(text: impl Into<String>, tone: &str) -> Item {
@@ -112,10 +132,13 @@ impl Chat {
                 text, display_text, ..
             } => {
                 let t = display_text.as_deref().unwrap_or(text);
-                self.push(item! {
-                    kind: "user".into(),
-                    text: clean_text(t),
-                });
+                // `Some("")`: a note from the harness to the model, not something typed
+                if !t.is_empty() {
+                    self.push(item! {
+                        kind: "user".into(),
+                        text: clean_text(t),
+                    });
+                }
             }
             Event::TurnStarted { .. } => {
                 self.turn_text = false;
@@ -149,11 +172,16 @@ impl Chat {
                                 start: Some(now),
                             });
                             self.think = Some(i);
+                            self.think_t0 = None;
                             i
                         }
                     };
                     let it = &mut self.agent.items[i];
                     it.text.push_str(&clean_text(text));
+                    // the block's duration is first to last delta, so a replay shows the real one
+                    if let Some(t) = parse_ts(&env.ts) {
+                        it.ms = t - *self.think_t0.get_or_insert(t);
+                    }
                     touch(it);
                 }
                 _ => {}
@@ -194,8 +222,43 @@ impl Chat {
             Event::ModelError { message, .. } => {
                 self.note(format!("model error: {message}"), "error")
             }
-            Event::ContextCompacted { trigger, .. } => {
-                self.note(format!("context compacted ({trigger})"), "")
+            Event::ContextUsage {
+                used_tokens,
+                window_tokens,
+                percent,
+                stale,
+                ..
+            } if sub.is_none() => {
+                self.ctx
+                    .on_usage(*used_tokens, *window_tokens, Some(*percent), *stale)
+            }
+            Event::ContextCompacting { .. } if sub.is_none() => self.ctx.on_compacting(),
+            Event::ContextCompactionFailed { reason, error } => {
+                self.ctx.on_compaction_failed();
+                self.note(
+                    format!("context compaction failed ({reason}): {error}"),
+                    "warn",
+                );
+            }
+            Event::ContextCompacted {
+                trigger,
+                tokens_before,
+                before_tokens,
+                after_tokens,
+                window_tokens,
+                ..
+            } => {
+                self.note(format!("context compacted ({trigger})"), "");
+                if sub.is_none() {
+                    // logs from before the numbers existed carry only `tokens_before`
+                    let before = if *before_tokens > 0 {
+                        *before_tokens
+                    } else {
+                        tokens_before.unwrap_or(0)
+                    };
+                    self.ctx
+                        .on_compacted(before, *after_tokens, *window_tokens, now);
+                }
             }
             Event::ToolRequested {
                 tool_call_id,
@@ -222,10 +285,32 @@ impl Chat {
                 });
                 self.tools.insert(tool_call_id.clone(), i);
             }
+            Event::ToolOutput {
+                tool_call_id, text, ..
+            } => {
+                if let Some(&i) = self.tools.get(tool_call_id) {
+                    let it = &mut self.agent.items[i];
+                    it.output.push_str(&clean_text(text));
+                    if it.output.len() > MAX_LIVE {
+                        // the live view is the tail; the whole result arrives with tool.completed
+                        let mut cut = it.output.len() - MAX_LIVE;
+                        while !it.output.is_char_boundary(cut) {
+                            cut += 1;
+                        }
+                        it.output.drain(..cut);
+                    }
+                    touch(it);
+                }
+            }
             Event::ToolCompleted {
                 tool_call_id,
                 status,
                 preview,
+                output,
+                output_truncated,
+                output_bytes,
+                result_ref,
+                diff,
                 ..
             } => {
                 if let Some(&i) = self.tools.get(tool_call_id) {
@@ -237,7 +322,22 @@ impl Chat {
                     }
                     .into();
                     it.soft = *status == ToolStatus::SoftError;
-                    it.result = clean_text(preview);
+                    // the whole model-facing text; the 200-char preview only for older logs
+                    it.result = clean_text(output.as_deref().unwrap_or(preview));
+                    if *output_truncated {
+                        let whole = match result_ref {
+                            Some(a) => format!(
+                                "full output ({output_bytes} bytes): artifact {}",
+                                clean_line(&a.path)
+                            ),
+                            None => format!("the whole ({output_bytes} bytes) could not be saved"),
+                        };
+                        it.result = format!("[output truncated · {whole}]\n{}", it.result);
+                    }
+                    if let Some(d) = diff {
+                        it.diff = clean_diff(d);
+                    }
+                    it.output.clear();
                     it.end = Some(now);
                     touch(it);
                 }
@@ -374,6 +474,7 @@ mod tests {
                     name: format!("T{evil}"),
                     input: json!({ evil: [evil, {"k": evil}], "n": 1 }),
                     input_truncated: false,
+                    origin: None,
                 },
             },
             0,
@@ -389,5 +490,232 @@ mod tests {
             assert!(!all.contains(bad), "{bad} in {all}");
         }
         assert!(it.name.starts_with('T'));
+    }
+
+    /// A stored session: thinking deltas 4.2 s apart, then an Edit with a `diff` and one without.
+    #[test]
+    fn replayed_session_shows_thinking_duration_and_line_numbered_diff() {
+        let line = |seq: u32, ts: &str, ty: &str, payload: Value| {
+            json!({"v": 1, "seq": seq, "ts": ts, "session_id": "s", "task_id": null,
+                "turn_id": null, "type": ty, "payload": payload})
+            .to_string()
+        };
+        let done = |id: &str, diff: Option<Value>| {
+            let mut p = json!({"tool_call_id": id, "name": "Edit", "status": "ok", "is_error": false,
+                "not_run": false, "duration_ms": 1, "preview": "p", "bytes": 1, "truncated": false});
+            if let Some(d) = diff {
+                p["diff"] = d;
+            }
+            p
+        };
+        let input = json!({"file_path": "src/a.rs", "old_string": "let a = 1;", "new_string": "let a = 2;"});
+        let req = |id: &str| json!({"tool_call_id": id, "name": "Edit", "input": input, "input_truncated": false});
+        let diff = json!({"path": "src/a.rs", "kind": "update", "added": 1, "removed": 1, "truncated": false,
+            "hunks": [{"old_start": 41, "old_lines": 1, "new_start": 41, "new_lines": 1,
+                "lines": [{"tag": "-", "old_no": 41, "text": "let a = 1;"}, {"tag": "+", "new_no": 41, "text": "let a = 2;\u{1b}[31m"}]}]});
+        let jsonl = [
+            line(
+                1,
+                "2026-01-01T00:00:00.000Z",
+                "model.delta",
+                json!({"block_index": 0, "kind": "thinking", "text": "hmm "}),
+            ),
+            line(
+                2,
+                "2026-01-01T00:00:04.200Z",
+                "model.delta",
+                json!({"block_index": 0, "kind": "thinking", "text": "ok"}),
+            ),
+            line(3, "2026-01-01T00:00:09.000Z", "tool.requested", req("a")),
+            line(
+                4,
+                "2026-01-01T00:00:10.000Z",
+                "tool.completed",
+                done("a", Some(diff)),
+            ),
+            line(5, "2026-01-01T00:00:11.000Z", "tool.requested", req("b")),
+            line(
+                6,
+                "2026-01-01T00:00:12.000Z",
+                "tool.completed",
+                done("b", None),
+            ),
+        ]
+        .join("\n");
+        let mut chat = Chat::default();
+        for rec in nemo_events::EventReader::new(jsonl.as_bytes()) {
+            let nemo_events::Record::Known(e) = rec.unwrap() else {
+                panic!("known")
+            };
+            chat.apply(&e, parse_ts(&e.ts).unwrap());
+        }
+        let (lines, _) =
+            nemo_tui_render::agent::transcript_rows(&chat.agent, 80, 40, 0, 0, false, 0);
+        let text: Vec<String> = lines
+            .iter()
+            .map(|l| nemo_tui_base::text::strip_ansi(l).trim_end().to_string())
+            .collect();
+        let all = text.join("\n");
+        assert!(all.contains("✻ Thinking · 4.2s"), "{all}");
+        assert!(all.contains("│ hmm ok"), "{all}");
+        assert!(all.contains("Updated src/a.rs — +1 −1 (line 41)"), "{all}");
+        assert!(
+            all.contains("41     − let a = 1;") || all.contains("41    − let a = 1;"),
+            "{all}"
+        );
+        assert!(
+            !all.contains('\u{1b}'),
+            "escape bytes must not reach the screen"
+        );
+        assert!(
+            all.contains("(line numbers unavailable)"),
+            "older event without diff: {all}"
+        );
+    }
+
+    fn env(seq: u64, event: Event) -> Envelope {
+        Envelope {
+            v: 1,
+            seq,
+            ts: "2026-01-01T00:00:00.000Z".into(),
+            session_id: "s".into(),
+            task_id: None,
+            turn_id: None,
+            agent_id: None,
+            event,
+        }
+    }
+
+    fn requested(id: &str, name: &str) -> Event {
+        Event::ToolRequested {
+            tool_call_id: id.into(),
+            name: name.into(),
+            input: json!({"command": "x"}),
+            input_truncated: false,
+            origin: None,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn completed(id: &str, preview: &str, output: Option<&str>, cut: bool, aref: bool) -> Event {
+        Event::ToolCompleted {
+            tool_call_id: id.into(),
+            name: "Bash".into(),
+            status: ToolStatus::Ok,
+            is_error: false,
+            not_run: false,
+            duration_ms: 1,
+            preview: preview.into(),
+            bytes: 9,
+            truncated: false,
+            result_ref: aref.then(|| nemo_events::ArtifactRef {
+                artifact_id: "a".into(),
+                path: "terminal/proc_1-ab.log".into(),
+                size: 9,
+                sha256: "0".into(),
+                mime: "text/plain".into(),
+            }),
+            origin: None,
+            output: output.map(Into::into),
+            output_truncated: cut,
+            output_bytes: 9_000_000,
+            diff: None,
+        }
+    }
+
+    #[test]
+    fn live_output_is_the_running_rows_tail_and_the_completed_row_uses_the_whole_output() {
+        let mut chat = Chat::default();
+        chat.apply(&env(1, requested("c", "Bash")), 0);
+        for (i, t) in ["one\ntw", "o\nthree\n"].iter().enumerate() {
+            chat.apply(
+                &env(
+                    2 + i as u64,
+                    Event::ToolOutput {
+                        tool_call_id: "c".into(),
+                        stream: "merged".into(),
+                        text: (*t).into(),
+                        seq: 1 + i as u64,
+                        origin: None,
+                    },
+                ),
+                0,
+            );
+        }
+        let it = chat.agent.items.last().unwrap();
+        assert_eq!(
+            (it.status.as_str(), it.output.as_str()),
+            ("running", "one\ntwo\nthree\n")
+        );
+        let whole = "one\ntwo\nthree\nfour";
+        chat.apply(
+            &env(4, completed("c", "one\ntwo...", Some(whole), false, false)),
+            5,
+        );
+        let it = chat.agent.items.last().unwrap();
+        assert_eq!(
+            (it.status.as_str(), it.result.as_str(), it.output.as_str()),
+            ("done", whole, "")
+        );
+    }
+
+    #[test]
+    fn a_cut_output_is_marked_with_its_artifact_path_never_silently() {
+        let mut chat = Chat::default();
+        chat.apply(&env(1, requested("c", "mcp__x__y")), 0);
+        chat.apply(
+            &env(2, completed("c", "p", Some("head ... tail"), true, true)),
+            1,
+        );
+        let r = &chat.agent.items.last().unwrap().result;
+        assert!(
+            r.starts_with("[output truncated")
+                && r.contains("terminal/proc_1-ab.log")
+                && r.ends_with("head ... tail"),
+            "{r}"
+        );
+        // no artifact could be written: still said, not hidden
+        chat.apply(&env(3, requested("d", "mcp__x__y")), 0);
+        chat.apply(
+            &env(4, completed("d", "p", Some("head ... tail"), true, false)),
+            1,
+        );
+        assert!(
+            chat.agent
+                .items
+                .last()
+                .unwrap()
+                .result
+                .contains("could not be saved")
+        );
+        // logs from before `output` existed still show their preview
+        chat.apply(&env(5, requested("e", "Read")), 0);
+        chat.apply(
+            &env(6, completed("e", "old preview", None, false, false)),
+            1,
+        );
+        assert_eq!(chat.agent.items.last().unwrap().result, "old preview");
+    }
+
+    #[test]
+    fn a_note_to_the_model_is_not_a_user_row() {
+        let mut chat = Chat::default();
+        let msg = |t: &str, d: Option<&str>| {
+            env(
+                1,
+                Event::UserMessage {
+                    text: t.into(),
+                    display_text: d.map(Into::into),
+                    images: vec![],
+                },
+            )
+        };
+        chat.apply(&msg("[Nemo note] analyse", Some("")), 0);
+        assert!(chat.agent.items.is_empty());
+        chat.apply(
+            &msg("<user-bash-input>ls</user-bash-input>", Some("!ls")),
+            0,
+        );
+        assert_eq!(chat.agent.items[0].text, "!ls");
     }
 }

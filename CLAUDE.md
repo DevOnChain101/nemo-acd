@@ -14,7 +14,7 @@ Owns its agent loop and tool runtime; talks to Anthropic-compatible and OpenAI-c
 - Autonomous features (browser runtime, verification engine, sandbox, sessions) are built on the Rust core, not on the Node CLI.
 
 ## Reference implementation (read-only)
-- Old Node CLI: `~/Vibe/nemo-cli` (~24k lines JS, `npm test`). It is the frozen oracle: use it to read behavior, build golden fixtures and baseline evals. Do not add features there and do not edit it from this project.
+- Old Node CLI: `~/Vibe/nemo-cli` (~24k lines JS, `npm test`). It is the frozen oracle: use it to read behavior, build golden fixtures and baseline evals. Do not add features there and NEVER modify anything under it (owner instruction, 2026-10-28: the owner no longer uses that repo; reading it for behaviour/fixtures is still fine). Its two open test failures (legacyEnvWarnings, selection copy glyph) are moot.
 - Port behavior, not code shape. Faithful ports: config, permissions, parser, render (golden-tested). Reshaped on purpose: `WorkspaceContext` + `session_id` on every tool call, typed event bus emitting JSONL, session store, `TerminalRuntime`.
 - Module→component map: Appendix C of the doc. Known Node weaknesses to NOT carry over: no OS sandbox, no worktrees, no browser, no verification gate, plaintext `auth.json`.
 

@@ -21,6 +21,15 @@ const DEFAULT_TIMEOUT_MS: f64 = 120_000.0;
 const MAX_TIMEOUT_MS: f64 = 600_000.0;
 const MAX_LOG_READ: u64 = 1_000_000;
 
+tokio::task_local! {
+    /// Live output of the Bash call running in this task: set by the harness around
+    /// `Tool::execute`, so a tool call stays `(input, ctx) -> output` for everyone else.
+    pub static LIVE_OUTPUT: nemo_terminal::OutputSink;
+    /// Run the Bash call unconfined. Set only by the harness for a command the person typed
+    /// (`!cmd`) when their settings say so; the model's input can never reach this.
+    pub static UNCONFINED: bool;
+}
+
 fn kind(sh: &Shared) -> &'static str {
     if sh.rt.shell().is_posix() {
         "posix"
@@ -120,6 +129,8 @@ pub(crate) fn bash<'a>(
         let mut spec = ExecSpec::new(command);
         spec.timeout = Duration::from_millis(timeout_ms);
         spec.max_output_bytes = MAX_OUTPUT;
+        spec.on_output = LIVE_OUTPUT.try_with(Clone::clone).ok();
+        spec.unconfined = UNCONFINED.try_with(|u| *u).unwrap_or(false);
         let r = match sh.rt.exec(&ctx.session_id, spec, &ctx.cancel).await {
             Ok(r) => r,
             Err(e) => return ToolOutput::error(format!("Bash: {e}")),

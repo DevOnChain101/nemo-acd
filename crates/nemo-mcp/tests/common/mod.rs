@@ -8,15 +8,19 @@ use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
 pub fn echo_server_path() -> PathBuf {
-    // target/<profile>/deps/<test-exe> -> target/<profile>/examples/echo_server
+    example_path("echo_server")
+}
+
+pub fn example_path(name: &str) -> PathBuf {
+    // target/<profile>/deps/<test-exe> -> target/<profile>/examples/<name>
     let mut p = std::env::current_exe().unwrap();
     p.pop();
     p.pop();
     p.push("examples");
     p.push(if cfg!(windows) {
-        "echo_server.exe"
+        format!("{name}.exe")
     } else {
-        "echo_server"
+        name.to_string()
     });
     assert!(p.exists(), "build the example first: {}", p.display());
     p

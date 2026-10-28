@@ -29,6 +29,6 @@ ADR-010 Rust core; ADR-011 API keys only, user-managed via NEMO_* (standard vars
 - Linux/Windows: only per-crate compile checks for C-free crates; whole-workspace cross-check impossible on macOS (aws-lc-sys). Need CI on real runners; ConPTY, legacy conhost, Git Bash quoting, Landlock/bwrap enforcement, clipboard/notification tools unverified.
 - Repo remote, branch protection (`ci-ok`), action SHA pinning (docs/RELEASE.md), signing secrets, npm names, OWNER placeholders.
 - Specs and golden cases still `draft` / unreviewed by a human.
-- Nodes C and F2 in the Node reference repo (legacyEnvWarnings test; copy `●` glyph) undecided.
+- Node repo ~/Vibe/nemo-cli: owner no longer uses it and forbids further edits (2026-10-28); open Node test failures C/F2 are moot; Node eval baseline is no longer a cutover requirement unless the owner says otherwise.
 - Security: third review in progress (see its report); known residual risks in docs/SECURITY.md.
 - Cutover: parallel run, then retire Node (docs/MIGRATION.md checklist).

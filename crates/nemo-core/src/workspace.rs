@@ -67,7 +67,7 @@ impl WorkspaceContext {
         artifact_root: PathBuf,
         process_group_id: impl Into<String>,
     ) -> Result<Self, ResolveError> {
-        let real = |p: &Path| fs::canonicalize(p).map_err(ResolveError::Io);
+        let real = |p: &Path| canonicalize(p).map_err(ResolveError::Io);
         let root = real(root)?;
         let cwd = real(cwd)?;
         let additional_dirs = additional_dirs
@@ -171,13 +171,19 @@ pub fn lexical_normalize(p: &Path) -> PathBuf {
     out
 }
 
+/// `fs::canonicalize` without the Windows verbatim prefix (`\\?\C:\x` -> `C:\x`, `\\?\UNC\s\h` ->
+/// `\\s\h`), which git and most tools reject. Use it for every path handed to a child process.
+pub fn canonicalize(p: impl AsRef<Path>) -> std::io::Result<PathBuf> {
+    dunce::canonicalize(p)
+}
+
 /// Realpath of `p`, or of its nearest existing ancestor plus the missing tail.
 /// `None` when a dangling symlink is on the path.
 pub fn realpath_lenient(p: &Path) -> Option<PathBuf> {
     let mut tail = Vec::new();
     let mut cur = p;
     loop {
-        match fs::canonicalize(cur) {
+        match canonicalize(cur) {
             Ok(mut real) => {
                 real.extend(tail.iter().rev());
                 return Some(real);
@@ -227,7 +233,7 @@ mod tests {
     /// base/p (workspace), base/pp (sibling with same prefix), base/outside, base/extra
     fn fx() -> Fx {
         let dir = tempfile::tempdir().unwrap();
-        let base = fs::canonicalize(dir.path()).unwrap();
+        let base = canonicalize(dir.path()).unwrap();
         for d in ["p/sub", "p/subdir", "pp", "outside", "extra"] {
             fs::create_dir_all(base.join(d)).unwrap();
         }
@@ -425,6 +431,7 @@ mod tests {
         }
     }
 
+    #[cfg(unix)] // colon and device names are invalid in a real Windows filesystem
     #[test]
     fn posix_policy_allows_colon_and_device_names() {
         let f = fx();

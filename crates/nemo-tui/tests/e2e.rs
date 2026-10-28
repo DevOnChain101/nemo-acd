@@ -16,7 +16,7 @@ use nemo_tools::{BoxFuture, SideEffectClass, Tool, ToolOutput, ToolRuntime, Tool
 use nemo_tui::{
     Exit, ExitReason, OpenTarget, Opener, Options, ScriptedTty, UiLink, run_interactive,
 };
-use nemo_tui_base::clipboard::ClipboardSink;
+use nemo_tui_base::clipboard::{ClipboardSink, ClipboardSource};
 use serde_json::{Value, json};
 use std::sync::Mutex;
 
@@ -78,6 +78,32 @@ impl ClipboardSink for RecClip {
     }
 }
 
+/// A clipboard to paste from: counts the reads, answers with `text` or fails.
+#[derive(Clone)]
+struct FakePaste {
+    text: Result<String, String>,
+    reads: Arc<AtomicUsize>,
+}
+
+impl FakePaste {
+    fn new(text: Result<&str, &str>) -> Self {
+        Self {
+            text: text.map(String::from).map_err(String::from),
+            reads: Arc::default(),
+        }
+    }
+    fn reads(&self) -> usize {
+        self.reads.load(Ordering::SeqCst)
+    }
+}
+
+impl ClipboardSource for FakePaste {
+    fn paste(&self) -> io::Result<String> {
+        self.reads.fetch_add(1, Ordering::SeqCst);
+        self.text.clone().map_err(io::Error::other)
+    }
+}
+
 struct RecOpen(Log);
 impl Opener for RecOpen {
     fn open(&self, t: &OpenTarget) -> io::Result<()> {
@@ -100,6 +126,7 @@ struct Knobs {
     stream_frame: Option<Duration>,
     log: Option<Log>,
     notes: Vec<String>,
+    paste: Option<FakePaste>,
 }
 
 fn rig(turns: Vec<Turn>, k: Knobs) -> Rig {
@@ -161,6 +188,9 @@ fn rig(turns: Vec<Turn>, k: Knobs) -> Rig {
         if let Some(l) = &k.log {
             o.clipboard = Some(vec![Box::new(RecClip(l.copied.clone()))]);
             o.opener = Some(Box::new(RecOpen(l.clone())));
+        }
+        if let Some(p) = &k.paste {
+            o.paste_source = Some(vec![Box::new(p.clone())]);
         }
         o.tick = Duration::from_millis(10);
         o.idle_tick = Duration::from_millis(20);
@@ -779,4 +809,161 @@ mod signals {
         );
         drop(c.child.stdin.take());
     }
+}
+
+/// Right button press then release at a 1-based cell.
+fn right_click(r: &Rig, x: usize, y: usize) {
+    r.tty.send(&format!("\x1b[<2;{x};{y}M\x1b[<2;{x};{y}m"));
+}
+
+#[test]
+fn right_click_in_the_prompt_pastes_the_clipboard_without_submitting() {
+    let paste = FakePaste::new(Ok("line one\r\nline two"));
+    let mut r = rig(
+        vec![Turn::text("got it")],
+        Knobs {
+            paste: Some(paste.clone()),
+            ..Knobs::default()
+        },
+    );
+    r.wait_for("Try \"explain this repo\"");
+    let (x, y) = cell_of(&r, "Try \"explain");
+    right_click(&r, x, y);
+    r.wait_for("line two");
+    assert_eq!(paste.reads(), 1);
+    std::thread::sleep(Duration::from_millis(150));
+    assert!(
+        r.provider.requests().is_empty(),
+        "a pasted newline submitted the prompt"
+    );
+    r.tty.send("\r");
+    r.wait_for("got it");
+    let req = &r.provider.requests()[0];
+    assert!(
+        format!("{:?}", req.messages).contains("line one\\nline two"),
+        "{:?}",
+        req.messages
+    );
+    r.tty.send("\x04");
+    r.finish();
+}
+
+#[test]
+fn right_click_never_answers_or_feeds_an_approval_dialog_and_outside_the_prompt_does_nothing() {
+    let paste = FakePaste::new(Ok("1\r\n2\r\nyes"));
+    let mut r = rig(
+        vec![Turn::tool("m1", "Mutate", json!({})), Turn::text("done")],
+        Knobs {
+            paste: Some(paste.clone()),
+            ..Knobs::default()
+        },
+    );
+    r.wait_for("Try \"explain this repo\"");
+    right_click(&r, 1, 1); // header, outside the prompt
+    r.tty.send("go");
+    r.tty.send("\r");
+    r.wait_for("Do you want to proceed?");
+    // unarmed (just opened), then armed: clicks over the dialog and the rows around it
+    for armed in [false, true] {
+        if armed {
+            r.wait_armed();
+        }
+        let (x, y) = cell_of(&r, "Do you want to proceed?");
+        for dy in [0, 2, 4] {
+            right_click(&r, x, y + dy);
+        }
+        right_click(&r, 3, 3);
+    }
+    std::thread::sleep(Duration::from_millis(300));
+    assert_eq!(
+        paste.reads(),
+        0,
+        "the clipboard was read while a dialog was open"
+    );
+    assert_eq!(r.tool.runs(), 0, "a right click answered the dialog");
+    assert!(r.tty.screen_text().contains("Do you want to proceed?"));
+    r.tty.send("\x1b"); // esc: no
+    r.wait_for("done");
+    r.tty.send("\x04");
+    r.finish();
+}
+
+#[test]
+fn hostile_clipboard_is_sanitised_capped_and_failures_are_a_toast() {
+    let evil = "a\x1b]52;c;ZXZpbA==\x07b\x1b[2Jc\u{202e}d\x08e";
+    let mut r = rig(
+        vec![],
+        Knobs {
+            paste: Some(FakePaste::new(Ok(evil))),
+            ..Knobs::default()
+        },
+    );
+    r.wait_for("Try \"explain this repo\"");
+    let (x, y) = cell_of(&r, "Try \"explain");
+    right_click(&r, x, y);
+    r.wait_for("a]52;c;ZXZpbA==b[2Jcde"); // escape bytes gone, the rest is plain text
+    assert!(
+        !r.tty.raw().contains("\x1b]52"),
+        "clipboard text reached the terminal as OSC 52"
+    );
+    r.tty.send("\x04");
+    r.tty.send("\x15"); // ctrl+u: clear, then quit on empty ctrl+d
+    r.tty.send("\x04");
+    r.finish();
+
+    // 5 MiB: capped, the prompt refuses it with a note, the app stays alive
+    let mut r = rig(
+        vec![],
+        Knobs {
+            paste: Some(FakePaste::new(Ok(&"x".repeat(5 << 20)))),
+            ..Knobs::default()
+        },
+    );
+    r.wait_for("Try \"explain this repo\"");
+    let (x, y) = cell_of(&r, "Try \"explain");
+    right_click(&r, x, y);
+    r.wait_for("paste is too large");
+    r.tty.send("\x04");
+    r.finish();
+
+    // no clipboard tool: a toast, no panic
+    let mut r = rig(
+        vec![],
+        Knobs {
+            paste: Some(FakePaste::new(Err("xclip not found"))),
+            ..Knobs::default()
+        },
+    );
+    r.wait_for("Try \"explain this repo\"");
+    let (x, y) = cell_of(&r, "Try \"explain");
+    right_click(&r, x, y);
+    r.wait_for("clipboard unavailable: xclip not found");
+    r.tty.send("\x04");
+    r.finish();
+}
+
+#[test]
+fn ctrl_o_expands_and_collapses_clamped_code_blocks() {
+    let code: String = (1..=12).map(|i| format!("let v{i} = {i};\n")).collect();
+    let mut r = rig(
+        vec![Turn::text(&format!("here:\n```rs\n{code}```\nbye"))],
+        Knobs::default(),
+    );
+    r.wait_for("Try \"explain this repo\"");
+    r.tty.send("q");
+    r.tty.send("\r");
+    r.wait_for("… +6 more lines (ctrl+o to expand)");
+    let s = r.tty.screen_text();
+    assert!(
+        s.contains("let v6 = 6;") && !s.contains("let v7 = 7;"),
+        "{s}"
+    );
+    r.tty.send("\x0f");
+    r.wait_for("let v12 = 12;");
+    r.wait_for("(ctrl+o to collapse)");
+    r.tty.send("\x0f");
+    r.wait_for("… +6 more lines (ctrl+o to expand)");
+    assert!(!r.tty.screen_text().contains("let v12 = 12;"));
+    r.tty.send("\x04");
+    r.finish();
 }

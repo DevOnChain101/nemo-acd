@@ -22,7 +22,8 @@ named_keys! {
     CtrlLeft = "ctrl-left", CtrlRight = "ctrl-right", CtrlPageUp = "ctrl-pageup",
     CtrlPageDown = "ctrl-pagedown", AltPageUp = "alt-pageup", AltPageDown = "alt-pagedown",
     AltUp = "alt-up", AltDown = "alt-down", AltLeft = "alt-left", AltRight = "alt-right",
-    AltEnter = "alt-enter", AltA = "alt-a", AltV = "alt-v",
+    AltEnter = "alt-enter", AltA = "alt-a", AltV = "alt-v", AltBackspace = "alt-backspace",
+    AltDelete = "alt-delete", AltD = "alt-d",
     CtrlA = "ctrl-a", CtrlC = "ctrl-c", CtrlD = "ctrl-d", CtrlE = "ctrl-e", CtrlJ = "ctrl-j",
     CtrlK = "ctrl-k", CtrlL = "ctrl-l", CtrlN = "ctrl-n", CtrlO = "ctrl-o", CtrlP = "ctrl-p",
     CtrlR = "ctrl-r", CtrlU = "ctrl-u", CtrlV = "ctrl-v", CtrlW = "ctrl-w",
@@ -66,12 +67,17 @@ const SEQ: &[(&str, Named)] = &[
     ("\x1b[1;3D", AltLeft),
     ("\x1b[1;3C", AltRight),
     ("\x1b\r", AltEnter),
-    ("\x1bb", CtrlLeft),  // macOS option+left
-    ("\x1bf", CtrlRight), // macOS option+right
-    ("\x1b\x7f", CtrlW),  // alt/option+backspace
-    ("\x1b\x08", CtrlW),
-    ("\x1b[127;3u", CtrlW), // CSI-u alt/option+backspace
-    ("\x1b[127;5u", CtrlW), // CSI-u ctrl+backspace
+    ("\x1bb", CtrlLeft),        // macOS option+left
+    ("\x1bf", CtrlRight),       // macOS option+right
+    ("\x1b\x7f", AltBackspace), // alt/option+backspace (also Windows terminals)
+    ("\x1b\x08", AltBackspace),
+    ("\x1b[127;3u", AltBackspace), // CSI-u alt/option+backspace
+    ("\x1b[127;5u", CtrlW),        // CSI-u ctrl+backspace
+    ("\x1b[127;9u", CtrlU),        // CSI-u cmd+backspace: delete to line start
+    ("\x1b[3;3~", AltDelete),
+    ("\x1b[3;9~", AltDelete),
+    ("\x1bd", AltD),
+    ("\x1b[100;3u", AltD),
     ("\x1ba", AltA),
     ("\x1bv", AltV),
     ("\x1b[118;9u", AltV),
@@ -399,12 +405,26 @@ fn string_seq_len(s: &str, i: usize) -> Option<StrSeq> {
     Some(StrSeq::Held)
 }
 
-/// Pasted text is data: no escape bytes, other C0/C1 controls or paste markers inside it.
-fn clean_paste(p: &str) -> String {
-    p.replace(PASTE_START, "")
+/// Bidi controls and zero-width marks: invisible, they can make pasted text read differently
+/// from what it is.
+fn is_bidi_or_zero_width(c: char) -> bool {
+    matches!(c, '\u{200b}'..='\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2060}'..='\u{2064}' | '\u{2066}'..='\u{2069}' | '\u{061c}' | '\u{feff}')
+}
+
+/// Pasted text is data: no escape bytes, other C0/C1 controls, bidi marks or paste markers inside
+/// it; CRLF becomes LF and the result is capped at 1 MiB. One routine for bracketed paste and
+/// clipboard paste.
+pub fn clean_paste(p: &str) -> String {
+    let mut capped = String::new();
+    push_capped(&mut capped, p);
+    capped
+        .replace(PASTE_START, "")
         .replace(PASTE_END, "")
+        .replace("\r\n", "\n")
         .chars()
-        .filter(|c| matches!(c, '\n' | '\r' | '\t') || !(c.is_control()))
+        .filter(|c| {
+            matches!(c, '\n' | '\r' | '\t') || !(c.is_control() || is_bidi_or_zero_width(*c))
+        })
         .collect()
 }
 
@@ -615,9 +635,31 @@ mod tests {
         );
         assert_eq!(
             names("\x17\x1b\x7f\x1b\x08\x1b[127;3u\x1b[127;5u"),
-            ["ctrl-w"; 5]
+            [
+                "ctrl-w",
+                "alt-backspace",
+                "alt-backspace",
+                "alt-backspace",
+                "ctrl-w"
+            ]
+        );
+        assert_eq!(
+            names("\x1b[3;3~\x1bd\x1b[100;3u\x1b[127;9u\x1b[3~"),
+            ["alt-delete", "alt-d", "alt-d", "ctrl-u", "delete"]
         );
         assert_eq!(names("xin chào"), ["text:xin chào"]);
+    }
+
+    #[test]
+    fn clean_paste_is_the_one_sanitiser() {
+        assert_eq!(
+            clean_paste("a\r\nb\tc\x1b[31m\u{202e}d\u{200b}\0e"),
+            "a\nb\tc[31mde"
+        );
+        let big = "x".repeat(MAX_PASTE + 10);
+        assert_eq!(clean_paste(&big).len(), MAX_PASTE);
+        // a bracketed paste goes through the same routine
+        assert_eq!(names("\x1b[200~a\u{202e}b\x1b[201~"), ["paste:ab"]);
     }
 
     #[test]

@@ -59,7 +59,7 @@ struct Fx {
 
 fn fx_named(repo_name: &str) -> Fx {
     let tmp = tempfile::tempdir().unwrap();
-    let base = fs::canonicalize(tmp.path()).unwrap();
+    let base = nemo_core::canonicalize(tmp.path()).unwrap();
     let repo = base.join(repo_name);
     fs::create_dir_all(&repo).unwrap();
     g(&repo, &["init", "-q"]);
@@ -104,10 +104,10 @@ fn create_diff_cleanup_leaves_user_tree_untouched() {
     assert_eq!(a.context.root, *wt);
     assert_eq!(a.context.cwd, *wt);
     assert_eq!(a.context.git_worktree.as_ref(), Some(wt));
-    assert_eq!(*wt, fs::canonicalize(wt).unwrap());
+    assert_eq!(*wt, nemo_core::canonicalize(wt).unwrap());
     assert_eq!(
         wt,
-        &fs::canonicalize(f.base.join(".nemo-worktrees/s1")).unwrap()
+        &nemo_core::canonicalize(f.base.join(".nemo-worktrees/s1")).unwrap()
     );
     assert_eq!(info.branch, "nemo/s1");
     // Worktree starts from HEAD: no user edits visible there.
@@ -454,7 +454,9 @@ fn merge_plan_clean_and_conflict() {
 fn non_git_directory_is_plain_workspace() {
     need_git!();
     let tmp = tempfile::tempdir().unwrap();
-    let dir = fs::canonicalize(tmp.path()).unwrap().join("plain dir");
+    let dir = nemo_core::canonicalize(tmp.path())
+        .unwrap()
+        .join("plain dir");
     fs::create_dir_all(&dir).unwrap();
     let mgr = WorktreeManager::new(
         &env(),
@@ -473,7 +475,7 @@ fn non_git_directory_is_plain_workspace() {
 fn repo_without_commits_is_refused() {
     need_git!();
     let tmp = tempfile::tempdir().unwrap();
-    let dir = fs::canonicalize(tmp.path()).unwrap().join("empty");
+    let dir = nemo_core::canonicalize(tmp.path()).unwrap().join("empty");
     fs::create_dir_all(&dir).unwrap();
     g(&dir, &["init", "-q"]);
     let mgr = WorktreeManager::new(
@@ -578,7 +580,7 @@ fn close_session_reports_leaks_and_removes_temp() {
 #[test]
 fn restore_files_rewinds_agent_edits_and_refuses_user_edits() {
     let tmp = tempfile::tempdir().unwrap();
-    let base = fs::canonicalize(tmp.path()).unwrap();
+    let base = nemo_core::canonicalize(tmp.path()).unwrap();
     let wt = base.join("wt");
     fs::create_dir_all(&wt).unwrap();
     fs::write(wt.join("a.txt"), "v1").unwrap();
@@ -673,7 +675,7 @@ fn restore_files_rewinds_agent_edits_and_refuses_user_edits() {
 #[test]
 fn restore_refuses_lossy_snapshots_unless_skipped() {
     let tmp = tempfile::tempdir().unwrap();
-    let base = fs::canonicalize(tmp.path()).unwrap();
+    let base = nemo_core::canonicalize(tmp.path()).unwrap();
     let wt = base.join("wt");
     fs::create_dir_all(&wt).unwrap();
     fs::write(wt.join(".env"), "TOKEN=real-secret-value\n").unwrap();

@@ -36,7 +36,12 @@ impl Roots {
             match v {
                 Value::String(mut s) => {
                     for (p, name) in roots {
-                        s = s.replace(&*p.to_string_lossy(), name);
+                        if s.contains(&*p.to_string_lossy()) {
+                            s = s.replace(&*p.to_string_lossy(), name);
+                            if cfg!(windows) {
+                                s = s.replace('\\', "/"); // fixtures are POSIX-spelled
+                            }
+                        }
                     }
                     Value::String(s)
                 }
@@ -276,7 +281,8 @@ fn golden_config_cases() {
         let expected: Value =
             serde_json::from_slice(&fs::read(case.join("expected.json")).unwrap()).unwrap();
         let sandbox = tempfile::tempdir().unwrap();
-        let tmp = sandbox.path().canonicalize().unwrap();
+        // dunce: a verbatim `\\?\` prefix makes the `/` joins in `expand` invalid on Windows
+        let tmp = dunce::canonicalize(sandbox.path()).unwrap();
         let r = Roots {
             home: tmp.join("home"),
             nemo_home: tmp.join("nemo_home"),

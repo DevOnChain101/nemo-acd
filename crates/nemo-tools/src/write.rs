@@ -39,6 +39,13 @@ pub(crate) fn run(input: &Value, ctx: &ToolContext) -> ToolOutput {
         }
     }
 
+    // The previous text for the diff; a non-UTF-8 or oversized file is simply not diffed.
+    let before = existing.as_ref().and_then(|_| {
+        root.read_capped(&abs, MAX_FILE_BYTES)
+            .ok()
+            .and_then(|b| String::from_utf8(b).ok())
+    });
+
     if let Err(e) = root.write(&abs, content) {
         return ToolOutput::error(format!("Write: cannot write {}: {e}", abs.display()));
     }
@@ -55,5 +62,14 @@ pub(crate) fn run(input: &Value, ctx: &ToolContext) -> ToolOutput {
         abs.display(),
         md.len()
     ))
-    .with_meta(json!({"created": created, "bytes": md.len()}))
+    .with_meta(json!({
+        "created": created,
+        "bytes": md.len(),
+        "diff": (created || before.is_some()).then(|| crate::diff::for_file(
+            file_path,
+            if created { "create" } else { "overwrite" },
+            before.as_deref().unwrap_or(""),
+            content,
+        )),
+    }))
 }

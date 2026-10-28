@@ -30,6 +30,15 @@ pub fn tool_name_for(server: &str, tool: &str) -> String {
     if full.len() <= MAX_TOOL_NAME_LEN {
         return full;
     }
+    hashed(server, tool, &s, &t)
+}
+
+/// Like [`tool_name_for`] but always with the hash suffix: used when two sanitized names collide.
+pub fn tool_name_hashed(server: &str, tool: &str) -> String {
+    hashed(server, tool, &sanitize_part(server), &sanitize_part(tool))
+}
+
+fn hashed(server: &str, tool: &str, s: &str, t: &str) -> String {
     let hash: String = Sha1::digest(format!("{server}\0{tool}").as_bytes())
         .iter()
         .map(|b| format!("{b:02x}"))

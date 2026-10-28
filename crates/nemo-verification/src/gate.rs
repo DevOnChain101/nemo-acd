@@ -2,7 +2,7 @@
 //! self-correction (§5).
 
 use crate::plan::plan_checks;
-use crate::runner::VerifyRunner;
+use crate::runner::{CheckAuthorizer, VerifyRunner};
 use crate::types::*;
 use nemo_events::TaskStatus;
 use std::collections::{BTreeSet, HashMap};
@@ -160,6 +160,18 @@ impl CompletionGate {
         claimed_done: bool,
         cancel: &CancellationToken,
     ) -> GateDecision {
+        self.evaluate_with(st, claimed_done, cancel, None).await
+    }
+
+    /// [`evaluate`](Self::evaluate) where each check command is first authorised by `auth`; a
+    /// refused check is reported `blocked` (never failed, never skipped silently).
+    pub async fn evaluate_with(
+        &mut self,
+        st: &TaskState,
+        claimed_done: bool,
+        cancel: &CancellationToken,
+        auth: Option<&dyn CheckAuthorizer>,
+    ) -> GateDecision {
         let has_user = st
             .criteria
             .iter()
@@ -170,7 +182,7 @@ impl CompletionGate {
         self.attempt += 1;
         let started_at = now();
         let plan = plan_checks(&st.criteria, &st.model_checks, &self.runner.workspace().cwd);
-        let checks = self.runner.run(&plan, cancel).await;
+        let checks = self.runner.run_with(&plan, cancel, auth).await;
         let mut criteria = st.criteria.clone();
         let (status, mut limitations) = aggregate(&mut criteria, &checks, self.cfg.inferred_only);
 

@@ -228,6 +228,9 @@ pub struct Verdict {
     /// SHA-256 (hex) of the tool input JSON, set when that JSON is longer than
     /// `INPUT_DISPLAY_LIMIT` chars (a dialog shows only the head); the reason says so.
     pub full_input_digest: Option<String>,
+    /// An `ask` that even a command the user typed must not get past: critical path removal,
+    /// a protected path, ambiguous path fields.
+    pub hard: bool,
 }
 
 /// Chars of input JSON a generic permission dialog shows.
@@ -243,6 +246,7 @@ impl Verdict {
             rule: false,
             message: None,
             full_input_digest: None,
+            hard: false,
         }
     }
 }
@@ -735,7 +739,11 @@ impl Permissions {
         match mode {
             Mode::DontAsk => Verdict::new(Decision::Deny, "dontAsk mode: protected path"),
             Mode::BypassPermissions => Verdict::new(Decision::Allow, "bypassPermissions mode"),
-            _ => Verdict::new(Decision::Ask, "protected path requires confirmation"),
+            _ => {
+                let mut v = Verdict::new(Decision::Ask, "protected path requires confirmation");
+                v.hard = true;
+                v
+            }
         }
     }
 
@@ -1039,6 +1047,22 @@ impl Permissions {
         v
     }
 
+    /// Verdict for a shell command the USER typed (`!cmd`): explicit intent, so a plain `ask`
+    /// (including an ask rule) becomes `allow`, whatever the mode or interactivity. Deny rules,
+    /// protected paths and critical removals still block (`Deny`, or a `hard` `Ask`).
+    pub fn check_user_command(&self, command: &str) -> Verdict {
+        let mut v = self.decide(
+            "Bash",
+            &serde_json::json!({ "command": command }),
+            Mode::Default,
+        );
+        if matches!(v.decision, Decision::Ask | Decision::Classify) && !v.hard {
+            v.decision = Decision::Allow;
+            v.reason = format!("typed by the user ({})", v.reason);
+        }
+        v
+    }
+
     fn decide(&self, tool: &str, input: &Value, mode: Mode) -> Verdict {
         // tools that run a model-supplied shell command get the Bash verdict for that command
         // (deny/ask/allow rules, critical_bash, protected paths, strict parse); only a tool-name
@@ -1086,7 +1110,9 @@ impl Permissions {
             if mode == Mode::DontAsk {
                 return v(Deny, "dontAsk mode: ambiguous path fields");
             }
-            return v(Ask, "ambiguous path fields in tool input");
+            let mut r = v(Ask, "ambiguous path fields in tool input");
+            r.hard = true;
+            return r;
         }
 
         // Never auto-approved, whatever the mode or allow rules say.
@@ -1107,6 +1133,7 @@ impl Permissions {
                 "removes a critical path (root, home, working directory or a parent)",
             );
             r.critical = auto || classify;
+            r.hard = true;
             return r;
         }
 

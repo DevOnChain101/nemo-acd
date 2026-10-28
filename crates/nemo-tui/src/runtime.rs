@@ -11,7 +11,9 @@ use nemo_events::Envelope;
 use nemo_harness::{Harness, TaskOutcome, TaskRequest, from_mode};
 use nemo_providers::Message;
 use nemo_tui_base::Platform;
-use nemo_tui_base::clipboard::{ClipboardSink, copy_to_clipboard, default_chain};
+use nemo_tui_base::clipboard::{
+    ClipboardSink, ClipboardSource, copy_to_clipboard, default_chain, paste_chain, read_clipboard,
+};
 use nemo_tui_base::complete::Command as CmdDef;
 use nemo_tui_base::keys::{Key, KeyParser, Named};
 use nemo_tui_base::screen::{BRACKETED_PASTE_ON, Screen};
@@ -20,7 +22,7 @@ use nemo_tui_base::terminal::{GuardOptions, TerminalGuard};
 
 use crate::SavedSession;
 use crate::app::{App, AppConfig, Cmd};
-use crate::link::{Msg, TaskDone, UiLink};
+use crate::link::{Msg, TaskDone, UiLink, UserDone};
 use crate::links::{OpenTarget, Opener, SystemOpener};
 use crate::resume::Resume;
 use crate::status::SandboxStatus;
@@ -73,6 +75,8 @@ pub struct Options {
     pub startup_notes: Vec<String>,
     /// Default: the OS tool, then OSC 52.
     pub clipboard: Option<Vec<Box<dyn ClipboardSink>>>,
+    /// Right-click paste. Default: the OS tool(s) for the platform.
+    pub paste_source: Option<Vec<Box<dyn ClipboardSource>>>,
     pub opener: Option<Box<dyn Opener>>,
     pub clock: fn() -> i64,
     /// Timer period while something animates / while idle (idle only polls the terminal size).
@@ -110,6 +114,7 @@ impl Options {
             resume: None,
             startup_notes: vec![],
             clipboard: None,
+            paste_source: None,
             opener: None,
             clock: crate::wall_clock_ms,
             tick: Duration::from_millis(80),
@@ -163,7 +168,64 @@ struct Runner {
 }
 
 impl Runner {
-    fn start(&mut self, app: &mut App, text: String, cancel: tokio_util::sync::CancellationToken) {
+    /// `/compact`: while a task runs the harness compacts at its next safe point, otherwise the
+    /// conversation between tasks is compacted now (on the runtime; `Msg::Compacted` returns it).
+    fn compact(&mut self, app: &mut App, instructions: Option<String>) {
+        if app.task_running() {
+            self.harness.request_compact(instructions);
+            app.note(
+                "compaction requested: it runs before the next model request",
+                "",
+            );
+            return;
+        }
+        let Some(session) = self.session.clone().filter(|_| !self.history.is_empty()) else {
+            app.note("/compact: nothing to compact yet", "warn");
+            return;
+        };
+        app.compact_started();
+        let (h, history, tx) = (self.harness.clone(), self.history.clone(), self.tx.clone());
+        self.runtime.spawn(async move {
+            let cancel = tokio_util::sync::CancellationToken::new();
+            let r = h.compact_now(&session, history, instructions, cancel).await;
+            let _ = tx.send(Msg::Compacted(r));
+        });
+    }
+
+    /// `!cmd`: runs on the runtime; `Msg::UserCommandDone` brings the history back.
+    fn user_command(
+        &mut self,
+        app: &mut App,
+        command: String,
+        record_only: bool,
+        cancel: tokio_util::sync::CancellationToken,
+    ) {
+        let Some(session) = self.session.clone() else {
+            app.command_done(Some(
+                "the session is not available (an earlier task did not end)",
+            ));
+            return;
+        };
+        let (h, history, tx) = (self.harness.clone(), self.history.clone(), self.tx.clone());
+        self.runtime.spawn(async move {
+            let result = h
+                .run_user_command(&session, history, &command, cancel)
+                .await
+                .map_err(|e| e.to_string());
+            let _ = tx.send(Msg::UserCommandDone(Box::new(UserDone {
+                result,
+                record_only,
+            })));
+        });
+    }
+
+    fn start(
+        &mut self,
+        app: &mut App,
+        text: String,
+        display_text: Option<String>,
+        cancel: tokio_util::sync::CancellationToken,
+    ) {
         let Some(mut session) = self.session.take() else {
             app.task_done(
                 &Err("the session is not available (an earlier task did not end)".into()),
@@ -183,6 +245,7 @@ impl Runner {
             request: text,
             criteria: vec![],
             history: self.history.clone(),
+            display_text,
         };
         let (h, tx) = (self.harness.clone(), self.tx.clone());
         let inner = self.runtime.spawn(async move {
@@ -279,6 +342,10 @@ pub fn run_interactive(mut o: Options, tty: Tty) -> io::Result<Exit> {
         .clipboard
         .take()
         .unwrap_or_else(|| default_chain(o.platform, &o.env));
+    let paste: Vec<Box<dyn ClipboardSource>> = o
+        .paste_source
+        .take()
+        .unwrap_or_else(|| paste_chain(o.platform, &o.env));
     let opener: Box<dyn Opener> = o.opener.take().unwrap_or_else(|| {
         Box::new(SystemOpener {
             platform: o.platform,
@@ -418,6 +485,7 @@ pub fn run_interactive(mut o: Options, tty: Tty) -> io::Result<Exit> {
                                 &mut runner,
                                 &mut screen,
                                 &clipboard,
+                                &paste,
                                 &*opener,
                                 &mut switch,
                                 raw_mode,
@@ -441,6 +509,7 @@ pub fn run_interactive(mut o: Options, tty: Tty) -> io::Result<Exit> {
                             &mut runner,
                             &mut screen,
                             &clipboard,
+                            &paste,
                             &*opener,
                             &mut switch,
                             raw_mode,
@@ -471,6 +540,45 @@ pub fn run_interactive(mut o: Options, tty: Tty) -> io::Result<Exit> {
                 Msg::Withdraw(id) => {
                     app.on_withdraw(&id, now);
                     dirty = true;
+                }
+                Msg::Compacted(r) => {
+                    match r {
+                        Ok(history) => runner.history = history,
+                        Err(e) => app.note(format!("/compact failed: {e}"), "error"),
+                    }
+                    app.compact_done();
+                    dirty = true;
+                    urgent = true;
+                }
+                Msg::UserCommandDone(d) => {
+                    let UserDone {
+                        result,
+                        record_only,
+                    } = *d;
+                    match result {
+                        Ok((history, out)) => {
+                            runner.history = history;
+                            app.command_done(None);
+                            // the model reads the result, unless the person said not to (`!!`),
+                            // the settings say not to, it never ran, or Esc cancelled it
+                            if out.ran
+                                && !out.cancelled
+                                && !record_only
+                                && runner.harness.shell_settings().user_commands_model_turn
+                            {
+                                let cancel = app.begin_followup(now);
+                                runner.start(
+                                    &mut app,
+                                    nemo_harness::user_command_note().to_string(),
+                                    Some(String::new()),
+                                    cancel,
+                                );
+                            }
+                        }
+                        Err(e) => app.command_done(Some(&e)),
+                    }
+                    dirty = true;
+                    urgent = true;
                 }
                 Msg::TaskDone(d) => {
                     let TaskDone {
@@ -528,6 +636,7 @@ fn exec(
     runner: &mut Runner,
     screen: &mut Screen<SharedOut>,
     clipboard: &[Box<dyn ClipboardSink>],
+    paste: &[Box<dyn ClipboardSource>],
     opener: &dyn Opener,
     switch: &mut Option<ModelSwitch>,
     raw_mode: bool,
@@ -535,7 +644,16 @@ fn exec(
     now: i64,
 ) -> io::Result<()> {
     match c {
-        Cmd::StartTask { text, cancel } => runner.start(app, text, cancel),
+        Cmd::StartTask {
+            text,
+            display_text,
+            cancel,
+        } => runner.start(app, text, display_text, cancel),
+        Cmd::UserCommand {
+            command,
+            record_only,
+            cancel,
+        } => runner.user_command(app, command, record_only, cancel),
         Cmd::ClearConversation => runner.history.clear(),
         Cmd::Copy(text) => {
             let sinks: Vec<&dyn ClipboardSink> = clipboard.iter().map(|b| &**b).collect();
@@ -553,6 +671,13 @@ fn exec(
                 );
             }
         }
+        // shortcut: reads on the UI thread (bounded by the 2 s tool timeout); move to a worker if
+        // a slow clipboard manager shows up in practice
+        Cmd::PasteClipboard => match read_clipboard(paste) {
+            Ok(text) => app.paste_clipboard(&text, now),
+            Err(e) => app.toast(format!("clipboard unavailable: {e}"), now, true),
+        },
+        Cmd::Compact { instructions } => runner.compact(app, instructions),
         Cmd::Open(t) => match opener.open(&t) {
             Ok(()) => app.toast(format!("opening {}", t.describe()), now, false),
             Err(e) => {

@@ -433,8 +433,13 @@ impl SandboxBackend for BwrapBackend {
 mod tests {
     use super::*;
 
+    // POSIX-looking test paths get a drive letter on Windows so they are absolute there too.
     fn p(s: &str) -> PathBuf {
-        PathBuf::from(s)
+        PathBuf::from(if cfg!(windows) {
+            format!("C:{s}")
+        } else {
+            s.into()
+        })
     }
 
     #[test]
@@ -476,7 +481,7 @@ mod tests {
 
     #[test]
     fn landlock_wrap_shape_and_failures() {
-        let b = LinuxLandlockBackend::new("/h/nemo-sandbox-exec".into(), 4);
+        let b = LinuxLandlockBackend::new(p("/h/nemo-sandbox-exec"), 4);
         let pol = SandboxPolicy {
             writable_roots: vec![p("/work")],
             ..Default::default()
@@ -488,12 +493,12 @@ mod tests {
             ..Default::default()
         };
         let w = b.wrap(&pol, &c).unwrap();
-        assert_eq!(w.program, "/h/nemo-sandbox-exec");
+        assert_eq!(w.program, p("/h/nemo-sandbox-exec").into_os_string());
         assert!(w.clear_env && w.cwd == c.cwd);
         assert_eq!(&w.args[1..], ["--", "sh", "-c", "true"]);
         let back = crate::decode_policy(w.args[0].to_str().unwrap()).unwrap();
         assert!(back.writable_roots.contains(&p("/work")) && back.network == NetworkPolicy::Deny);
-        let old = LinuxLandlockBackend::new("/h".into(), 3);
+        let old = LinuxLandlockBackend::new(p("/h"), 3);
         assert!(matches!(
             old.wrap(&pol, &c),
             Err(SandboxError::Unsupported(_))
@@ -516,7 +521,7 @@ mod tests {
 
     #[test]
     fn landlock_wrap_private_tmp_and_no_real_tmp_or_run() {
-        let b = LinuxLandlockBackend::new("/h/x".into(), 4);
+        let b = LinuxLandlockBackend::new(p("/h/x"), 4);
         let pol = SandboxPolicy {
             writable_roots: vec![p("/work")],
             tmp_dir: Some(p("/work-tmp")),
@@ -531,11 +536,14 @@ mod tests {
                     .writable_roots
                     .iter()
                     .chain(&back.readable_roots)
-                    .any(|r| r == Path::new(bad)),
+                    .any(|r| *r == p(bad)),
                 "{bad} must not be granted"
             );
         }
-        assert!(w.env.contains(&("TMPDIR".into(), "/work-tmp".into())));
+        assert!(
+            w.env
+                .contains(&("TMPDIR".into(), p("/work-tmp").into_os_string()))
+        );
     }
 
     #[test]
@@ -593,6 +601,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)] // renders POSIX mount arguments (`--bind /work /work`)
     #[test]
     fn bwrap_hides_run_and_binds_private_tmp_and_readonly() {
         let t = tempfile::tempdir().unwrap();
@@ -625,6 +634,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)] // renders POSIX mount arguments (`--bind /work /work`)
     #[test]
     fn bwrap_worktree_git_pin_is_readonly() {
         let t = tempfile::tempdir().unwrap();
@@ -666,6 +676,7 @@ mod tests {
         ));
     }
 
+    #[cfg(unix)] // renders POSIX mount arguments (`--bind /work /work`)
     #[test]
     fn bwrap_args_shape() {
         let pol = SandboxPolicy {
@@ -715,7 +726,7 @@ mod tests {
             Guarantee::Strong
         );
         for abi in [3, 5] {
-            let l = LinuxLandlockBackend::new("/h".into(), abi);
+            let l = LinuxLandlockBackend::new(p("/h"), abi);
             assert!(matches!(
                 l.wrap(&pol, &c),
                 Err(SandboxError::Unsupported(_))
@@ -725,7 +736,7 @@ mod tests {
                 Guarantee::None
             );
         }
-        let l = LinuxLandlockBackend::new("/h".into(), 5);
+        let l = LinuxLandlockBackend::new(p("/h"), 5);
         assert_eq!(l.network_guarantee(&NetworkPolicy::Deny), Guarantee::Weak);
         assert!(matches!(
             crate::encode_policy(&pol),

@@ -1,8 +1,9 @@
 //! Harness `ContextProvider` on top of `nemo-context`: ordered assembly (rules, instructions,
 //! task state) and compaction with a summarizer backed by the run's own provider.
-//! No proactive trimming: history is sent whole and compacted when the provider reports a
-//! context overflow (the harness only calls `compact` then).
+//! No trimming here: history is sent whole. The harness decides when to call `compact` (before a
+//! request past the auto-compact threshold, on a provider overflow, or on `/compact`).
 
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use futures_util::StreamExt;
@@ -11,7 +12,7 @@ use nemo_context::{
     Summarizer, TaskState, assemble, compact, messages_tokens,
 };
 use nemo_events::ArtifactRef;
-use nemo_harness::{BoxFut, Built, Compaction, ContextProvider, RULES};
+use nemo_harness::{AutoCompact, BoxFut, Built, Compaction, ContextProvider, RULES, ShellSettings};
 use nemo_providers::{
     Content, Delta, Message, ModelProvider, Request, Role, StreamEvent, System, SystemBlock,
 };
@@ -22,6 +23,28 @@ use crate::transcript::Transcript;
 
 const SUB_RULES: &str =
     "You are a focused subagent. Complete the delegated task and report back a concise result.";
+
+/// `nemo.context` of the USER settings.json (a repository must not switch compaction off or move
+/// its threshold). Missing or unreadable file = defaults; diagnostics name keys only.
+pub fn read_auto_compact(user_settings: &Path) -> (AutoCompact, Vec<String>) {
+    let v = std::fs::read(user_settings)
+        .ok()
+        .filter(|b| b.len() <= 1 << 20)
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or(serde_json::Value::Null);
+    AutoCompact::from_settings(&v)
+}
+
+/// `nemo.shell` of the USER settings.json (`!cmd` behaviour; a repository must not turn the
+/// sandbox off for it). Missing or unreadable file = defaults; diagnostics name keys only.
+pub fn read_shell_settings(user_settings: &Path) -> (ShellSettings, Vec<String>) {
+    let v = std::fs::read(user_settings)
+        .ok()
+        .filter(|b| b.len() <= 1 << 20)
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or(serde_json::Value::Null);
+    ShellSettings::from_settings(&v)
+}
 
 pub type PutArtifact = Box<dyn Fn(&[u8]) -> Result<ArtifactRef, String> + Send + Sync>;
 
@@ -196,32 +219,24 @@ impl ContextProvider for NemoContext {
             .map_err(|e| e.to_string())
     }
 
-    fn compact<'a>(&'a self, history: &'a [Message]) -> BoxFut<'a, Result<Compaction, String>> {
+    fn compact<'a>(
+        &'a self,
+        history: &'a [Message],
+        instructions: &'a str,
+    ) -> BoxFut<'a, Result<Compaction, String>> {
         Box::pin(async move {
-            // nemo-context's `compact` future is not Send (its `&dyn TokenEstimator` is not
-            // Sync), so it runs to completion on a blocking thread.
-            let (h, s, state) = (
-                history.to_vec(),
-                self.summarizer.clone(),
-                self.state.clone(),
-            );
-            let handle = tokio::runtime::Handle::current();
-            let (before, messages) = tokio::task::spawn_blocking(move || {
-                let est = CharsPerToken::default();
-                let before = messages_tokens(&est, &h);
-                let out = handle.block_on(compact(
-                    &est,
-                    &*s,
-                    &h,
-                    &state,
-                    "",
-                    &CompactConfig::default(),
-                ));
-                (before, out)
-            })
+            let est = CharsPerToken::default();
+            let before = messages_tokens(&est, history);
+            let messages = compact(
+                &est,
+                &*self.summarizer,
+                history,
+                &self.state,
+                instructions,
+                &CompactConfig::default(),
+            )
             .await
-            .map_err(|e| e.to_string())?;
-            let messages = messages.map_err(|e| format!("{e:?}"))?;
+            .map_err(|e| format!("{e:?}"))?;
             let summary = self
                 .summarizer
                 .last
@@ -232,6 +247,7 @@ impl ContextProvider for NemoContext {
                 messages,
                 summary_ref: (self.put)(summary.as_bytes())?,
                 tokens_before: Some(before),
+                summary_chars: summary.chars().count() as u64,
             })
         })
     }
@@ -240,6 +256,26 @@ impl ContextProvider for NemoContext {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn auto_compact_settings_parse_clamp_and_default() {
+        let p = |j: serde_json::Value| AutoCompact::from_settings(&j);
+        assert_eq!(p(serde_json::json!({})), (AutoCompact::default(), vec![]));
+        let (c, d) = p(
+            serde_json::json!({"nemo":{"context":{"auto_compact":false,"auto_compact_threshold":0.7}}}),
+        );
+        assert!(!c.enabled && c.threshold == 0.7 && d.is_empty());
+        let (c, d) = p(serde_json::json!({"nemo":{"context":{"auto_compact_threshold":0.99}}}));
+        assert!(c.enabled && c.threshold == 0.95 && d.len() == 1, "{d:?}");
+        let (c, d) = p(
+            serde_json::json!({"nemo":{"context":{"auto_compact":"no","auto_compact_threshold":"x"}}}),
+        );
+        assert_eq!((c, d.len()), (AutoCompact::default(), 2));
+        assert_eq!(
+            read_auto_compact(Path::new("/nonexistent/settings.json")).0,
+            AutoCompact::default()
+        );
+    }
 
     fn skill(name: &str, d: &str, source: SkillSource) -> SkillInfo {
         SkillInfo {

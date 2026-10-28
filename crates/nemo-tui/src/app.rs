@@ -11,7 +11,7 @@ use nemo_permissions::{Mode, Suggestion};
 use nemo_tools::NeedsUser;
 use nemo_tui_base::complete::{self, Command as CmdDef, StdFs};
 use nemo_tui_base::editor::LineEditor;
-use nemo_tui_base::keys::{Key, MouseAction, Named, WheelDir};
+use nemo_tui_base::keys::{Key, MouseAction, Named, WheelDir, clean_paste};
 use nemo_tui_base::screen::adoptable_size;
 use nemo_tui_base::selection::{
     self as sel, Act, Event as SelEvent, Mode as SelMode, Point, Selection, selection_transition,
@@ -40,7 +40,7 @@ use crate::chat::Chat;
 use crate::link::{ApprovalAsk, InputAsk};
 use crate::links::{OpenTarget, existing_path, path_at, url_at};
 use crate::sanitize::{clean_input, clean_line, clean_text};
-use crate::status::{SandboxStatus, status_line};
+use crate::status::{SandboxStatus, StatusExtra, status_line_with};
 use crate::{ExitReason, SavedSession};
 
 const QUIT_ARM_MS: i64 = 1500;
@@ -78,6 +78,15 @@ pub(crate) struct AppConfig {
 pub(crate) enum Cmd {
     StartTask {
         text: String,
+        /// What the pane shows instead of `text` (`Some("")`: nothing, a note to the model).
+        display_text: Option<String>,
+        cancel: CancellationToken,
+    },
+    /// `!cmd` / `!!cmd`: run a shell command the user typed (explicit intent) and add it with
+    /// its output to the conversation; `record_only` (`!!`) gives the model no turn for it.
+    UserCommand {
+        command: String,
+        record_only: bool,
         cancel: CancellationToken,
     },
     ClearConversation,
@@ -86,6 +95,13 @@ pub(crate) enum Cmd {
     SwitchModel(String),
     /// Leave and re-enter the alternate screen (ctrl+l).
     ResetScreen,
+    /// Right click in the prompt: the host reads the system clipboard and hands the text back
+    /// through [`App::paste_clipboard`] (or reports the failure with [`App::toast`]).
+    PasteClipboard,
+    /// `/compact [instructions]`: the host asks the harness to compact the conversation.
+    Compact {
+        instructions: Option<String>,
+    },
 }
 
 enum DialogKind {
@@ -192,6 +208,8 @@ pub(crate) struct App {
     sug_selected: usize,
     sug_dismissed: Option<String>,
     task: Option<TaskState>,
+    /// A `/compact` between tasks is running: a new task would race with its history swap.
+    compacting: bool,
     ran_task: bool,
     quit_armed_at: Option<i64>,
     toast: Option<Toast>,
@@ -214,6 +232,11 @@ fn local_commands() -> Vec<CmdDef> {
     vec![
         c("help", "commands and keys", ""),
         c("clear", "start a new conversation", ""),
+        c(
+            "compact",
+            "summarise the conversation to free context",
+            "[instructions]",
+        ),
         c("new", "open a session in another folder", ""),
         c("resume", "continue a saved session", "[session id]"),
         c("model", "pick a model, or change it directly", "[model]"),
@@ -292,6 +315,7 @@ impl App {
             sug_selected: 0,
             sug_dismissed: None,
             task: None,
+            compacting: false,
             ran_task,
             quit_armed_at: None,
             toast: None,
@@ -314,6 +338,14 @@ impl App {
         ) {
             self.scroll = 0;
         }
+    }
+
+    pub fn compact_started(&mut self) {
+        self.compacting = true;
+    }
+
+    pub fn compact_done(&mut self) {
+        self.compacting = false;
     }
 
     pub fn note(&mut self, text: impl Into<String>, tone: &str) {
@@ -572,6 +604,10 @@ impl App {
             out.push(Cmd::ResetScreen);
             return out;
         }
+        if is_key(&k, Named::CtrlO) {
+            self.expanded = !self.expanded; // global: also over dialogs, pickers and a running task
+            return out;
+        }
         let paging = is_key(&k, Named::PageUp) || is_key(&k, Named::PageDown);
         if selection_transition(self.sel.mode(), SelEvent::Key { page: paging }).1 == Act::Clear {
             self.clear_selection();
@@ -594,6 +630,38 @@ impl App {
         self.task.is_some()
     }
 
+    /// Shell prompt: the text starts with a typed `!` (so history recall restores it). The
+    /// leading `!` is not drawn; the prompt shows `! ` instead.
+    fn bash(&self) -> bool {
+        self.editor.chars.first() == Some(&'!')
+    }
+
+    /// A user command finished. `err` = the harness could not run it at all.
+    pub fn command_done(&mut self, err: Option<&str>) {
+        self.task = None;
+        self.chat.agent.status = "idle".into();
+        self.chat.agent.interrupting = false;
+        if let Some(e) = err {
+            self.chat
+                .note(format!("command failed to run: {e}"), "error");
+        }
+    }
+
+    /// The model turn after a user command: same task plumbing as a typed prompt, but the
+    /// request (a note from the harness) is not shown.
+    pub fn begin_followup(&mut self, now: i64) -> CancellationToken {
+        let cancel = CancellationToken::new();
+        self.task = Some(TaskState {
+            cancel: cancel.clone(),
+            cancelling: false,
+        });
+        self.chat.agent.status = "running".into();
+        self.chat.agent.turn_start = now;
+        self.chat.agent.turn_mode = Some(mode_str(self.mode).into());
+        self.scroll = 0;
+        cancel
+    }
+
     /// Esc: cancel the running task. Returns whether there was one.
     fn interrupt(&mut self) -> bool {
         match &mut self.task {
@@ -614,12 +682,21 @@ impl App {
             Key::Text(t) => {
                 if t == "?" && self.editor.chars.is_empty() {
                     self.run_slash("help", "", now, out);
+                } else if t.starts_with('!') && t != "!" && self.editor.cur == 0 {
+                    // only a typed `!` starts a shell command, never a burst of characters
+                    self.editor.insert(&format!(" {t}"));
                 } else {
                     self.editor.insert(t);
                 }
             }
             Key::Paste(t) => {
-                if !self.editor.insert(t) {
+                // pasted text never becomes a shell command by itself: type the `!` yourself
+                let t = if self.editor.cur == 0 && t.starts_with('!') {
+                    format!(" {t}")
+                } else {
+                    t.clone()
+                };
+                if !self.editor.insert(&t) {
                     self.chat
                         .note("paste is too large · use @file to attach it", "warn");
                 }
@@ -655,6 +732,8 @@ impl App {
             CtrlU => e.kill_start(),
             CtrlK => e.kill_end(),
             CtrlW => e.kill_word(),
+            AltBackspace => e.kill_word_left(),
+            AltD | AltDelete => e.kill_word_right(),
             Up => self.vertical(true),
             Down => self.vertical(false),
             PageUp => {
@@ -663,9 +742,11 @@ impl App {
             }
             PageDown => self.scroll = self.scroll.saturating_sub(SCROLL_STEP),
             ShiftTab => self.cycle_mode(),
-            CtrlO => self.expanded = !self.expanded,
             Escape => {
-                self.interrupt();
+                // a running task / command first; else leave the shell prompt
+                if !self.interrupt() && self.bash() {
+                    self.editor.clear();
+                }
             }
             CtrlR => {
                 let from = e.history.len() as i64 - 1;
@@ -756,6 +837,9 @@ impl App {
         if text.trim().is_empty() {
             return;
         }
+        if self.bash() {
+            return self.submit_command(&text, now, out);
+        }
         if let Some(rest) = text.trim_start().strip_prefix('/') {
             let (name, arg) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
             if self.cfg.extra_commands.iter().all(|c| c.name != name) {
@@ -766,6 +850,14 @@ impl App {
         }
         if self.running() {
             self.toast("a task is running · esc cancels it", now, true);
+            return;
+        }
+        if self.compacting {
+            self.toast(
+                "compacting the conversation · wait for it to finish",
+                now,
+                true,
+            );
             return;
         }
         self.editor.submit();
@@ -779,7 +871,45 @@ impl App {
         self.chat.agent.turn_mode = Some(mode_str(self.mode).into());
         self.scroll = 0;
         self.clear_selection();
-        out.push(Cmd::StartTask { text, cancel });
+        out.push(Cmd::StartTask {
+            text,
+            display_text: None,
+            cancel,
+        });
+    }
+
+    /// Enter in the shell prompt: `!cmd` runs it and the model analyses the result; `!!cmd` only
+    /// records it.
+    fn submit_command(&mut self, text: &str, now: i64, out: &mut Vec<Cmd>) {
+        let rest = text.strip_prefix('!').unwrap_or(text);
+        let (record_only, command) = match rest.strip_prefix('!') {
+            Some(c) => (true, c),
+            None => (false, rest),
+        };
+        let command = command.trim().to_string();
+        if command.is_empty() {
+            return;
+        }
+        if self.running() {
+            self.toast("a task is running · esc cancels it", now, true);
+            return;
+        }
+        if self.compacting {
+            self.toast(
+                "compacting the conversation · wait for it to finish",
+                now,
+                true,
+            );
+            return;
+        }
+        self.editor.submit();
+        let cancel = self.begin_followup(now);
+        self.clear_selection();
+        out.push(Cmd::UserCommand {
+            command,
+            record_only,
+            cancel,
+        });
     }
 
     // ------------------------------------------------------------------ slash commands
@@ -800,6 +930,10 @@ impl App {
                     lines: HELP.iter().map(|s| (*s).to_string()).collect(),
                 });
             }
+            "compact" if self.compacting => self.out_item("/compact: already compacting", true),
+            "compact" => out.push(Cmd::Compact {
+                instructions: (!arg.is_empty()).then(|| arg.to_string()),
+            }),
             "exit" | "quit" => self.quit = Some(ExitReason::Quit),
             "clear" => {
                 if self.running() {
@@ -1220,7 +1354,8 @@ impl App {
     // ------------------------------------------------------------------ suggestions
 
     fn refresh_suggestions(&mut self, now: i64) {
-        if !self.dialogs.is_empty() || self.picker.is_some() || self.search.is_some() {
+        if !self.dialogs.is_empty() || self.picker.is_some() || self.search.is_some() || self.bash()
+        {
             self.sug = None;
             self.sug_view.clear();
             return;
@@ -1594,6 +1729,28 @@ impl App {
             .is_some_and(|r| p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h)
     }
 
+    /// Below the message rows, inside the chat pane: working line, prompt box, suggestions.
+    fn in_input(&self, p: Point) -> bool {
+        self.in_chat(p)
+            && self.frame.as_ref().is_some_and(|f| {
+                let top = f.rects.chat_rect.map_or(0, |r| r.y)
+                    + f.chat_body.as_ref().map_or(0, |b| b.h as i64);
+                p.y >= top
+            })
+    }
+
+    /// Clipboard text from [`Cmd::PasteClipboard`]: sanitised like a bracketed paste and
+    /// inserted at the cursor (never submitted).
+    pub fn paste_clipboard(&mut self, text: &str, now: i64) {
+        if text.is_empty() {
+            self.toast("clipboard is empty", now, true);
+            return;
+        }
+        let mut out = vec![];
+        self.paste_activity(now);
+        self.agent_key(&Key::Paste(clean_paste(text)), now, &mut out);
+    }
+
     pub fn clear_selection(&mut self) {
         self.sel = SelState::default();
     }
@@ -1692,6 +1849,23 @@ impl App {
                 action: MouseAction::Down,
                 mods,
             } => self.mouse_down(x, y, mods, now, out),
+            // right click in the prompt box = paste; never while a dialog, picker or search
+            // owns the keyboard (a click must not answer or feed them)
+            Key::Mouse {
+                x,
+                y,
+                button: 2,
+                action: MouseAction::Down,
+                ..
+            } if self.dialogs.is_empty() && self.picker.is_none() && self.search.is_none() => {
+                let p = Point {
+                    x: i64::from(x) - 1,
+                    y: i64::from(y) - 1,
+                };
+                if self.in_input(p) {
+                    out.push(Cmd::PasteClipboard);
+                }
+            }
             _ => {}
         }
     }
@@ -1909,7 +2083,9 @@ impl App {
             waiting: !self.dialogs.is_empty(),
             busy: self.chat.agent.status != "idle",
         }];
+        let bash = self.bash();
         let mut opts = AgentOpts {
+            input_mode: bash.then(|| "bash".to_string()),
             scroll: self.scroll,
             expanded: self.expanded,
             selected: self.sug_selected,
@@ -1949,8 +2125,8 @@ impl App {
                 agent: Some(&self.chat.agent),
                 chat_agent: None,
                 editor: Some(EditorView {
-                    chars: &self.editor.chars,
-                    cur: self.editor.cur,
+                    chars: &self.editor.chars[usize::from(bash)..],
+                    cur: self.editor.cur.saturating_sub(usize::from(bash)),
                 }),
                 focus: Focus::Agent,
                 view: &view,
@@ -1960,7 +2136,7 @@ impl App {
             render_frame(&state, w, h - 1, frame_no, now)
         };
         let mut lines = frame.lines.clone();
-        lines.push(status_line(
+        lines.push(status_line_with(
             &self.cfg.sandbox,
             &self.cfg.budget,
             &self.chat.totals,
@@ -1970,6 +2146,11 @@ impl App {
                 .task_started
                 .map_or(0, |t| (now - t).max(0) as u64),
             w,
+            &StatusExtra {
+                context: Some(&self.chat.ctx),
+                now,
+                expanded: self.expanded,
+            },
         ));
         self.frame = Some(frame);
         self.lines.clone_from(&lines);

@@ -115,12 +115,19 @@ impl SandboxPolicy {
                 .map(PathBuf::from)
                 .filter(|p| p.is_absolute())
         };
-        let mut deny = vec![
-            PathBuf::from("/var/run/docker.sock"),
-            PathBuf::from("/run/docker.sock"),
-            PathBuf::from("/var/run/podman"),
-            PathBuf::from("/run/podman"),
-        ];
+        // POSIX socket paths are not absolute paths on Windows (validate would reject them).
+        let mut deny = if cfg!(unix) {
+            [
+                "/var/run/docker.sock",
+                "/run/docker.sock",
+                "/var/run/podman",
+                "/run/podman",
+            ]
+            .map(PathBuf::from)
+            .to_vec()
+        } else {
+            vec![]
+        };
         if let Some(home) = env_path("HOME").or_else(|| env_path("USERPROFILE")) {
             deny.extend(credential_paths(
                 &home,
@@ -163,7 +170,7 @@ impl SandboxPolicy {
     /// there would expose the credential stores in `deny_paths`.
     pub fn check_read_root(&self, path: &Path) -> Result<PathBuf, String> {
         let shown = path.display();
-        let c = std::fs::canonicalize(path).map_err(|e| format!("{shown}: {e}"))?;
+        let c = dunce::canonicalize(path).map_err(|e| format!("{shown}: {e}"))?;
         if c.parent().is_none() {
             return Err(format!("{shown}: a filesystem root cannot be granted"));
         }
@@ -196,7 +203,7 @@ impl SandboxPolicy {
     /// main repo's `.git` when the workspace is a worktree: a `--sandbox-write` of the repo
     /// would otherwise silently re-open it.
     pub fn ensure_unwritable(&self, path: &Path) -> Result<(), SandboxError> {
-        let canon = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+        let canon = |p: &Path| dunce::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
         let target = canon(path);
         match self
             .writable_roots
@@ -378,7 +385,7 @@ fn canon_lossy(p: &Path) -> PathBuf {
     let mut tail = vec![];
     let mut cur = p;
     loop {
-        if let Ok(c) = std::fs::canonicalize(cur) {
+        if let Ok(c) = dunce::canonicalize(cur) {
             return tail.iter().rev().fold(c, |a, t| a.join(t));
         }
         match (cur.parent(), cur.file_name()) {
@@ -489,6 +496,15 @@ pub(crate) fn resolve_program(c: &SandboxedCommand) -> Option<PathBuf> {
 mod tests {
     use super::*;
 
+    // POSIX-looking test paths get a drive letter on Windows so they are absolute there too.
+    fn p(s: &str) -> PathBuf {
+        PathBuf::from(if cfg!(windows) {
+            format!("C:{s}")
+        } else {
+            s.into()
+        })
+    }
+
     #[test]
     fn rejects_relative_and_host_allowlist() {
         let mut p = SandboxPolicy {
@@ -508,21 +524,25 @@ mod tests {
 
     #[test]
     fn standard_policy_shape() {
-        let p = SandboxPolicy::standard(Path::new("/ws"), Path::new("/ws-tmp"));
-        assert_eq!(p.network, NetworkPolicy::Deny);
-        assert_eq!(p.required, Guarantee::Weak);
-        assert_eq!(p.tmp_dir.as_deref(), Some(Path::new("/ws-tmp")));
-        assert!(p.readonly_paths.contains(&"/ws/.git/hooks".into()));
-        assert!(p.readonly_paths.contains(&"/ws/.git/config".into()));
-        assert!(p.deny_paths.contains(&"/run/docker.sock".into()));
-        validate(&p).unwrap();
+        let ws = p("/ws");
+        let pol = SandboxPolicy::standard(&ws, &p("/ws-tmp"));
+        assert_eq!(pol.network, NetworkPolicy::Deny);
+        assert_eq!(pol.required, Guarantee::Weak);
+        assert_eq!(pol.tmp_dir.as_deref(), Some(p("/ws-tmp").as_path()));
+        assert!(pol.readonly_paths.contains(&ws.join(".git/hooks")));
+        assert!(pol.readonly_paths.contains(&ws.join(".git/config")));
+        assert_eq!(
+            pol.deny_paths.contains(&"/run/docker.sock".into()),
+            cfg!(unix)
+        );
+        validate(&pol).unwrap();
         // .git (ancestor of both read-only paths) is guarded against rename/removal; /ws is not.
-        assert_eq!(p.parent_guards(), vec![PathBuf::from("/ws/.git")]);
+        assert_eq!(pol.parent_guards(), vec![ws.join(".git")]);
     }
 
     #[test]
     fn credential_paths_cover_common_stores() {
-        let v = credential_paths(Path::new("/h"), Some(Path::new("/h/AD")), None);
+        let v = credential_paths(&p("/h"), Some(&p("/h/AD")), None);
         for d in [
             ".netrc",
             ".npmrc",
@@ -534,9 +554,9 @@ mod tests {
             ".zsh_history",
             ".mozilla",
         ] {
-            assert!(v.contains(&Path::new("/h").join(d)), "{d}");
+            assert!(v.contains(&p("/h").join(d)), "{d}");
         }
-        assert!(v.contains(&"/h/AD/gcloud".into()));
+        assert!(v.contains(&p("/h/AD").join("gcloud")));
     }
 
     #[test]
@@ -570,15 +590,14 @@ mod tests {
 
     #[test]
     fn protect_and_ensure_unwritable() {
-        let mut p = SandboxPolicy::standard(Path::new("/ws"), Path::new("/ws-tmp"));
-        p.protect([PathBuf::from("/ws/.git")]);
-        assert!(p.readonly_paths.contains(&"/ws/.git".into()));
-        p.ensure_unwritable(Path::new("/main/.git/worktrees/x"))
-            .unwrap();
+        let mut pol = SandboxPolicy::standard(&p("/ws"), &p("/ws-tmp"));
+        pol.protect([p("/ws/.git")]);
+        assert!(pol.readonly_paths.contains(&p("/ws/.git")));
+        pol.ensure_unwritable(&p("/main/.git/worktrees/x")).unwrap();
         for bad in ["/ws", "/ws/sub/.git", "/ws-tmp/a"] {
             assert!(
                 matches!(
-                    p.ensure_unwritable(Path::new(bad)),
+                    pol.ensure_unwritable(&p(bad)),
                     Err(SandboxError::InvalidPolicy(_))
                 ),
                 "{bad}"
@@ -588,20 +607,20 @@ mod tests {
 
     #[test]
     fn tmpdir_is_forced() {
-        let p = SandboxPolicy {
-            tmp_dir: Some("/priv".into()),
+        let pol = SandboxPolicy {
+            tmp_dir: Some(p("/priv")),
             ..Default::default()
         };
         let c = SandboxedCommand {
             env: vec![("TMPDIR".into(), "/tmp".into())],
             ..Default::default()
         };
-        let env = build_env(&p, &c);
+        let env = build_env(&pol, &c);
         assert_eq!(
             env.iter()
                 .filter(|(k, _)| k == "TMPDIR")
                 .collect::<Vec<_>>(),
-            [&("TMPDIR".into(), "/priv".into())]
+            [&("TMPDIR".into(), p("/priv").into_os_string())]
         );
     }
 

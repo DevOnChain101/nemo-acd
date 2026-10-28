@@ -13,6 +13,7 @@ use serde_json::Value;
 
 mod artifact;
 mod browser;
+mod diff;
 mod edit;
 mod glob;
 mod grep;
@@ -30,9 +31,11 @@ mod web;
 mod write;
 
 pub use browser::{BrowserConfig, redact_input};
+pub use nemo_terminal::OutputSink;
 pub use registry::{Registry, standard_policy, standard_policy_git, standard_policy_with};
 pub use skill::{SkillInfo, SkillSource, discover_skills};
 pub use tasks::{NeedsUser, Question, QuestionOption};
+pub use terminal::{LIVE_OUTPUT, UNCONFINED};
 pub use web::WebConfig;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

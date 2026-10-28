@@ -285,7 +285,7 @@ async fn failures_disabled_and_enable_toggle() {
 }
 
 #[tokio::test]
-async fn sse_is_a_clear_error_and_url_only_reports_both() {
+async fn sse_failure_and_url_only_reports_both_transports() {
     let mut sse = McpServerConfig::http("sse", "http://127.0.0.1:1/sse");
     sse.transport = Some(TransportKind::Sse);
     let mut url_only =
@@ -294,13 +294,14 @@ async fn sse_is_a_clear_error_and_url_only_reports_both() {
     let m = started(vec![sse, url_only], base_env()).await;
     let st = m.status();
     assert!(
-        st[0].error.as_deref().unwrap().contains("not supported"),
+        st[0].error.as_deref().unwrap().starts_with("sse: "),
         "{:?}",
         st[0]
     );
+    // a bare url tries streamable http, then the legacy SSE transport; both failures are reported
     let e = st[1].error.as_deref().unwrap();
     assert!(
-        e.contains("not supported") && !e.contains("sekrit-token-9"),
+        e.contains("http: ") && e.contains("sse: ") && !e.contains("sekrit-token-9"),
         "{e}"
     );
     m.close().await;

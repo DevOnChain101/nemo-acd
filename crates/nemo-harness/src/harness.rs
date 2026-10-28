@@ -36,6 +36,105 @@ pub struct Pricing {
     pub output_per_mtok: f64,
 }
 
+/// Proactive compaction (`nemo.context.*` of the user settings.json).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AutoCompact {
+    pub enabled: bool,
+    /// Fraction of the context window (0.5..=0.95) at which the next request is preceded by a
+    /// compaction.
+    pub threshold: f64,
+}
+
+impl Default for AutoCompact {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            threshold: 0.85,
+        }
+    }
+}
+
+impl AutoCompact {
+    pub const MIN_THRESHOLD: f64 = 0.5;
+    pub const MAX_THRESHOLD: f64 = 0.95;
+
+    /// Reads `{"nemo":{"context":{"auto_compact":bool,"auto_compact_threshold":0.5..0.95}}}`.
+    /// Invalid values keep the default (out-of-range thresholds are clamped); each is named in
+    /// the returned diagnostics (key only, never the value).
+    pub fn from_settings(v: &Value) -> (Self, Vec<String>) {
+        let (mut out, mut diag) = (Self::default(), vec![]);
+        let Some(c) = v.get("nemo").and_then(|n| n.get("context")) else {
+            return (out, diag);
+        };
+        match c.get("auto_compact") {
+            None => {}
+            Some(Value::Bool(b)) => out.enabled = *b,
+            Some(_) => diag.push("nemo.context.auto_compact must be true or false".into()),
+        }
+        match c.get("auto_compact_threshold") {
+            None => {}
+            Some(t) => match t.as_f64().filter(|t| t.is_finite()) {
+                Some(t) => {
+                    out.threshold = t.clamp(Self::MIN_THRESHOLD, Self::MAX_THRESHOLD);
+                    if out.threshold != t {
+                        diag.push(
+                            "nemo.context.auto_compact_threshold clamped to 0.5..0.95".into(),
+                        );
+                    }
+                }
+                None => diag.push("nemo.context.auto_compact_threshold must be a number".into()),
+            },
+        }
+        (out, diag)
+    }
+}
+
+/// `nemo.shell.*` of the USER settings.json: commands the person types with `!`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ShellSettings {
+    /// After a `!cmd` the model gets a turn to analyse the result (`!!cmd` never does).
+    pub user_commands_model_turn: bool,
+    /// Run `!cmd` outside the sandbox the Bash tool uses (default: same sandbox).
+    pub user_commands_unsandboxed: bool,
+}
+
+impl Default for ShellSettings {
+    fn default() -> Self {
+        Self {
+            user_commands_model_turn: true,
+            user_commands_unsandboxed: false,
+        }
+    }
+}
+
+impl ShellSettings {
+    /// Reads `{"nemo":{"shell":{"user_commands_model_turn":bool,"user_commands_unsandboxed":bool}}}`.
+    /// A wrong type keeps the default; the diagnostic names the key only.
+    pub fn from_settings(v: &Value) -> (Self, Vec<String>) {
+        let (mut out, mut diag) = (Self::default(), vec![]);
+        let Some(c) = v.get("nemo").and_then(|n| n.get("shell")) else {
+            return (out, diag);
+        };
+        for (key, slot) in [
+            (
+                "user_commands_model_turn",
+                &mut out.user_commands_model_turn,
+            ),
+            (
+                "user_commands_unsandboxed",
+                &mut out.user_commands_unsandboxed,
+            ),
+        ] {
+            match c.get(key) {
+                None => {}
+                Some(Value::Bool(b)) => *slot = *b,
+                Some(_) => diag.push(format!("nemo.shell.{key} must be true or false")),
+            }
+        }
+        (out, diag)
+    }
+}
+
 #[derive(Clone)]
 pub struct HarnessConfig {
     pub model: String,
@@ -54,6 +153,8 @@ pub struct HarnessConfig {
     pub max_tool_result_chars: usize,
     /// Environment given to tools; reduced with `Env::child_env` (allowlist) on construction.
     pub env: BTreeMap<String, String>,
+    pub auto_compact: AutoCompact,
+    pub shell: ShellSettings,
 }
 
 /// `env` may hold credentials: only its keys are printed.
@@ -68,6 +169,8 @@ impl std::fmt::Debug for HarnessConfig {
             .field("stream_recoveries", &self.stream_recoveries)
             .field("recovery_delay", &self.recovery_delay)
             .field("max_tool_result_chars", &self.max_tool_result_chars)
+            .field("auto_compact", &self.auto_compact)
+            .field("shell", &self.shell)
             .field("env_keys", &self.env.keys().collect::<Vec<_>>())
             .finish()
     }
@@ -97,6 +200,8 @@ impl HarnessConfig {
             recovery_delay: Duration::from_millis(500),
             max_tool_result_chars: 30_000,
             env: BTreeMap::new(),
+            auto_compact: AutoCompact::default(),
+            shell: ShellSettings::default(),
         }
     }
 }
@@ -124,6 +229,9 @@ pub struct TaskRequest {
     pub criteria: Vec<Criterion>,
     /// Earlier conversation of an interactive session.
     pub history: Vec<Message>,
+    /// What the UI shows for `request` (`user.message.display_text`); `Some("")` = nothing, for
+    /// a request that is a harness note to the model and not something the person typed.
+    pub display_text: Option<String>,
 }
 
 impl TaskRequest {
@@ -132,6 +240,7 @@ impl TaskRequest {
             request: request.into(),
             criteria: vec![],
             history: vec![],
+            display_text: None,
         }
     }
 }
@@ -145,6 +254,8 @@ pub struct TaskOutcome {
     pub final_text: String,
     pub usage: Usage,
     pub changed_files: Vec<String>,
+    /// Permission rules the task needed and could not get because nobody could approve.
+    pub needed_permissions: Vec<String>,
     /// Conversation to pass as `TaskRequest.history` of the next task.
     pub messages: Vec<Message>,
 }
@@ -153,12 +264,15 @@ pub struct TaskOutcome {
 pub enum HarnessError {
     /// The session cannot start a task from its current status.
     Transition(InvalidTransition),
+    /// The request cannot be served (e.g. an empty `!` command).
+    Rejected(String),
 }
 
 impl std::fmt::Display for HarnessError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Transition(t) => t.fmt(f),
+            Self::Rejected(m) => f.write_str(m),
         }
     }
 }
@@ -197,6 +311,12 @@ pub(crate) struct TaskRun {
     pub pending_user_need: AtomicBool,
     /// Checks the model registered through `verify_run`.
     pub model_checks: Mutex<Vec<nemo_verification::Check>>,
+    /// A call needed an approval nobody could give, and nothing ran successfully since.
+    pub pending_approval: AtomicBool,
+    /// Rules that would have allowed the calls/checks that needed that approval.
+    pub needed: Mutex<BTreeSet<String>>,
+    /// A gate check was blocked for lack of an approval.
+    pub gate_blocked: AtomicBool,
 }
 
 pub(crate) struct AgentCtx {
@@ -214,6 +334,30 @@ pub(crate) struct AgentState {
     pub messages: Vec<Message>,
     pub recent: VecDeque<u64>,
     pub compacted: bool,
+    /// Provider usage anchors the size estimate; see `ContextMeter`.
+    pub meter: nemo_context::ContextMeter,
+    /// Estimated tokens of the request apart from `messages` (system, tool definitions).
+    pub fixed_raw: u64,
+    /// Requests made so far (the clock of the auto-compact pause).
+    pub requests: u64,
+    pub auto_failures: u32,
+    /// No proactive compaction before this request number.
+    pub auto_pause_until: u64,
+}
+
+impl AgentState {
+    pub fn new(messages: Vec<Message>) -> Self {
+        Self {
+            messages,
+            recent: VecDeque::new(),
+            compacted: false,
+            meter: Default::default(),
+            fixed_raw: 0,
+            requests: 0,
+            auto_failures: 0,
+            auto_pause_until: 0,
+        }
+    }
 }
 
 pub(crate) enum AgentEnd {
@@ -245,6 +389,8 @@ pub struct Harness {
     pub(crate) config: HarnessConfig,
     pub(crate) env: Arc<BTreeMap<String, String>>,
     pub(crate) read_ledger: Arc<Mutex<HashMap<PathBuf, SystemTime>>>,
+    /// `Some(instructions)` = a manual compaction is wanted at the next safe point.
+    pub(crate) compact_wanted: Mutex<Option<Option<String>>>,
 }
 
 impl Harness {
@@ -277,6 +423,7 @@ impl Harness {
             config,
             env: Arc::new(env),
             read_ledger: Arc::default(),
+            compact_wanted: Mutex::default(),
         }
     }
 
@@ -307,6 +454,11 @@ impl Harness {
     pub fn with_gate(mut self, g: GateFactory) -> Self {
         self.gate = Some(g);
         self
+    }
+
+    /// `nemo.shell.*`: whether a `!cmd` is followed by a model turn, and where it runs.
+    pub fn shell_settings(&self) -> ShellSettings {
+        self.config.shell
     }
 
     /// Current (session-wide) permission engine, e.g. to inspect the mode in tests.
@@ -482,41 +634,8 @@ impl Harness {
         }
         let task_id = uuid();
         session.task_id = Some(task_id.clone());
-        let now = Instant::now();
-        let task = TaskRun {
-            session_id: session.id.clone(),
-            task_id: task_id.clone(),
-            workspace: Arc::new(session.workspace.clone()),
-            cancel,
-            started: now,
-            deadline: session
-                .budget
-                .max_wall_ms
-                .map(|ms| now + Duration::from_millis(ms)),
-            budget: session.budget.clone(),
-            caps: self.provider.capabilities(&self.config.model),
-            counters: Mutex::default(),
-            status: Mutex::new(start),
-            side_effects: AtomicBool::new(false),
-            changed: Mutex::default(),
-            hit: Mutex::default(),
-            pending_user_need: AtomicBool::new(false),
-            model_checks: Mutex::default(),
-        };
-        let mode = to_mode(session.permission_mode);
-        let main = AgentCtx {
-            agent_id: None,
-            depth: 0,
-            mode: Mutex::new(mode),
-            perms: self.permissions.clone(),
-            allowed: None,
-            prompt: None,
-        };
-        let mut st = AgentState {
-            messages: req.history,
-            recent: VecDeque::new(),
-            compacted: false,
-        };
+        let (task, main) = self.run_ctx(session, task_id.clone(), start, cancel);
+        let mut st = AgentState::new(req.history);
         st.messages.push(Message {
             role: Role::User,
             content: Content::Text(req.request.clone()),
@@ -579,7 +698,7 @@ impl Harness {
                 None,
                 Event::UserMessage {
                     text: req.request,
-                    display_text: None,
+                    display_text: req.display_text,
                     images: vec![],
                 },
             );
@@ -603,6 +722,7 @@ impl Harness {
 
         let usage = self.usage(&task);
         let changed_files = lock(&task.changed).clone();
+        let needed_permissions: Vec<String> = lock(&task.needed).iter().cloned().collect();
         self.emit_task(
             &task,
             Event::TaskEnded {
@@ -612,6 +732,7 @@ impl Harness {
                 usage: usage.clone(),
                 changed_files: changed_files.clone(),
                 artifacts_root: task.workspace.artifact_root.to_string_lossy().into_owned(),
+                needed_permissions: needed_permissions.clone(),
             },
         );
 
@@ -632,8 +753,83 @@ impl Harness {
             final_text,
             usage,
             changed_files,
+            needed_permissions,
             messages: st.messages,
         })
+    }
+
+    /// Per-run state for `session`: the task record and the main agent.
+    pub(crate) fn run_ctx(
+        &self,
+        session: &AgentSession,
+        task_id: String,
+        start: SessionStatus,
+        cancel: CancellationToken,
+    ) -> (TaskRun, AgentCtx) {
+        let now = Instant::now();
+        let task = TaskRun {
+            session_id: session.id.clone(),
+            task_id,
+            workspace: Arc::new(session.workspace.clone()),
+            cancel,
+            started: now,
+            deadline: session
+                .budget
+                .max_wall_ms
+                .map(|ms| now + Duration::from_millis(ms)),
+            budget: session.budget.clone(),
+            caps: self.provider.capabilities(&self.config.model),
+            counters: Mutex::default(),
+            status: Mutex::new(start),
+            side_effects: AtomicBool::new(false),
+            changed: Mutex::default(),
+            hit: Mutex::default(),
+            pending_user_need: AtomicBool::new(false),
+            model_checks: Mutex::default(),
+            pending_approval: AtomicBool::new(false),
+            needed: Mutex::default(),
+            gate_blocked: AtomicBool::new(false),
+        };
+        let main = AgentCtx {
+            agent_id: None,
+            depth: 0,
+            mode: Mutex::new(to_mode(session.permission_mode)),
+            perms: self.permissions.clone(),
+            allowed: None,
+            prompt: None,
+        };
+        (task, main)
+    }
+
+    /// Asks for a manual compaction of the running task's history at its next safe point (before
+    /// the next model request, never between a `tool_use` and its results). Emits
+    /// `context.compacting|compacted|usage` with `reason:"manual"`, or `context.compaction_failed`.
+    /// Cheap and callable from any thread; a later call before the safe point replaces the
+    /// instructions. When no task is running use [`Harness::compact_now`].
+    pub fn request_compact(&self, instructions: Option<String>) {
+        *lock(&self.compact_wanted) = Some(instructions);
+    }
+
+    /// Compacts `history` (the conversation between tasks, `TaskOutcome.messages`) now and
+    /// returns the compacted history for the next `TaskRequest.history`. Events carry the
+    /// session's last task id and `reason:"manual"`. On failure the history is unchanged and
+    /// `context.compaction_failed` was emitted.
+    pub async fn compact_now(
+        &self,
+        session: &AgentSession,
+        history: Vec<Message>,
+        instructions: Option<String>,
+        cancel: CancellationToken,
+    ) -> Result<Vec<Message>, String> {
+        let task_id = session.task_id.clone().unwrap_or_else(uuid);
+        let (task, main) = self.run_ctx(session, task_id, session.status, cancel);
+        let mut st = AgentState::new(history);
+        // Sizes the fixed part of the request (system, tools) so before/after are comparable.
+        let _ = self.make_request(&task, &main, &mut st);
+        let instructions = instructions.unwrap_or_default();
+        self.compact_history(&task, &main, &mut st, "manual", &instructions)
+            .await?;
+        Ok(st.messages)
     }
 
     /// Interactive sessions: a finished task leaves the session `idle` for the next prompt.
@@ -684,6 +880,14 @@ impl Harness {
                     if task.pending_user_need.load(Ordering::SeqCst) {
                         return (TaskStatus::Blocked, "needs_user_input".into(), None, text);
                     }
+                    if task.pending_approval.load(Ordering::SeqCst) {
+                        return (
+                            TaskStatus::Blocked,
+                            "approval_unavailable".into(),
+                            None,
+                            text,
+                        );
+                    }
                     // Exit 2 / `decision: block` keeps the model working; the reason goes to it only.
                     if let Some(stop) = self
                         .run_hook(
@@ -718,7 +922,7 @@ impl Harness {
                         continue;
                     }
                     self.set_status(task, SessionStatus::Verifying, "model proposed to finish");
-                    match self.evaluate(task, gate, criteria, true).await {
+                    match self.evaluate(task, main, gate, criteria, true).await {
                         GateDecision::Complete(rep) => {
                             let id = self.report(task, main, rep.as_deref());
                             let why = if id.is_some() {
@@ -769,7 +973,7 @@ impl Harness {
                         "budget exhausted: final evaluation",
                     );
                     let why = format!("budget_exceeded:{kind}");
-                    return match self.evaluate(task, gate, criteria, false).await {
+                    return match self.evaluate(task, main, gate, criteria, false).await {
                         GateDecision::Complete(Some(rep)) => {
                             let id = self.report(task, main, Some(&rep));
                             (TaskStatus::Completed, format!("verified; {why}"), id, text)
@@ -844,6 +1048,7 @@ impl Harness {
     async fn evaluate(
         &self,
         task: &TaskRun,
+        agent: &AgentCtx,
         gate: &mut Option<CompletionGate>,
         criteria: &[Criterion],
         claimed_done: bool,
@@ -857,7 +1062,30 @@ impl Harness {
             changed_files: lock(&task.changed).clone(),
         };
         match gate {
-            Some(g) => g.evaluate(&state, claimed_done, &task.cancel).await,
+            Some(g) => {
+                let auth = crate::exec::GateAuth {
+                    harness: self,
+                    task,
+                    agent,
+                };
+                let d = g
+                    .evaluate_with(&state, claimed_done, &task.cancel, Some(&auth))
+                    .await;
+                // A check that only waited for an approval nobody could give is not an
+                // unverified result: the task is blocked on that permission.
+                match d {
+                    GateDecision::Stop {
+                        status: TaskStatus::Unverified | TaskStatus::Blocked,
+                        report,
+                        ..
+                    } if task.gate_blocked.load(Ordering::SeqCst) => GateDecision::Stop {
+                        status: TaskStatus::Blocked,
+                        reason: "approval_unavailable".into(),
+                        report,
+                    },
+                    d => d,
+                }
+            }
             // Same applicability rule as the gate; without one nothing can prove the work.
             None if !state.side_effects
                 && !criteria.iter().any(|c| c.source == CriterionSource::User) =>

@@ -114,6 +114,30 @@ pub(crate) fn cap_text(text: &str, max: usize) -> (String, bool) {
     )
 }
 
+/// Head 60 % / tail 40 % of at most `max` bytes (char boundaries kept). `(text, was_cut)`.
+pub(crate) fn cap_bytes(text: &str, max: usize) -> (String, bool) {
+    if text.len() <= max {
+        return (text.to_string(), false);
+    }
+    let mut h = max * 6 / 10;
+    while !text.is_char_boundary(h) {
+        h -= 1;
+    }
+    let mut t = text.len() - (max - max * 6 / 10);
+    while !text.is_char_boundary(t) {
+        t += 1;
+    }
+    (
+        format!(
+            "{}\n[... {} bytes truncated ...]\n{}",
+            &text[..h],
+            t - h,
+            &text[t..]
+        ),
+        true,
+    )
+}
+
 pub(crate) fn preview(text: &str) -> String {
     let mut p: String = text.chars().take(200).collect();
     if text.chars().count() > 200 {

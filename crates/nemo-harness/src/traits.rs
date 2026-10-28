@@ -190,13 +190,29 @@ pub struct Compaction {
     pub messages: Vec<Message>,
     pub summary_ref: ArtifactRef,
     pub tokens_before: Option<u64>,
+    /// Length of the summary text, for `context.compacted.summary_chars`.
+    pub summary_chars: u64,
 }
 
-/// Builds what is sent to the model and compacts on demand (context overflow). `nemo-context`
-/// is wired in behind this trait; [`crate::StaticContext`] is the dependency-free default.
+/// Builds what is sent to the model and compacts on demand: before a request that would pass the
+/// auto-compact threshold, on a provider context overflow, or when the user asks (`/compact`).
+/// `nemo-context` is wired in behind this trait; [`crate::StaticContext`] is the dependency-free
+/// default and cannot compact.
 pub trait ContextProvider: Send + Sync {
     /// `agent_prompt` is the sub-agent definition's system prompt (`None` for the main agent).
     fn build(&self, history: &[Message], agent_prompt: Option<&str>) -> Result<Built, String>;
 
-    fn compact<'a>(&'a self, history: &'a [Message]) -> BoxFut<'a, Result<Compaction, String>>;
+    /// Summarises the head of `history` (the tail stays verbatim, tool pairing stays valid).
+    /// `instructions` are extra guidance for the summary (manual `/compact <text>`, PreCompact
+    /// hook output); empty for none. Must not touch `history` on failure.
+    fn compact<'a>(
+        &'a self,
+        history: &'a [Message],
+        instructions: &'a str,
+    ) -> BoxFut<'a, Result<Compaction, String>>;
+
+    /// False when `compact` can never succeed: the harness then skips proactive attempts.
+    fn can_compact(&self) -> bool {
+        true
+    }
 }

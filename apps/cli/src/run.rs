@@ -151,6 +151,15 @@ pub struct Common {
     pub approve_mcp: Vec<String>,
     #[arg(long)]
     pub no_session_store: bool,
+    /// Allow a tool call without asking, e.g. `--allow 'Bash(cargo test:*)'` (settings rule
+    /// syntax; repeatable). Typed by you, so trusted; it cannot lift critical-path or
+    /// protected-path protections.
+    #[arg(long, value_name = "RULE")]
+    pub allow: Vec<String>,
+    /// Deny a tool call, e.g. `--deny 'Bash(git push:*)'` (settings rule syntax; repeatable).
+    /// Deny wins over every allow.
+    #[arg(long, value_name = "RULE")]
+    pub deny: Vec<String>,
     /// Work in an isolated git worktree on branch `nemo/<session>`; left in place for review.
     #[arg(long)]
     pub worktree: bool,
@@ -255,6 +264,31 @@ fn parse_pricing(v: &Value, label: &str, model: &str) -> Option<Pricing> {
     })
 }
 
+/// `--allow` / `--deny` values: non-empty, one line, `Tool` or `Tool(content)`.
+fn rules_arg(v: &[String], flag: &str) -> Result<Vec<String>, String> {
+    v.iter()
+        .map(|r| {
+            let r = r.trim();
+            let name = r.split('(').next().unwrap_or("");
+            let well_formed = !name.is_empty()
+                && name
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || matches!(c, '_' | '-' | '.'))
+                && (r.len() == name.len() || r.ends_with(')'))
+                && r.len() <= 2000
+                && !r.chars().any(char::is_control);
+            if well_formed {
+                Ok(r.to_string())
+            } else {
+                Err(format!(
+                    "{flag} {}: expected a rule like Bash(cargo test:*), Edit or mcp__server__tool",
+                    sanitize_for_display(r)
+                ))
+            }
+        })
+        .collect()
+}
+
 /// A name/value that `Command::env` accepts.
 fn env_pair_ok(k: &str, v: &str) -> bool {
     !k.is_empty() && !k.contains(['=', '\0']) && !v.contains('\0')
@@ -320,6 +354,10 @@ pub fn prepare(
     front: Front,
     resume: Option<&nemo_tui::Resume>,
 ) -> Result<Prepared, String> {
+    let (cli_allow, cli_deny) = (
+        rules_arg(&c.allow, "--allow")?,
+        rules_arg(&c.deny, "--deny")?,
+    );
     let h = homes(env)?;
     let nemo_deny = [h.nemo.join("auth.json"), h.nemo.join("settings.json")];
     // Before anything is created (worktree, store): a bad grant is a usage error.
@@ -626,8 +664,20 @@ pub fn prepare(
     rt.open_session_sandboxed(&sid, ws.clone(), child_env.clone(), policy.ok());
 
     let rules = PermissionRules {
-        allow: settings.permissions.allow.clone(),
-        deny: settings.permissions.deny.clone(),
+        allow: settings
+            .permissions
+            .allow
+            .iter()
+            .chain(&cli_allow)
+            .cloned()
+            .collect(),
+        deny: settings
+            .permissions
+            .deny
+            .iter()
+            .chain(&cli_deny)
+            .cloned()
+            .collect(),
         ask: settings.permissions.ask.clone(),
         additional_directories: extra_dirs,
     };
@@ -642,6 +692,16 @@ pub fn prepare(
     hcfg.max_output_tokens = cfg.max_tokens as u32;
     hcfg.env = child_env;
     hcfg.pricing = price;
+    let (auto_compact, diag) = crate::ctx::read_auto_compact(&h.nemo.join("settings.json"));
+    for d in &diag {
+        eprintln!("nemo: warning: {d}");
+    }
+    hcfg.auto_compact = auto_compact;
+    let (shell, diag) = crate::ctx::read_shell_settings(&h.nemo.join("settings.json"));
+    for d in &diag {
+        eprintln!("nemo: warning: {d}");
+    }
+    hcfg.shell = shell;
 
     let put: PutArtifact = match &store {
         Some(s) => {
@@ -703,6 +763,13 @@ pub fn prepare(
         &c.approve_mcp,
     );
     mplan.env_passthrough = crate::mcp::read_passthrough(&h.nemo.join("settings.json"));
+    mplan.guard = crate::mcp::read_guard(
+        &h.nemo.join("settings.json"),
+        (trust == ProjectTrust::Trusted)
+            .then(|| settings.project_root.join(".nemo").join("settings.json"))
+            .as_deref(),
+    );
+    mplan.artifact_dir = Some(artifact_root.join("mcp"));
     // Printed now (before any TUI alt screen) and kept in `notices`, which become `notice`
     // events (headless) or TUI startup notes, so approvals stay visible after the screen clears.
     for n in &mplan.notices {
@@ -719,20 +786,20 @@ pub fn prepare(
         eprintln!("nemo: warning: {w}");
         notices.push(w);
     }
-    let (mcp, mcp_tools) = if mplan.servers.is_empty() {
-        (None, vec![])
+    let (mcp, mcp_attach) = if mplan.servers.is_empty() {
+        (None, None)
     } else {
         let (m, t, warns) = tokio_rt.block_on(crate::mcp::start(&mplan, env, &ws.root));
         for w in warns {
             eprintln!("nemo: warning: {}", sanitize_for_display(&w));
         }
-        (Some(m), t)
+        (Some(m), Some(t))
     };
 
     let mut toolbox =
         ToolBox::new(Registry::with_terminal_policy(rt.clone(), make_policy).with_new_tools());
-    for t in mcp_tools {
-        toolbox = toolbox.with_tool(t);
+    if let Some(a) = mcp_attach {
+        toolbox = a.apply(toolbox);
     }
     let gate_cfg = vs.gate(budget.max_verify_attempts);
     let rt_gate = rt.clone();
@@ -816,7 +883,7 @@ pub fn run(a: RunArgs, env: Env) -> Result<u8, String> {
         return Err("--max-cost-usd must be a positive number".into());
     }
     let cwd =
-        std::fs::canonicalize(&a.cwd).map_err(|e| format!("--cwd {}: {e}", a.cwd.display()))?;
+        nemo_core::canonicalize(&a.cwd).map_err(|e| format!("--cwd {}: {e}", a.cwd.display()))?;
     if !cwd.is_dir() {
         return Err(format!("--cwd {} is not a directory", cwd.display()));
     }
@@ -885,6 +952,7 @@ pub fn run(a: RunArgs, env: Env) -> Result<u8, String> {
                             request: prompt,
                             criteria,
                             history: vec![],
+                            display_text: None,
                         },
                         cancel,
                     )
@@ -913,6 +981,9 @@ pub fn run(a: RunArgs, env: Env) -> Result<u8, String> {
         let code = match task.await {
             Ok(Ok(out)) => {
                 eprintln!("nemo: task {:?}: {}", out.status, out.reason);
+                if let Some(h) = blocked_hint(&out) {
+                    eprintln!("{h}");
+                }
                 exit_code(out.status)
             }
             Ok(Err(e)) => {
@@ -1085,6 +1156,42 @@ fn resolve_provider(
 /// stdout was closed by the reader; the task was cancelled and its events are in the store.
 pub const EXIT_STDOUT_CLOSED: u8 = 141;
 
+/// `nemo: blocked: approval needed for ... - rerun with --allow ... or in the TUI`.
+fn blocked_hint(out: &TaskOutcome) -> Option<String> {
+    if out.needed_permissions.is_empty() {
+        return None;
+    }
+    // Blocked is the usual outcome; a model that worked around the denial still gets told.
+    let lead = if out.status == TaskStatus::Blocked {
+        "nemo: blocked: approval needed for"
+    } else {
+        "nemo: note: approval was needed but unavailable for"
+    };
+    let rules = &out.needed_permissions;
+    // The rule text derives from the model's command: never offer it paste-ready unless it is inert
+    // in a shell (no quote, expansion, separator, redirection or control character).
+    let paste_safe = |r: &str| {
+        !r.chars()
+            .any(|c| c.is_control() || "'\"$`\\;|&<>".contains(c))
+    };
+    let flags: Vec<String> = rules
+        .iter()
+        .filter(|r| paste_safe(r))
+        .map(|r| format!("--allow '{r}'"))
+        .collect();
+    let names = rules
+        .iter()
+        .map(|r| sanitize_for_display(r))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let how = if flags.len() == rules.len() {
+        format!("rerun with {} or in the TUI", flags.join(" "))
+    } else {
+        "the rule text comes from the model's command, so review it and add it with --allow yourself, or approve in the TUI".to_string()
+    };
+    Some(format!("{lead} {names} \u{2014} {how}"))
+}
+
 fn exit_code(s: TaskStatus) -> u8 {
     match s {
         TaskStatus::Completed => 0,
@@ -1158,6 +1265,44 @@ fn artifact_to_dir(dir: PathBuf) -> PutArtifact {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn outcome(rules: &[&str]) -> TaskOutcome {
+        TaskOutcome {
+            task_id: String::new(),
+            status: TaskStatus::Blocked,
+            reason: String::new(),
+            verification_report_id: None,
+            final_text: String::new(),
+            usage: nemo_events::Usage {
+                input_tokens: 0,
+                output_tokens: 0,
+                cache_read_input_tokens: None,
+                cache_creation_input_tokens: None,
+                cost_usd: None,
+            },
+            changed_files: vec![],
+            needed_permissions: rules.iter().map(|r| r.to_string()).collect(),
+            messages: vec![],
+        }
+    }
+
+    #[test]
+    fn blocked_hint_offers_only_shell_inert_rules() {
+        let h = blocked_hint(&outcome(&["Bash(cargo test:*)"])).unwrap();
+        assert!(h.contains("--allow 'Bash(cargo test:*)'"), "{h}");
+        for bad in [
+            "Bash(a'; rm -rf ~:*)",
+            "Bash($(id):*)",
+            "Bash(a`b`:*)",
+            "Bash(a\\b)",
+            "Bash(a|b)",
+            "Bash(a\nb)",
+        ] {
+            let h = blocked_hint(&outcome(&[bad])).unwrap();
+            assert!(!h.contains("--allow '"), "{h}");
+            assert!(h.contains("comes from the model's command"), "{h}");
+        }
+    }
 
     #[test]
     fn preflight_refuses_loopback_the_backend_cannot_honour() {

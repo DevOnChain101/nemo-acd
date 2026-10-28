@@ -2450,3 +2450,26 @@ fn large_input_carries_digest_and_truncation_note() {
         big.reason
     );
 }
+
+#[test]
+fn user_typed_command_auto_approves_a_plain_ask_but_not_hard_blocks() {
+    let f = fx();
+    let p = f.with(
+        rules(&[], &["Bash(curl:*)"], &["Bash(make:*)"]),
+        Mode::Default,
+    );
+    let user = |c: &str| p.check_user_command(c);
+    // plain ask and ask rule: explicit intent
+    assert_eq!(user("cargo test").decision, A);
+    assert_eq!(user("make all").decision, A);
+    // even where the agent could not ask anyone
+    let mut headless = f.with(rules(&[], &[], &[]), Mode::DontAsk);
+    headless.env.interactive = false;
+    assert_eq!(headless.check_user_command("cargo test").decision, A);
+    // deny rule, critical removal, protected path: still blocked
+    assert_eq!(user("curl http://x").decision, D);
+    for c in ["rm -rf /", "echo x > .git/config"] {
+        let v = user(c);
+        assert!(v.decision == D || (v.decision == Q && v.hard), "{c}: {v:?}");
+    }
+}
