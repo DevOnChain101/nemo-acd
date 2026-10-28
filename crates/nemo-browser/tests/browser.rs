@@ -193,11 +193,20 @@ async fn launch_failure_reports_exit_status_and_stderr_body() {
         ("NEMO_BROWSER_PATH", fake.to_string_lossy().into_owned()),
         ("PATH", "/usr/bin:/bin".to_owned()),
     ]);
-    let err = BrowserRuntime::launch(BrowserOptions::new(dir.path()), &env)
-        .await
-        .err()
-        .expect("fake browser must not launch")
-        .to_string();
+    // The product execs the file itself, so retry the classic ETXTBSY race (another test thread
+    // forked while the script was still open for writing).
+    let mut err = String::new();
+    for _ in 0..10 {
+        err = BrowserRuntime::launch(BrowserOptions::new(dir.path()), &env)
+            .await
+            .err()
+            .expect("fake browser must not launch")
+            .to_string();
+        if !err.contains("Text file busy") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
     assert!(
         err.contains("dying-words-marker") && err.contains("exit"),
         "{err}"

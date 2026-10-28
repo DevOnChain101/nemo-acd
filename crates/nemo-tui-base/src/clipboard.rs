@@ -415,15 +415,15 @@ mod tests {
         );
     }
 
+    /// Run through `sh <file>`, never exec the file itself: executing a script that was just
+    /// written races with other test threads forking (ETXTBSY, "Text file busy").
     #[cfg(unix)]
     fn script(dir: &Path, body: &str) -> PasteCommand {
-        use std::os::unix::fs::PermissionsExt;
         let p = dir.join("tool.sh");
-        std::fs::write(&p, format!("#!/bin/sh\n{body}\n")).unwrap();
-        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::write(&p, format!("{body}\n")).unwrap();
         PasteCommand {
-            program: p,
-            args: vec![],
+            program: "/bin/sh".into(),
+            args: vec![p.display().to_string()],
         }
     }
 
@@ -461,12 +461,10 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let out = d.path().join("out.txt");
         let sh = d.path().join("sink.sh");
-        std::fs::write(&sh, format!("#!/bin/sh\ncat > '{}'\n", out.display())).unwrap();
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&sh, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::write(&sh, format!("cat > '{}'\n", out.display())).unwrap();
         let sink = PipeClipboard {
-            program: sh,
-            args: vec![],
+            program: "/bin/sh".into(),
+            args: vec![sh.display().to_string()],
             encoding: Encoding::Utf8,
         };
         sink.copy("héllo\nworld").unwrap();

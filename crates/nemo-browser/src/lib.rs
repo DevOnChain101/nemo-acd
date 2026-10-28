@@ -83,7 +83,7 @@ impl BrowserOptions {
             no_sandbox: false,
             viewport: (1280, 800),
             transport: Transport::default(),
-            launch_timeout: Duration::from_secs(20),
+            launch_timeout: Duration::from_secs(60), // cold Chrome on a loaded CI runner is slow
             navigation_timeout: Duration::from_secs(30),
             chrome_args: vec![],
             event_capacity: 8192,
@@ -434,6 +434,54 @@ async fn launch_failure(
     ))
 }
 
+/// `ws://...` from the `DevTools listening on` line Chrome logs to stderr.
+fn listening_url(stderr_path: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(stderr_path).ok()?;
+    let rest = text.split("DevTools listening on ").nth(1)?;
+    let url = rest.split_whitespace().next()?;
+    url.starts_with("ws://127.0.0.1:").then(|| url.to_owned())
+}
+
+fn dir_listing(dir: &Path) -> String {
+    let names: Vec<String> = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .take(40)
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    if names.is_empty() {
+        "(empty or unreadable)".into()
+    } else {
+        names.join(", ")
+    }
+}
+
+/// Windows system variables Chrome and its helpers expect; `child_env` strips them. Non-secret.
+fn windows_chrome_env(env: &Env) -> Vec<(String, String)> {
+    if !cfg!(windows) {
+        return vec![];
+    }
+    [
+        "SystemDrive",
+        "windir",
+        "ProgramData",
+        "ProgramFiles",
+        "ProgramFiles(x86)",
+        "ProgramW6432",
+        "ALLUSERSPROFILE",
+        "USERNAME",
+        "USERDOMAIN",
+        "COMPUTERNAME",
+        "NUMBER_OF_PROCESSORS",
+        "PROCESSOR_ARCHITECTURE",
+        "CommonProgramFiles",
+    ]
+    .iter()
+    .filter_map(|k| env.get(k).map(|v| ((*k).to_owned(), v.to_owned())))
+    .collect()
+}
+
 impl BrowserRuntime {
     /// Discovers a browser (`NEMO_BROWSER_PATH` first), launches it headless with an isolated
     /// temp profile and opens one tab in a fresh browser context.
@@ -444,6 +492,13 @@ impl BrowserRuntime {
         let stderr_path = profile.path().join("stderr.log");
         let stderr = std::fs::File::create(&stderr_path)?;
         let (w, h) = opts.viewport;
+        std::fs::create_dir_all(&data_dir)?;
+        // Chrome wants a plain `C:\...` path, never the `\\?\` verbatim form.
+        let data_arg = data_dir.display().to_string();
+        let data_arg = data_arg
+            .strip_prefix(r"\\?\")
+            .unwrap_or(&data_arg)
+            .to_owned();
 
         let pipe = opts.transport == Transport::Pipe;
         let mut chrome_args = vec![
@@ -468,7 +523,11 @@ impl BrowserRuntime {
             ]
             .map(str::to_owned),
         );
-        chrome_args.push(format!("--user-data-dir={}", data_dir.display()));
+        chrome_args.push(format!("--user-data-dir={data_arg}"));
+        if !pipe {
+            // second discovery path: "DevTools listening on ws://..." on stderr
+            chrome_args.push("--enable-logging=stderr".into());
+        }
         chrome_args.push(format!("--window-size={w},{h}"));
         if opts.no_sandbox {
             chrome_args.push("--no-sandbox".into());
@@ -494,6 +553,7 @@ impl BrowserRuntime {
                 c.args(&chrome_args)
                     .env_clear()
                     .envs(env.child_env().iter())
+                    .envs(windows_chrome_env(env))
                     .stdin(Stdio::null())
                     .stdout(Stdio::null())
                     .stderr(stderr);
@@ -523,6 +583,9 @@ impl BrowserRuntime {
                         break format!("ws://127.0.0.1:{}{}", port.trim(), path.trim());
                     }
                 }
+                if let Some(u) = listening_url(&stderr_path) {
+                    break u;
+                }
                 if child.try_wait()?.is_some() {
                     return Err(launch_failure(
                         &mut *child,
@@ -537,7 +600,13 @@ impl BrowserRuntime {
                         &mut *child,
                         &stderr_path,
                         &exe,
-                        "browser did not publish its DevTools port in time",
+                        &format!(
+                            "browser did not publish its DevTools port in {} s; DevToolsActivePort {}; user-data-dir {} contains: {}",
+                            opts.launch_timeout.as_secs(),
+                            if data_dir.join("DevToolsActivePort").exists() { "exists" } else { "does not exist" },
+                            data_arg,
+                            dir_listing(&data_dir),
+                        ),
                     )
                     .await);
                 }
@@ -1143,6 +1212,23 @@ impl BrowserRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stderr_listening_line_gives_the_ws_url() {
+        let d = tempfile::tempdir().unwrap();
+        let f = d.path().join("stderr.log");
+        std::fs::write(
+            &f,
+            "[1:2:INFO] x\nDevTools listening on ws://127.0.0.1:5555/devtools/browser/abc\n",
+        )
+        .unwrap();
+        assert_eq!(
+            listening_url(&f).as_deref(),
+            Some("ws://127.0.0.1:5555/devtools/browser/abc")
+        );
+        std::fs::write(&f, "DevTools listening on ws://evil.example:1/x\n").unwrap();
+        assert_eq!(listening_url(&f), None);
+    }
 
     #[test]
     fn key_table() {
