@@ -52,6 +52,10 @@ fn class(c: char) -> Class {
     }
 }
 
+fn is_combining(c: char) -> bool {
+    matches!(c as u32, 0x0300..=0x036F | 0x1AB0..=0x1AFF | 0x1DC0..=0x1DFF | 0x20D0..=0x20FF | 0xFE20..=0xFE2F)
+}
+
 #[derive(Debug, Default)]
 pub struct LineEditor {
     pub chars: Vec<char>,
@@ -98,10 +102,15 @@ impl LineEditor {
         true
     }
 
+    /// Deletes the character before the cursor with the combining marks that sit on it, so a
+    /// decomposed `ệ` (e + marks) goes in one press like a precomposed one.
     pub fn backspace(&mut self) {
-        if self.cur > 0 {
-            self.chars.remove(self.cur - 1);
+        while self.cur > 0 {
+            let c = self.chars.remove(self.cur - 1);
             self.cur -= 1;
+            if !is_combining(c) {
+                break;
+            }
         }
     }
 
@@ -271,6 +280,15 @@ mod tests {
     use super::*;
 
     // Translated from Node test/editor.test.js.
+    #[test]
+    fn backspace_removes_a_decomposed_letter_whole() {
+        let mut e = LineEditor::new();
+        e.insert("Vie\u{0302}\u{0323}t"); // Việt, NFD
+        e.backspace();
+        e.backspace();
+        assert_eq!(e.text(), "Vi");
+    }
+
     #[test]
     fn bounds_are_code_points_normalized_and_atomic() {
         let mut e = LineEditor::new();

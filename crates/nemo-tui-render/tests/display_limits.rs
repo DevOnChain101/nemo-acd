@@ -227,7 +227,15 @@ fn nothing_else_is_hidden() {
         "input": {}, "result": format!("{}\n{}", numbered("bad", 30), "w".repeat(500))});
     let l = render_with(vec![err], &[], false, 60);
     assert_eq!(count(&l, "bad "), 30);
-    assert_eq!(l.iter().map(|x| x.matches('w').count()).sum::<usize>(), 500);
+    // (the prompt hint "Shift+Enter newline" has a w too)
+    let w_count = |x: &&String| x.matches('w').count();
+    assert_eq!(
+        l.iter()
+            .filter(|x| !x.contains("Enter send"))
+            .map(|x| w_count(&x))
+            .sum::<usize>(),
+        500
+    );
     assert!(!l.iter().any(|x| x.contains('…')), "{l:#?}");
 
     // thinking, finished and streaming

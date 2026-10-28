@@ -26,6 +26,8 @@ pub struct Picker {
     pub window_size: usize,
     pub loading: bool,
     pub loading_text: String,
+    /// A yes/no style choice: no "filter:" line, typing does nothing.
+    pub no_filter: bool,
 }
 
 /// Loose in-order character match, case-insensitive (the same rule "/" and "@" completion use).

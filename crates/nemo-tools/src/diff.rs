@@ -91,7 +91,7 @@ pub(crate) fn build(path: &str, kind: &str, old: &str, new: &str, hide: bool) ->
 }
 
 /// `build` for a file path: secret files get counts only.
-pub(crate) fn for_file(path: &str, kind: &str, old: &str, new: &str) -> Value {
+pub fn for_file(path: &str, kind: &str, old: &str, new: &str) -> Value {
     let hide = nemo_core::secrets::is_secret_path(std::path::Path::new(path));
     build(path, kind, old, new, hide)
 }

@@ -544,12 +544,64 @@ async fn interactive_gate_check_asks_the_approver_and_runs_when_allowed() {
     assert_eq!(asked.len(), 1);
     assert_eq!(asked[0].input["command"], "test -f a.txt");
     assert!(
-        asked[0].reason.contains("verification check"),
+        asked[0].reason.contains("verification runs"),
         "{}",
         asked[0].reason
     );
     assert!(!asked[0].suggestions.is_empty());
     assert!(out.needed_permissions.is_empty());
+}
+
+/// B-3 / B-6: the inferred checks of one task are one dialog, the approval during `verifying`
+/// is a legal transition that never reaches the transcript, and read-only turns skip the gate.
+#[tokio::test]
+async fn inferred_checks_are_one_dialog_and_verifying_may_wait_for_approval() {
+    let pkg = r#"{"scripts":{"lint":"true","test":"true"}}"#;
+    let turns = vec![
+        Turn::tool(
+            "w1",
+            "Write",
+            json!({"file_path": "package.json", "content": pkg}),
+        ),
+        Turn::text("done"),
+        Turn::text("done again"),
+    ];
+    let approver = ScriptedApprover::new(vec![Approval::allow()]);
+    let mut rig = gated(gate_opts(true), turns, Some(approver.clone()));
+    rig.run("add a package").await;
+    let asked = approver.asked.lock().unwrap().clone();
+    assert_eq!(asked.len(), 1, "{asked:?}");
+    let cmd = asked[0].input["command"].as_str().unwrap();
+    assert!(
+        cmd.contains("npm run lint") && cmd.contains("npm run test"),
+        "{cmd}"
+    );
+    let notices = rig.find(|e| match e {
+        Event::Notice { text, .. } if text.contains("invalid session transition") => Some(()),
+        _ => None,
+    });
+    assert!(notices.is_empty());
+    let moves = rig.find(|e| match e {
+        Event::SessionStatusChanged { from, to, .. } => Some((from.clone(), to.clone())),
+        _ => None,
+    });
+    assert!(
+        moves.contains(&("verifying".into(), "waiting_approval".into())),
+        "{moves:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_read_only_bash_turn_does_not_trigger_the_gate() {
+    let turns = vec![
+        Turn::tool("b1", "Bash", json!({"command": "ls"})),
+        Turn::text("done"),
+    ];
+    let approver = ScriptedApprover::new(vec![]);
+    let mut rig = gated(gate_opts(true), turns, Some(approver.clone()));
+    let out = rig.run("list files").await;
+    assert_eq!(out.status, TaskStatus::Completed, "{}", out.reason);
+    assert!(approver.asked.lock().unwrap().is_empty());
 }
 
 #[tokio::test]

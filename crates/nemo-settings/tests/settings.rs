@@ -41,8 +41,77 @@ impl Fx {
             user_home: self.home.path(),
             env: &env,
         };
-        load_settings(&ctx, trust)
+        load_settings_with_managed(&ctx, trust, &self.home.path().join("managed.json"))
     }
+    fn load_managed(&self, trust: ProjectTrust) -> Settings {
+        let env = Env::default();
+        let ctx = LoadContext {
+            cwd: self.proj.path(),
+            nemo_home: self.home.path(),
+            user_home: self.home.path(),
+            env: &env,
+        };
+        load_settings_with_managed(&ctx, trust, &self.home.path().join("managed.json"))
+    }
+}
+
+#[test]
+fn local_and_managed_layers_union_lists_and_managed_wins_scalars() {
+    let f = fx();
+    f.user(json!({"permissions":{"deny":["Bash(a:*)"],"defaultMode":"plan"}}));
+    f.project(json!({"permissions":{"allow":["Read"],"defaultMode":"acceptEdits"}}));
+    write(
+        f.proj.path(),
+        ".nemo/settings.local.json",
+        json!({"permissions":{"allow":["Bash(ls:*)"],"deny":["Bash(b:*)"],"defaultMode":"default"}}),
+    );
+    write(
+        f.home.path(),
+        "managed.json",
+        json!({"permissions":{"deny":["Bash(rm:*)"],"allow":["Bash(c:*)"],"defaultMode":"dontAsk"}}),
+    );
+    let s = f.load_managed(ProjectTrust::Trusted);
+    assert_eq!(s.permissions.deny, ["Bash(a:*)", "Bash(b:*)", "Bash(rm:*)"]);
+    assert_eq!(s.permissions.allow, ["Read", "Bash(ls:*)", "Bash(c:*)"]);
+    assert_eq!(s.permissions.default_mode, "dontAsk");
+    assert_eq!(s.managed_default_mode.as_deref(), Some("dontAsk"));
+    // untrusted project: local allow rules are dropped like project ones; managed still applies
+    let s = f.load_managed(ProjectTrust::Untrusted);
+    assert_eq!(s.permissions.allow, ["Bash(c:*)"]);
+    assert!(s.permissions.deny.contains(&"Bash(rm:*)".to_string()));
+    // a malformed managed file is an error (its deny rules cannot apply)
+    fs::write(f.home.path().join("managed.json"), "{,").unwrap();
+    assert!(!f.load_managed(ProjectTrust::Trusted).errors.is_empty());
+}
+
+#[test]
+fn persisted_allow_rules_land_in_the_gitignored_local_file() {
+    let f = fx();
+    write(
+        f.proj.path(),
+        ".nemo/settings.local.json",
+        json!({"theme":"x","permissions":{"allow":["Read"]}}),
+    );
+    persist_allow_rules(f.proj.path(), &["Bash(npm test:*)".into(), "Read".into()]).unwrap();
+    persist_allow_rules(f.proj.path(), &["Bash(npm test:*)".into()]).unwrap();
+    let v: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(f.proj.path().join(".nemo/settings.local.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        v["permissions"]["allow"],
+        json!(["Read", "Bash(npm test:*)"])
+    );
+    assert_eq!(v["theme"], "x");
+    let gi = fs::read_to_string(f.proj.path().join(".nemo/.gitignore")).unwrap();
+    assert_eq!(gi.matches("settings.local.json").count(), 1);
+    assert_eq!(
+        f.load(ProjectTrust::Trusted).permissions.allow,
+        ["Read", "Bash(npm test:*)"]
+    );
+    // never overwrite a file that cannot be parsed
+    fs::write(f.proj.path().join(".nemo/settings.local.json"), "{,").unwrap();
+    assert!(persist_allow_rules(f.proj.path(), &["Read".into()]).is_err());
 }
 
 #[test]

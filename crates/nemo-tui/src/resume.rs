@@ -35,8 +35,33 @@ pub fn list_saved(nemo_home: &Path, cwd: Option<&str>) -> Result<Vec<SavedSessio
     Ok(r.list_sessions(cwd)
         .map_err(|e| e.to_string())?
         .iter()
-        .map(saved)
+        .enumerate()
+        .map(|(i, rec)| {
+            let mut s = saved(rec);
+            // sessions have no stored title: the first prompt names them (newest 100 only)
+            if s.title.trim().is_empty() && i < 100 {
+                s.title = first_prompt(&r, &rec.id).unwrap_or_default();
+            }
+            s
+        })
         .collect())
+}
+
+/// First thing the person typed in a session, one line.
+fn first_prompt(r: &Reader, id: &str) -> Option<String> {
+    for rec in r.read_events(id, 0, 40).ok()? {
+        if let Record::Known(e) = rec
+            && let nemo_events::Event::UserMessage {
+                text, display_text, ..
+            } = e.event
+        {
+            let t = display_text.filter(|d| !d.is_empty()).unwrap_or(text);
+            if !t.trim().is_empty() && !t.starts_with("[Nemo") {
+                return Some(t.split_whitespace().collect::<Vec<_>>().join(" "));
+            }
+        }
+    }
+    None
 }
 
 /// `id` is a full id or a unique prefix. Unreadable events or messages are an error, not a

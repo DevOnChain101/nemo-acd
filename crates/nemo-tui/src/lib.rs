@@ -12,6 +12,7 @@ mod app;
 mod chat;
 mod link;
 pub mod links;
+mod preview;
 mod resume;
 mod runtime;
 mod status;

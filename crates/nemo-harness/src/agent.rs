@@ -261,7 +261,7 @@ impl Harness {
             tools: self.tool_defs(agent),
             temperature: None,
             thinking: None,
-            reasoning_effort: None,
+            reasoning_effort: lock(&self.reasoning_effort).clone(),
         };
         st.fixed_raw = fixed_tokens(&req);
         Ok(req)

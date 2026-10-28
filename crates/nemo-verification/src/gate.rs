@@ -12,9 +12,9 @@ use tokio_util::sync::CancellationToken;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum InferredOnlyPolicy {
     /// Inferred checks alone never give `passed`; the report caps at `unverified`.
-    #[default]
     CapUnverified,
-    /// Spec rule 4 literally: all inferred checks passed and at least one ran -> `passed`.
+    /// verification.md §3 rule 4: no failed check and at least one passed -> `passed`.
+    #[default]
     AllowPassed,
 }
 
@@ -107,7 +107,8 @@ pub fn aggregate(
     } else if user.iter().any(|c| c.status != Passed) {
         Unverified
     } else if user.is_empty() {
-        let inferred_pass = !checks.is_empty() && checks.iter().all(|k| k.status == Passed);
+        // `Failed` is excluded above, so one passed check is enough; others become limitations.
+        let inferred_pass = checks.iter().any(|k| k.status == Passed);
         if !checks.is_empty() {
             lim.push("no explicit acceptance criteria; inferred checks only".into());
         }
@@ -181,7 +182,12 @@ impl CompletionGate {
         }
         self.attempt += 1;
         let started_at = now();
-        let plan = plan_checks(&st.criteria, &st.model_checks, &self.runner.workspace().cwd);
+        let plan = plan_checks(
+            &st.criteria,
+            &st.model_checks,
+            &self.runner.workspace().cwd,
+            &st.changed_files,
+        );
         let checks = self.runner.run_with(&plan, cancel, auth).await;
         let mut criteria = st.criteria.clone();
         let (status, mut limitations) = aggregate(&mut criteria, &checks, self.cfg.inferred_only);

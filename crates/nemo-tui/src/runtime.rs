@@ -22,7 +22,7 @@ use nemo_tui_base::sgr::{ColorMode, encode};
 use nemo_tui_base::terminal::{GuardOptions, TerminalGuard};
 
 use crate::SavedSession;
-use crate::app::{App, AppConfig, Cmd};
+use crate::app::{App, AppConfig, Cmd, Info, PermAction};
 use crate::link::{Msg, TaskDone, UiLink, UserDone};
 use crate::links::{OpenTarget, Opener, SystemOpener};
 use crate::resume::Resume;
@@ -38,6 +38,8 @@ pub enum ExitReason {
     OpenFolder(std::path::PathBuf),
     /// The user picked a saved session: the host reopens it (see [`crate::load_resume`]).
     Resume(String),
+    /// `/model NAME`: the host rebuilds the harness for that model and reopens this session.
+    SwitchModel(String),
 }
 
 pub struct Exit {
@@ -65,10 +67,14 @@ pub struct Options {
     pub sandbox: SandboxStatus,
     /// Entries of the `/model` picker.
     pub models: Vec<String>,
+    /// `effort_tiers` of the current model; empty disables `/effort`.
+    pub effort_tiers: Vec<String>,
     /// Applies a model choice: returns the rebuilt harness and its label. Without it `/model`
     /// only lists.
     pub switch_model: Option<ModelSwitch>,
     pub extra_commands: Vec<CmdDef>,
+    /// Lines for `/mcp`: servers, state, tools, errors (called each time the command runs).
+    pub mcp_report: Option<Box<dyn Fn() -> Vec<String>>>,
     pub saved: Vec<SavedSession>,
     pub resume: Option<Resume>,
     /// Shown as warnings in the pane from the first frame (sanitised on ingest); the matching
@@ -109,8 +115,10 @@ impl Options {
             model: None,
             sandbox: SandboxStatus::default(),
             models: vec![],
+            effort_tiers: vec![],
             switch_model: None,
             extra_commands: vec![],
+            mcp_report: None,
             saved: vec![],
             resume: None,
             startup_notes: vec![],
@@ -153,6 +161,7 @@ fn cfg_for(o: &Options) -> AppConfig {
             m => m,
         },
         models: o.models.clone(),
+        effort_tiers: o.effort_tiers.clone(),
         extra_commands: o.extra_commands.clone(),
         saved: o.saved.clone(),
         home: o
@@ -164,6 +173,7 @@ fn cfg_for(o: &Options) -> AppConfig {
 }
 
 struct Runner {
+    mcp_report: Option<Box<dyn Fn() -> Vec<String>>>,
     harness: Arc<Harness>,
     session: Option<AgentSession>,
     history: Vec<Message>,
@@ -175,7 +185,7 @@ struct Runner {
 impl Runner {
     /// `/compact`: while a task runs the harness compacts at its next safe point, otherwise the
     /// conversation between tasks is compacted now (on the runtime; `Msg::Compacted` returns it).
-    fn compact(&mut self, app: &mut App, instructions: Option<String>) {
+    fn compact(&mut self, app: &mut App, instructions: Option<String>, now: i64) {
         if app.task_running() {
             self.harness.request_compact(instructions);
             app.note(
@@ -188,13 +198,86 @@ impl Runner {
             app.note("/compact: nothing to compact yet", "warn");
             return;
         };
-        app.compact_started();
+        app.compact_started(now);
         let (h, history, tx) = (self.harness.clone(), self.history.clone(), self.tx.clone());
         self.runtime.spawn(async move {
             let cancel = tokio_util::sync::CancellationToken::new();
             let r = h.compact_now(&session, history, instructions, cancel).await;
             let _ = tx.send(Msg::Compacted(r));
         });
+    }
+
+    /// `/mcp`, `/agents`, `/permissions`: text for the pane and whether it is an error.
+    fn info(&mut self, i: Info) -> (Vec<String>, bool) {
+        match i {
+            Info::Mcp => match &self.mcp_report {
+                Some(f) => (f(), false),
+                None => (
+                    vec!["MCP: no servers are configured for this session".into()],
+                    false,
+                ),
+            },
+            Info::Agents => {
+                let mut v = vec!["Agents the Task tool can start:".to_string()];
+                v.extend(
+                    self.harness
+                        .agent_defs()
+                        .into_iter()
+                        .map(|(n, d)| format!("  {n} · {d}")),
+                );
+                (v, false)
+            }
+            Info::Permissions(a) => {
+                let perms = self.harness.permissions();
+                let mut p = perms.lock().unwrap_or_else(|e| e.into_inner());
+                match a {
+                    PermAction::List => {
+                        let r = p.rules();
+                        let mut v = vec![format!(
+                            "mode: {}",
+                            nemo_tui_render::dialogs::mode_name(Some(p.mode().as_str()))
+                        )];
+                        for (k, rules) in [("allow", &r.allow), ("ask", &r.ask), ("deny", &r.deny)]
+                        {
+                            v.push(format!("{k} rules ({}):", rules.len()));
+                            v.extend(
+                                rules
+                                    .iter()
+                                    .map(|x| format!("  {}", crate::sanitize::clean_line(x))),
+                            );
+                        }
+                        v.push("add: /permissions allow RULE · remove: /permissions remove RULE (this session only)".into());
+                        (v, false)
+                    }
+                    PermAction::Allow(rule) => {
+                        if p.add_allow(&rule) {
+                            (
+                                vec![format!(
+                                    "allowed for this session: {}",
+                                    crate::sanitize::clean_line(&rule)
+                                )],
+                                false,
+                            )
+                        } else {
+                            (vec!["that allow rule already exists".into()], true)
+                        }
+                    }
+                    PermAction::Remove(rule) => match p.remove_rule(&rule) {
+                        0 => (
+                            vec![format!("no rule {}", crate::sanitize::clean_line(&rule))],
+                            true,
+                        ),
+                        n => (
+                            vec![format!(
+                                "removed {n} rule(s): {}",
+                                crate::sanitize::clean_line(&rule)
+                            )],
+                            false,
+                        ),
+                    },
+                }
+            }
+        }
     }
 
     /// `!cmd`: runs on the runtime; `Msg::UserCommandDone` brings the history back.
@@ -390,6 +473,7 @@ pub fn run_interactive(mut o: Options, tty: Tty) -> io::Result<Exit> {
     };
 
     let mut runner = Runner {
+        mcp_report: o.mcp_report.take(),
         harness: o.harness.clone(),
         session: Some(o.session.clone()),
         history,
@@ -418,6 +502,7 @@ pub fn run_interactive(mut o: Options, tty: Tty) -> io::Result<Exit> {
             if last_draw.is_none_or(|t| now - t >= gap) {
                 let (cols, rows) = last_size;
                 let lines = app.render(cols, rows, now);
+                screen.set_caret(app.caret());
                 screen.draw(&lines, cols, rows)?;
                 last_draw = Some(now);
                 dirty = false;
@@ -556,7 +641,10 @@ pub fn run_interactive(mut o: Options, tty: Tty) -> io::Result<Exit> {
                 Msg::Compacted(r) => {
                     match r {
                         Ok(history) => runner.history = history,
-                        Err(e) => app.note(format!("/compact failed: {e}"), "error"),
+                        Err(e) => {
+                            let (text, tone) = crate::chat::friendly_compact_error(&e);
+                            app.note(format!("/compact: {text}"), tone);
+                        }
                     }
                     app.compact_done();
                     dirty = true;
@@ -613,6 +701,23 @@ pub fn run_interactive(mut o: Options, tty: Tty) -> io::Result<Exit> {
                     urgent = true;
                 }
             }
+        }
+        for c in app.next_queued(now) {
+            urgent = true;
+            dirty = true;
+            exec(
+                c,
+                &mut app,
+                &mut runner,
+                &mut screen,
+                &clipboard,
+                &paste,
+                &*opener,
+                &mut switch,
+                raw_mode,
+                &out,
+                now,
+            )?;
         }
         // ---- terminal size (SIGWINCH only wakes us; the size is always re-read)
         let s = size();
@@ -685,7 +790,11 @@ fn exec(
             Ok(text) => app.paste_clipboard(&text, now),
             Err(e) => app.toast(format!("clipboard unavailable: {e}"), now, true),
         },
-        Cmd::Compact { instructions } => runner.compact(app, instructions),
+        Cmd::Info(i) => {
+            let (lines, error) = runner.info(i);
+            app.output(lines.join("\n"), error);
+        }
+        Cmd::Compact { instructions } => runner.compact(app, instructions, now),
         Cmd::Open(t) => match opener.open(&t) {
             Ok(()) => app.toast(format!("opening {}", t.describe()), now, false),
             Err(e) => {
@@ -707,11 +816,10 @@ fn exec(
                 app.mode_rejected(now, &e.to_string());
             }
         }
+        Cmd::SetEffort(e) => runner.harness.set_reasoning_effort(e),
         Cmd::SwitchModel(name) => match switch.as_mut() {
-            None => app.note(
-                "/model: this host cannot switch models while running",
-                "warn",
-            ),
+            // the host restarts the app on the same session with the other model
+            None => app.quit = Some(ExitReason::SwitchModel(name)),
             Some(f) => match f(&name) {
                 Ok((h, label)) => {
                     runner.harness = h;
@@ -770,6 +878,7 @@ pub fn render_once(o: &OnceOptions, out: &mut impl Write) -> io::Result<()> {
         sandbox: o.sandbox.clone(),
         mode: o.mode,
         models: vec![],
+        effort_tiers: vec![],
         extra_commands: vec![],
         saved: o.saved.clone(),
         home: None,

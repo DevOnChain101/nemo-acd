@@ -185,6 +185,8 @@ pub fn replay(raw: &str) -> Vec<String> {
             let params: String = cs[i + 2..j.min(cs.len())].iter().collect();
             match cs.get(j) {
                 Some('J') if params.starts_with('2') => rows.clear(),
+                // `ESC[r;cH` with c > 1 only parks the cursor (the prompt caret): no write follows
+                Some('H') if params.split(';').nth(1).is_some_and(|c| c != "1") => {}
                 Some('H') => {
                     row = params
                         .split(';')

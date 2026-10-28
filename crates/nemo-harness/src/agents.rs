@@ -114,6 +114,17 @@ pub fn from_mode(m: Mode) -> PermissionMode {
     }
 }
 
+impl crate::Harness {
+    /// `(name, description)` of every agent type the Task tool can start (for `/agents`).
+    pub fn agent_defs(&self) -> Vec<(String, String)> {
+        self.agents
+            .0
+            .iter()
+            .map(|d| (d.name.clone(), d.description.clone()))
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

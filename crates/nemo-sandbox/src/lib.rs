@@ -128,9 +128,10 @@ impl SandboxPolicy {
         } else {
             vec![]
         };
-        if let Some(home) = env_path("HOME").or_else(|| env_path("USERPROFILE")) {
+        let home = env_path("HOME").or_else(|| env_path("USERPROFILE"));
+        if let Some(home) = &home {
             deny.extend(credential_paths(
-                &home,
+                home,
                 env_path("APPDATA").as_deref(),
                 env_path("LOCALAPPDATA").as_deref(),
             ));
@@ -152,7 +153,9 @@ impl SandboxPolicy {
         deny.retain(|d| !workspace_root.starts_with(d) && !tmp_dir.starts_with(d));
         deny.sort();
         deny.dedup();
+        let reads = home.map_or(vec![], |h| toolchain_read_roots(&h, &deny));
         Self {
+            readable_roots: reads,
             writable_roots: vec![workspace_root.to_path_buf()],
             tmp_dir: Some(tmp_dir.to_path_buf()),
             deny_paths: deny,
@@ -428,6 +431,13 @@ fn credential_paths(home: &Path, appdata: Option<&Path>, local: Option<&Path>) -
         ".zsh_history",
         ".nemo/auth.json",
         ".nemo/settings.json",
+        ".cargo/credentials",
+        ".cargo/credentials.toml",
+        ".config/rclone",
+        ".config/doppler",
+        ".config/stripe",
+        ".config/heroku",
+        ".config/netrc",
     ]
     .iter()
     .map(|d| home.join(d))
@@ -443,6 +453,42 @@ fn credential_paths(home: &Path, appdata: Option<&Path>, local: Option<&Path>) -
             .flat_map(|a| ["Google/Chrome", "Chromium", "Microsoft/Edge"].map(|d| a.join(d))),
     );
     v
+}
+
+/// Toolchain / config dirs under `$HOME` (relative) that the standard policy makes readable.
+const TOOLCHAIN_DIRS: &[&str] = &[
+    ".rustup", ".cargo", ".nvm", ".npm", ".pyenv", ".asdf", ".local", ".config", ".volta",
+    ".rbenv", ".fnm", ".bun", ".deno", ".sdkman",
+];
+
+/// Existing toolchain dirs under `home` (plus Linuxbrew) as read roots. Landlock cannot deny a
+/// path inside an allowed root, so a dir that contains a denied path is replaced by its
+/// children minus the denied ones, recursively; `.env*`, `*.pem` and `*.key` entries are
+/// dropped. shortcut: dirs created later under an expanded dir are not covered, restart to refresh.
+fn toolchain_read_roots(home: &Path, deny: &[PathBuf]) -> Vec<PathBuf> {
+    fn add(dir: PathBuf, deny: &[PathBuf], out: &mut Vec<PathBuf>) {
+        let real = canon_lossy(&dir);
+        if deny.iter().any(|d| real.starts_with(canon_lossy(d))) {
+            return;
+        }
+        if !deny.iter().any(|d| canon_lossy(d).starts_with(&real)) {
+            return out.push(dir);
+        }
+        for e in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+            let n = e.file_name().to_string_lossy().to_lowercase();
+            if !(n.starts_with(".env") || n.ends_with(".pem") || n.ends_with(".key")) {
+                add(e.path(), deny, out);
+            }
+        }
+    }
+    let mut out = vec![];
+    let dirs = TOOLCHAIN_DIRS.iter().map(|d| home.join(d));
+    for d in dirs.chain(cfg!(target_os = "linux").then(|| "/home/linuxbrew/.linuxbrew".into())) {
+        if d.is_dir() {
+            add(d, deny, &mut out);
+        }
+    }
+    out
 }
 
 pub(crate) fn validate(p: &SandboxPolicy) -> Result<(), SandboxError> {
@@ -557,6 +603,54 @@ mod tests {
             assert!(v.contains(&p("/h").join(d)), "{d}");
         }
         assert!(v.contains(&p("/h/AD").join("gcloud")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn toolchain_roots_exclude_secrets() {
+        let td = tempfile::tempdir().unwrap();
+        let h = dunce::canonicalize(td.path()).unwrap();
+        for d in [
+            ".rustup/toolchains",
+            ".cargo/registry",
+            ".config/gh",
+            ".config/nvim",
+            ".ssh",
+        ] {
+            std::fs::create_dir_all(h.join(d)).unwrap();
+        }
+        for f in [
+            ".cargo/credentials.toml",
+            ".cargo/config.toml",
+            ".config/x.pem",
+            ".config/.env",
+        ] {
+            std::fs::write(h.join(f), "x").unwrap();
+        }
+        let deny = credential_paths(&h, None, None);
+        let r = toolchain_read_roots(&h, &deny);
+        let ok = |p: &str| r.iter().any(|x| h.join(p).starts_with(x));
+        for yes in [
+            ".rustup/toolchains",
+            ".cargo/registry",
+            ".cargo/config.toml",
+            ".config/nvim",
+        ] {
+            assert!(ok(yes), "{yes}");
+        }
+        for no in [
+            ".ssh",
+            ".config/gh",
+            ".cargo/credentials.toml",
+            ".config/x.pem",
+            ".config/.env",
+        ] {
+            assert!(!ok(no), "{no}");
+        }
+        assert!(
+            r.iter()
+                .all(|x| !deny.iter().any(|d| d.starts_with(x) || x.starts_with(d)))
+        );
     }
 
     #[test]

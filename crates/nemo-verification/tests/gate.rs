@@ -228,37 +228,75 @@ async fn python_unittest_inferred_pass_and_fail() {
             .contains("unittest discover")
     );
 
-    // Inferred-only pass: capped at unverified by default, one correction round, then stop.
+    // Inferred-only pass: one passed check and none failed is `passed` (verification.md §3 rule 4).
     let f = fx(&[("test_a.py", PY_OK)]);
     let mut g = f.gate(GateConfig::default());
+    let GateDecision::Complete(Some(r)) = g.evaluate(&state(vec![], &[]), true, &c).await else {
+        panic!("expected Complete")
+    };
+    assert_eq!(r.status, VerificationStatus::Passed);
+    assert!(
+        r.limitations
+            .iter()
+            .any(|l| l.contains("inferred checks only"))
+    );
+
+    // Opt-out: capped at unverified, one correction round, then stop.
+    let cfg = GateConfig {
+        inferred_only: InferredOnlyPolicy::CapUnverified,
+        ..Default::default()
+    };
+    let mut g = f.gate(cfg);
     let GateDecision::Continue { report, feedback } =
         g.evaluate(&state(vec![], &[]), true, &c).await
     else {
         panic!("expected Continue")
     };
     assert_eq!(report.status, VerificationStatus::Unverified);
-    assert!(
-        report
-            .limitations
-            .iter()
-            .any(|l| l.contains("inferred checks only"))
-    );
     assert!(feedback.contains("verify_run"));
     let GateDecision::Stop { status, .. } = g.evaluate(&state(vec![], &[]), true, &c).await else {
         panic!("expected Stop")
     };
     assert_eq!(status, TaskStatus::Unverified);
+}
 
-    // Policy switch: spec rule 4 literally.
-    let cfg = GateConfig {
-        inferred_only: InferredOnlyPolicy::AllowPassed,
-        ..Default::default()
+#[test]
+fn aggregate_inferred_pass_with_a_blocked_check_is_passed_with_a_limitation() {
+    use nemo_verification::{CheckResult, aggregate};
+    let mk = |id: &str, status| CheckResult {
+        id: id.into(),
+        status,
+        command: Some(id.into()),
+        ..serde_json::from_value(serde_json::json!({
+            "id": "", "kind": "unit", "command": null, "cwd": ".", "declared_by": "harness",
+            "started_at": "", "finished_at": "", "duration_ms": 0, "exit_code": null,
+            "timed_out": false, "status": "passed", "blocked_reason": null, "summary": "",
+            "failure_fingerprint": null, "criteria_ids": [], "artifacts": []
+        }))
+        .unwrap()
     };
-    let mut g = f.gate(cfg);
-    assert!(matches!(
-        g.evaluate(&state(vec![], &[]), true, &c).await,
-        GateDecision::Complete(Some(r)) if r.status == VerificationStatus::Passed
-    ));
+    let p = InferredOnlyPolicy::default();
+    let (s, lim) = aggregate(
+        &mut [],
+        &[
+            mk("a", VerificationStatus::Passed),
+            mk("b", VerificationStatus::Blocked),
+        ],
+        p,
+    );
+    assert_eq!(s, VerificationStatus::Passed);
+    assert!(lim.iter().any(|l| l.contains("check b")), "{lim:?}");
+    let (s, _) = aggregate(
+        &mut [],
+        &[
+            mk("a", VerificationStatus::Passed),
+            mk("b", VerificationStatus::Failed),
+        ],
+        p,
+    );
+    assert_eq!(s, VerificationStatus::Failed);
+    let (s, _) = aggregate(&mut [], &[mk("b", VerificationStatus::Blocked)], p);
+    assert_eq!(s, VerificationStatus::Unverified);
 }
 
 #[tokio::test]
@@ -410,7 +448,7 @@ async fn cwd_outside_workspace_is_refused() {
 
 #[tokio::test]
 async fn qa_task_skips_gate_and_cancel_stops() {
-    let f = fx(&[]);
+    let f = fx(&[("test_a.py", PY_OK)]);
     let mut g = f.gate(GateConfig::default());
     let st = TaskState {
         task_id: "t".into(),
@@ -617,4 +655,40 @@ async fn gate_with_a_blocked_user_check_is_blocked_not_failed() {
     };
     assert_eq!(status, TaskStatus::Blocked);
     assert_eq!(r.checks[0].status, VerificationStatus::Blocked);
+}
+
+#[tokio::test]
+async fn edit_without_a_relevant_check_is_unverified_not_not_applicable() {
+    let c = CancellationToken::new();
+    // Irrelevant-only: a changed .txt file makes the python check irrelevant -> nothing runs.
+    let f = fx(&[("test_a.py", PY_OK), ("hello.txt", "hi")]);
+    let mut g = f.gate(GateConfig::default());
+    let st = state(vec![], &["hello.txt"]);
+    let GateDecision::Continue { report, .. } = g.evaluate(&st, true, &c).await else {
+        panic!("expected one feedback round")
+    };
+    assert_eq!(report.status, VerificationStatus::Unverified);
+    assert!(report.checks.is_empty());
+    assert_eq!(report.changed_files, vec!["hello.txt".to_string()]);
+    let GateDecision::Stop { status, report, .. } = g.evaluate(&st, true, &c).await else {
+        panic!("expected Stop")
+    };
+    assert_eq!(status, TaskStatus::Unverified);
+    assert!(report.is_some());
+
+    // No checks at all in the workspace: same outcome.
+    let f = fx(&[("hello.txt", "hi")]);
+    let mut g = f.gate(GateConfig::default());
+    assert!(matches!(
+        g.evaluate(&state(vec![], &["hello.txt"]), true, &c).await,
+        GateDecision::Continue { .. }
+    ));
+
+    // One relevant passing check -> passed.
+    if have("python3") {
+        let f = fx(&[("test_a.py", PY_OK)]);
+        let mut g = f.gate(GateConfig::default());
+        let d = g.evaluate(&state(vec![], &["test_a.py"]), true, &c).await;
+        assert!(matches!(d, GateDecision::Complete(Some(_))), "{d:?}");
+    }
 }

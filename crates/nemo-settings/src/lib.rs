@@ -2,8 +2,11 @@
 //! `loadAutoModeConfig`, `loadBlockOutsideReads`, `findProjectRoot`; docs/specs/config.md).
 //!
 //! Layers, lowest to highest: `<nemo_home>/settings.json` (user), `<project_root>/.nemo/settings.json`
-//! (project). Lists are unions (deduped, order kept); scalars: last layer wins. Unknown keys are
-//! ignored. A file that exists but is malformed, not an object or unreadable is an ERROR (`Settings::errors`, also in `diagnostics`): its deny rules cannot apply, so the CLI refuses to start (owner decision D5, as Claude Code's Settings Error). Node only warned and went on without it. Node has no third "local" layer.
+//! (project), `<project_root>/.nemo/settings.local.json` (local, gitignored, where "allow always"
+//! persists; same trust rules as project), then the managed file ([`managed_settings_path`]; the
+//! organisation's, always trusted). The CLI flags sit between local and managed: precedence is
+//! managed > CLI > local > project > user. Lists are unions (deduped, order kept); scalars: last layer wins. Unknown keys are
+//! ignored. A file that exists but is malformed, not an object or unreadable is an ERROR (`Settings::errors`, also in `diagnostics`): its deny rules cannot apply, so the CLI refuses to start (owner decision D5, as Claude Code's Settings Error). Node only warned and went on without it. Node has no local or managed layer. Because lists are unions, a managed `deny`/`ask` rule can never be removed or overridden by a lower layer, the CLI or an allow rule; a managed `defaultMode` ([`Settings::managed_default_mode`]) beats `--permission-mode`.
 //!
 //! SECURITY (deviation from Node): the project file comes from a possibly hostile repository.
 //! Unless the caller passes [`ProjectTrust::Trusted`], it can only TIGHTEN: `deny`/`ask` rules, the
@@ -105,6 +108,8 @@ pub struct NemoSettings {
 pub struct Settings {
     pub project_root: PathBuf,
     pub permissions: PermissionRules,
+    /// `permissions.defaultMode` of the managed file: overrides the CLI flag and every other layer.
+    pub managed_default_mode: Option<String>,
     pub hooks: HooksConfig,
     pub disable_all_hooks: bool,
     pub mcp_approval: McpApproval,
@@ -161,20 +166,70 @@ pub fn is_secret_env_key(key: &str) -> bool {
         .any(|p| key.starts_with(p))
 }
 
+/// OS-specific path of the managed (organisation) settings file. Not overridable by environment
+/// variables: an override would let the user bypass it.
+pub fn managed_settings_path() -> PathBuf {
+    if cfg!(target_os = "macos") {
+        "/Library/Application Support/Nemo/managed-settings.json".into()
+    } else if cfg!(windows) {
+        "C:\\ProgramData\\Nemo\\managed-settings.json".into()
+    } else {
+        "/etc/nemo/managed-settings.json".into()
+    }
+}
+
+/// `<project_root>/.nemo/settings.local.json`.
+pub fn local_settings_path(project_root: &Path) -> PathBuf {
+    project_root.join(".nemo").join("settings.local.json")
+}
+
 pub fn load_settings(ctx: &LoadContext<'_>, trust: ProjectTrust) -> Settings {
+    load_settings_with_managed(ctx, trust, &managed_settings_path())
+}
+
+/// [`load_settings`] with an explicit managed file (tests).
+pub fn load_settings_with_managed(
+    ctx: &LoadContext<'_>,
+    trust: ProjectTrust,
+    managed: &Path,
+) -> Settings {
     let project_root = find_project_root(ctx.cwd);
     let mut s = Settings {
         project_root: project_root.clone(),
         ..Settings::default()
     };
-    let user = ctx.nemo_home.join("settings.json");
-    let project = project_root.join(".nemo").join("settings.json");
-    for (path, what, user_file) in [
-        (&user, "user settings", true),
-        (&project, "project settings", false),
-    ] {
+    let t = trust == ProjectTrust::Trusted;
+    // (path, label, user-level, trusted)
+    let layers = [
+        (
+            ctx.nemo_home.join("settings.json"),
+            "user settings",
+            true,
+            true,
+        ),
+        (
+            project_root.join(".nemo").join("settings.json"),
+            "project settings",
+            false,
+            t,
+        ),
+        (
+            local_settings_path(&project_root),
+            "local settings",
+            false,
+            t,
+        ),
+        (managed.to_path_buf(), "managed settings", true, true),
+    ];
+    for (path, what, user, trusted) in &layers {
         match read_json(path, what) {
-            Ok(Some(raw)) => s.apply(&raw, user_file, user_file || trust == ProjectTrust::Trusted),
+            Ok(Some(raw)) => {
+                s.apply(&raw, what, *user, *trusted);
+                if *what == "managed settings" {
+                    s.managed_default_mode =
+                        raw["permissions"]["defaultMode"].as_str().map(String::from);
+                }
+            }
             Ok(None) => {}
             Err(e) => {
                 s.diagnostics.push(e.clone());
@@ -183,6 +238,46 @@ pub fn load_settings(ctx: &LoadContext<'_>, trust: ProjectTrust) -> Settings {
         }
     }
     s
+}
+
+/// Persists "allow always" rules into the local settings file (created with its own
+/// `.nemo/.gitignore` entry). Existing keys are kept; rules are appended without duplicates.
+pub fn persist_allow_rules(project_root: &Path, rules: &[String]) -> std::io::Result<()> {
+    let path = local_settings_path(project_root);
+    let dir = path.parent().unwrap_or(project_root);
+    std::fs::create_dir_all(dir)?;
+    let mut v = match read_json(&path, "local settings") {
+        Ok(Some(v)) => v,
+        Ok(None) => Value::Object(Map::new()),
+        Err(e) => return Err(std::io::Error::other(e)), // never overwrite a file we cannot parse
+    };
+    let allow = v
+        .as_object_mut()
+        .map(|o| {
+            o.entry("permissions")
+                .or_insert_with(|| Value::Object(Map::new()))
+        })
+        .and_then(Value::as_object_mut)
+        .map(|p| p.entry("allow").or_insert_with(|| Value::Array(vec![])))
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| std::io::Error::other("local settings: permissions.allow is not a list"))?;
+    for r in rules {
+        if !allow.iter().any(|x| x.as_str() == Some(r)) {
+            allow.push(Value::String(r.clone()));
+        }
+    }
+    std::fs::write(&path, serde_json::to_string_pretty(&v)? + "\n")?;
+    let gi = dir.join(".gitignore");
+    let cur = std::fs::read_to_string(&gi).unwrap_or_default();
+    if !cur.lines().any(|l| l.trim() == "settings.local.json") {
+        let sep = if cur.is_empty() || cur.ends_with('\n') {
+            ""
+        } else {
+            "\n"
+        };
+        std::fs::write(&gi, format!("{cur}{sep}settings.local.json\n"))?;
+    }
+    Ok(())
 }
 
 /// `Ok(None)`: no such file. `Err`: it exists but is unusable (names the file, never a value).
@@ -231,13 +326,8 @@ fn union(into: &mut Vec<String>, add: Vec<String>) {
 }
 
 impl Settings {
-    /// `user`: the user file. `trusted`: user file, or project file with `Trusted`.
-    fn apply(&mut self, raw: &Value, user: bool, trusted: bool) {
-        let what = if user {
-            "user settings"
-        } else {
-            "project settings"
-        };
+    /// `user`: user-level file (user, managed). `trusted`: user-level, or project/local with `Trusted`.
+    fn apply(&mut self, raw: &Value, what: &str, user: bool, trusted: bool) {
         let perm = raw.get("permissions").filter(|p| p.is_object());
         let list = |k| strings(perm.and_then(|p| p.get(k)));
         let p = &mut self.permissions;

@@ -63,8 +63,8 @@ impl SessionStatus {
             | (Preparing, Idle | Running)
             | (Idle, Running)
             | (Running, WaitingApproval | Verifying | Failed | Blocked)
-            | (WaitingApproval, Running)
-            | (Verifying, Running | Completed | Unverified | Blocked | Failed)
+            | (WaitingApproval, Running | Verifying)
+            | (Verifying, WaitingApproval | Running | Completed | Unverified | Blocked | Failed)
             | (Running | WaitingApproval | Verifying, Cancelling | Interrupted)
             | (Cancelling, Cancelled | Interrupted)
             | (Interrupted, Recovering)
@@ -187,6 +187,8 @@ mod tests {
             (WaitingApproval, Running),
             (Running, Verifying),
             (Verifying, Running),
+            (Verifying, WaitingApproval),
+            (WaitingApproval, Verifying),
             (Verifying, Completed),
             (Verifying, Unverified),
             (Verifying, Blocked),
@@ -222,7 +224,7 @@ mod tests {
             .flat_map(|&a| ALL.iter().map(move |&b| (a, b)))
             .filter(|&(a, b)| a.can_transition_to(b))
             .count();
-        assert_eq!(valid_count, 30);
+        assert_eq!(valid_count, 32);
         for (a, b) in [
             (Created, Running),
             (Idle, Completed),

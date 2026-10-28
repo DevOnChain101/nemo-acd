@@ -46,7 +46,14 @@ struct Sandbox {
 
 fn set_mtime(p: &Path, secs: u64) {
     // Directories cannot be opened this way on Windows; unverified there.
-    let _ = fs::File::open(p).and_then(|f| f.set_modified(UNIX_EPOCH + Duration::from_secs(secs)));
+    // Files need a write handle: on Windows a read-only handle cannot set times (ignored error
+    // made every mtime-ordered case come back in name order). Directories fall back to read.
+    let t = UNIX_EPOCH + Duration::from_secs(secs);
+    let _ = fs::OpenOptions::new()
+        .write(true)
+        .open(p)
+        .or_else(|_| fs::File::open(p))
+        .and_then(|f| f.set_modified(t));
 }
 
 impl Sandbox {
@@ -429,7 +436,9 @@ fn golden_cases() {
             if bad.is_empty() {
                 pass += 1;
             } else {
-                failures.push(format!("{area}/{id}:\n{}", bad.join("\n")));
+                let msg = format!("{area}/{id}:\n{}", bad.join("\n"));
+                eprintln!("FAIL {msg}"); // case id, got and want, even if the summary is cut
+                failures.push(msg);
             }
         }
         println!(

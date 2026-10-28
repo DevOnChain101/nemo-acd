@@ -160,6 +160,8 @@ pub struct Rects {
     pub dock_max_scroll: usize,
     pub dock_scroll: usize,
     pub max_scroll: usize,
+    /// Prompt caret in screen cells `(x, y)` (the app parks the hardware cursor there).
+    pub caret: Option<(usize, usize)>,
 }
 
 pub struct Frame {
@@ -1620,6 +1622,7 @@ fn agent_panel(
         &opts,
     );
     out.max_scroll = res.max_scroll;
+    out.caret = res.caret; // agent-line coordinates until render_frame offsets them
     *body_out = Some(res.body);
     let busy = chat.status != "idle";
     let asking = !chat.pending.is_empty();
@@ -2483,7 +2486,7 @@ fn header(s: &DashState, w: i64, frame: usize, now: i64) -> String {
             },
         ),
         (
-            3,
+            4,
             if project.is_empty() {
                 String::new()
             } else {
@@ -2505,7 +2508,7 @@ fn header(s: &DashState, w: i64, frame: usize, now: i64) -> String {
     let right_chips: Vec<(u8, String)> = [
         (1, paint(COL_WHITE, &fmt_time(now, s.tz_offset_min))),
         (
-            2,
+            3,
             format!(
                 "{}{} {}",
                 paint(COL_MUTED, "ctx "),
@@ -2514,7 +2517,7 @@ fn header(s: &DashState, w: i64, frame: usize, now: i64) -> String {
             ),
         ),
         (
-            3,
+            4,
             s.usage.five_hour.as_ref().map_or(String::new(), |q| {
                 format!(
                     "{}{}",
@@ -2652,7 +2655,7 @@ fn footer(s: &DashState, w: i64) -> String {
         ("esc", "interrupt"),
         ("⇧tab", "mode"),
         ("alt+v", "paste image"),
-        ("! #", "shell / memory"),
+        ("!", "shell"),
         ("ctrl+o", "expand"),
         ("ctrl+r", "search history"),
         ("ctrl+l", "redraw"),
@@ -2702,21 +2705,21 @@ fn footer(s: &DashState, w: i64) -> String {
     {
         keys = perm_keys.to_vec();
     }
-    let tag = if s.follow {
-        format!("   {}", paint(COL_OK, "[following newest]"))
-    } else {
-        String::new()
-    };
-    fit(
-        &format!(
-            "{}{tag}",
-            keys.iter()
-                .map(|(k, d)| format!("{} {}", paint(COL_ACCENT, k), paint(COL_MUTED, d)))
-                .collect::<Vec<_>>()
-                .join("   ")
-        ),
-        u(w),
-    )
+    // Whole hints only, later ones dropped first (QA B-27); "[following newest]" is kept last.
+    let mut items: Vec<(u8, String)> = keys
+        .iter()
+        .enumerate()
+        .map(|(i, (k, d))| {
+            (
+                (i as u8).saturating_add(1).min(200),
+                format!("{} {}", paint(COL_ACCENT, k), paint(COL_MUTED, d)),
+            )
+        })
+        .collect();
+    if s.follow {
+        items.push((0, paint(COL_OK, "[following newest]")));
+    }
+    fit_items(&items, "   ", u(w))
 }
 
 // ---------------------------------------------------------------- layout
@@ -3100,7 +3103,10 @@ pub fn render_frame(
     let body_h = h - 2 - i64::from(rule);
     let header_rows = 1 + i64::from(rule);
     let layout = layout_for(w, h);
-    let side_w = if s.agent.is_some() {
+    // Narrow terminals: chat only; the sidebar would leave ~38 columns for the conversation (QA B-25).
+    let side_w = if s.agent.is_some() && w < 80 {
+        0
+    } else if s.agent.is_some() {
         clamp_int((w as f64 * 0.14).floor() as i64, 20, 40)
     } else {
         clamp_int((w as f64 * 0.17).floor() as i64, 22, 40)
@@ -3137,7 +3143,11 @@ pub fn render_frame(
             cx.sub_docked = topo.docked;
             let side = {
                 let mut hits = std::mem::take(&mut cx.hits);
-                let r = side_column(s, side_w, body_h, frame, now, h / 2, cx.rects, &mut hits);
+                let r = if side_w == 0 {
+                    vec![]
+                } else {
+                    side_column(s, side_w, body_h, frame, now, h / 2, cx.rects, &mut hits)
+                };
                 cx.hits = hits;
                 r
             };
@@ -3177,7 +3187,11 @@ pub fn render_frame(
             cx.sub_docked = topo.docked;
             let side = {
                 let mut hits = std::mem::take(&mut cx.hits);
-                let r = side_column(s, side_w, upper_h, frame, now, h / 2, cx.rects, &mut hits);
+                let r = if side_w == 0 {
+                    vec![]
+                } else {
+                    side_column(s, side_w, upper_h, frame, now, h / 2, cx.rects, &mut hits)
+                };
                 cx.hits = hits;
                 r
             };
@@ -3204,7 +3218,11 @@ pub fn render_frame(
         Layout::None => {
             let side = {
                 let mut hits = std::mem::take(&mut cx.hits);
-                let r = side_column(s, side_w, body_h, frame, now, h / 2, cx.rects, &mut hits);
+                let r = if side_w == 0 {
+                    vec![]
+                } else {
+                    side_column(s, side_w, body_h, frame, now, h / 2, cx.rects, &mut hits)
+                };
                 cx.hits = hits;
                 r
             };
@@ -3230,6 +3248,11 @@ pub fn render_frame(
             h: l.h,
         });
     }
+    // box border + space = 2 cells left, 1 row above the agent lines
+    r.caret = r
+        .caret
+        .zip(local)
+        .map(|((x, y), l)| (u(side_w + l.x) + 2 + x, u(header_rows + l.y) + 1 + y));
     r.sidebar_rect = Some(sidebar_rect);
     if let Some(a) = r.activity_rect.as_mut() {
         a.y += header_rows;

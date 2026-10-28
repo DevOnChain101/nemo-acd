@@ -134,7 +134,7 @@ impl Rig {
     }
 }
 
-const READY: &str = "Try \"explain this repo\"";
+const READY: &str = "Enter send";
 
 #[test]
 fn bang_command_runs_enters_the_conversation_and_the_model_analyses_it() {

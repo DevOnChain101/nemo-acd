@@ -23,7 +23,7 @@ named_keys! {
     CtrlPageDown = "ctrl-pagedown", AltPageUp = "alt-pageup", AltPageDown = "alt-pagedown",
     AltUp = "alt-up", AltDown = "alt-down", AltLeft = "alt-left", AltRight = "alt-right",
     AltEnter = "alt-enter", AltA = "alt-a", AltV = "alt-v", AltBackspace = "alt-backspace",
-    AltDelete = "alt-delete", AltD = "alt-d",
+    AltDelete = "alt-delete", AltD = "alt-d", AltT = "alt-t",
     CtrlA = "ctrl-a", CtrlC = "ctrl-c", CtrlD = "ctrl-d", CtrlE = "ctrl-e", CtrlJ = "ctrl-j",
     CtrlK = "ctrl-k", CtrlL = "ctrl-l", CtrlN = "ctrl-n", CtrlO = "ctrl-o", CtrlP = "ctrl-p",
     CtrlR = "ctrl-r", CtrlU = "ctrl-u", CtrlV = "ctrl-v", CtrlW = "ctrl-w",
@@ -54,6 +54,7 @@ const SEQ: &[(&str, Named)] = &[
     ("\x1b[6~", PageDown),
     ("\x1b[Z", ShiftTab),
     ("\x1b[13;2u", ShiftEnter),
+    ("\x1b[27;2;13~", ShiftEnter), // xterm modifyOtherKeys
     ("\x1b[1;5A", CtrlUp),
     ("\x1b[1;5B", CtrlDown),
     ("\x1b[1;5C", CtrlRight),
@@ -80,6 +81,8 @@ const SEQ: &[(&str, Named)] = &[
     ("\x1b[100;3u", AltD),
     ("\x1ba", AltA),
     ("\x1bv", AltV),
+    ("\x1bt", AltT),
+    ("\x1b[116;3u", AltT),
     ("\x1b[118;9u", AltV),
     ("\x1b[118;3u", AltV),
 ];

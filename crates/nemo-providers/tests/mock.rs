@@ -546,6 +546,13 @@ async fn network_error_text_has_no_credentials() {
         "{err}"
     );
     assert!(!format!("{:?}", Secret::new(KEY)).contains("SECRET"));
+    // Friendly: host:port only, a retry hint, no URL or userinfo.
+    let m = err.message();
+    assert!(
+        m.starts_with("cannot reach 127.0.0.1:1 ") && m.contains("retry"),
+        "{m}"
+    );
+    assert!(!m.contains("http"), "{m}");
 }
 
 #[tokio::test]

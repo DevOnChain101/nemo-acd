@@ -265,6 +265,36 @@ fn summary(d: &Diff) -> String {
     }
 }
 
+/// Rows of a diff in the approval dialog: a `+N −M` line, then at most `max` numbered diff rows
+/// and a footer for the rest. `None` when `v` is not a diff.
+pub(super) fn dialog_rows(v: &Value, w: usize, max: usize) -> Option<Vec<Row>> {
+    let d = parse(v)?;
+    let mut rows = vec![vec![r(summary_counts(&d), C_SUBTLE)]];
+    let all = body_rows(&d, w + 5);
+    let hidden = all.len().saturating_sub(max);
+    rows.extend(all.into_iter().take(max));
+    if hidden > 0 {
+        rows.push(vec![r(
+            format!("… +{hidden} more lines (x shows the whole input)"),
+            C_SUBTLE,
+        )]);
+    }
+    Some(rows)
+}
+
+fn summary_counts(d: &Diff) -> String {
+    let range = match d.hunks.first() {
+        Some(h) if d.numbered && d.kind == "update" => format!(" · from line {}", h.new_start),
+        _ => String::new(),
+    };
+    let hidden = if d.hidden {
+        " · content hidden: secret file"
+    } else {
+        ""
+    };
+    format!("{} +{} −{}{range}{hidden}", d.kind, d.added, d.removed)
+}
+
 /// `None`: not a file-change tool, not finished, or nothing to show: the generic rows apply.
 pub(super) fn view(it: &Item, w: usize, expanded: bool) -> Option<View> {
     let base = base_name(&it.name);

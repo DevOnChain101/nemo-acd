@@ -46,7 +46,7 @@ pub(crate) fn run<'a>(
             })
             .into_iter()
             .collect();
-        let mut plan = plan_checks(&[], &model, &cwd);
+        let mut plan = plan_checks(&[], &model, &cwd, &[]);
         if !check_ids.is_empty() {
             if let Some(bad) = check_ids.iter().find(|i| !plan.iter().any(|c| &c.id == *i)) {
                 let have: Vec<_> = plan.iter().map(|c| c.id.as_str()).collect();

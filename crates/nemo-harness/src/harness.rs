@@ -390,6 +390,9 @@ pub(crate) enum AgentEnd {
     Internal(String),
 }
 
+/// Persists accepted "allow always" rules, e.g. into the local settings file.
+pub type RuleStore = Arc<dyn Fn(&[String]) + Send + Sync>;
+
 /// Lifetime of services: a tool call lives at most until its deadline or cancellation (its
 /// token is cancelled then). Processes and browsers a tool starts on purpose belong to the
 /// session; the host ends them with `Registry::close_session` when the session ends.
@@ -410,6 +413,12 @@ pub struct Harness {
     pub(crate) read_ledger: Arc<Mutex<HashMap<PathBuf, SystemTime>>>,
     /// `Some(instructions)` = a manual compaction is wanted at the next safe point.
     pub(crate) compact_wanted: Mutex<Option<Option<String>>>,
+    /// `reasoning_effort` of the next requests (OpenAI protocol); `None` = the provider's default.
+    pub(crate) reasoning_effort: Mutex<Option<String>>,
+    /// Gate check commands the person approved as a set; valid for the whole session.
+    /// Called with the allow rules a person accepted with "allow always" (to persist them).
+    pub(crate) rule_store: Option<RuleStore>,
+    pub(crate) verify_ok: Mutex<std::collections::HashSet<String>>,
 }
 
 impl Harness {
@@ -443,6 +452,9 @@ impl Harness {
             env: Arc::new(env),
             read_ledger: Arc::default(),
             compact_wanted: Mutex::default(),
+            reasoning_effort: Mutex::default(),
+            verify_ok: Mutex::default(),
+            rule_store: None,
         }
     }
 
@@ -464,6 +476,10 @@ impl Harness {
     }
     pub fn with_agents(mut self, a: AgentTable) -> Self {
         self.agents = a;
+        self
+    }
+    pub fn with_rule_store(mut self, f: RuleStore) -> Self {
+        self.rule_store = Some(f);
         self
     }
     pub fn with_change_tracker(mut self, t: Arc<dyn ChangeTracker>) -> Self {
@@ -558,25 +574,22 @@ impl Harness {
     }
 
     /// Applies a state-machine transition and emits `session.status_changed`. A rejected
-    /// transition changes nothing and is reported as an error notice (spec §3).
+    /// transition changes nothing; it is a harness bug, so it is kept out of the transcript (spec §3).
     pub(crate) fn set_status(&self, task: &TaskRun, to: SessionStatus, reason: &str) {
         let from = *lock(&task.status);
         if from == to {
             return;
         }
-        match from.transition(to) {
-            Ok(next) => {
-                *lock(&task.status) = next;
-                self.emit_task(
-                    task,
-                    Event::SessionStatusChanged {
-                        from: status_str(from),
-                        to: status_str(to),
-                        reason: Some(reason.into()),
-                    },
-                );
-            }
-            Err(e) => self.notice(task, "error", e.to_string()),
+        if let Ok(next) = from.transition(to) {
+            *lock(&task.status) = next;
+            self.emit_task(
+                task,
+                Event::SessionStatusChanged {
+                    from: status_str(from),
+                    to: status_str(to),
+                    reason: Some(reason.into()),
+                },
+            );
         }
     }
 
@@ -862,6 +875,12 @@ impl Harness {
         (task, main)
     }
 
+    /// Effort tier sent with every following model request (`None`: provider default). Callable
+    /// from any thread, also while a task runs.
+    pub fn set_reasoning_effort(&self, effort: Option<String>) {
+        *lock(&self.reasoning_effort) = effort;
+    }
+
     /// Asks for a manual compaction of the running task's history at its next safe point (before
     /// the next model request, never between a `tool_use` and its results). Emits
     /// `context.compacting|compacted|usage` with `reason:"manual"`, or `context.compaction_failed`.
@@ -1128,6 +1147,7 @@ impl Harness {
                     harness: self,
                     task,
                     agent,
+                    denied: Mutex::default(),
                 };
                 let d = g
                     .evaluate_with(&state, claimed_done, &task.cancel, Some(&auth))
@@ -1194,6 +1214,12 @@ impl Harness {
         target: Option<&str>,
     ) -> Option<HookOutcome> {
         let hooks = self.hooks.as_ref()?;
+        let mut payload = payload;
+        if let Some(o) = payload.as_object_mut() {
+            // Claude-compatible extras; `prompt_id` is the task (one user prompt).
+            o.insert("permission_mode".into(), json!(lock(&agent.mode).as_str()));
+            o.insert("prompt_id".into(), json!(task.task_id));
+        }
         let out = hooks.run(event, payload, target, &task.cancel).await;
         for r in &out.results {
             let outcome = match r.exit_code {

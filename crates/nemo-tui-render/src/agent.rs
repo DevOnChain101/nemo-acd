@@ -132,26 +132,9 @@ fn fmt_bytes(n: f64) -> String {
     }
 }
 
-const TURN_VERBS: [&str; 16] = [
-    "Working",
-    "Cooking",
-    "Galloping",
-    "Brewing",
-    "Pondering",
-    "Noodling",
-    "Simmering",
-    "Churning",
-    "Crunching",
-    "Percolating",
-    "Wrangling",
-    "Hatching",
-    "Conjuring",
-    "Tinkering",
-    "Mulling",
-    "Forging",
-];
+const TURN_VERBS: [&str; 4] = ["Working", "Thinking", "Reasoning", "Planning"];
 fn turn_verb(turn_start: i64) -> &'static str {
-    TURN_VERBS[(turn_start.div_euclid(1000)).rem_euclid(16) as usize]
+    TURN_VERBS[(turn_start.div_euclid(1000)).rem_euclid(4) as usize]
 }
 
 // ---------------------------------------------------------------- data model
@@ -325,6 +308,8 @@ pub struct Pending {
     pub dialog: String,
     pub tool: String,
     pub input: Value,
+    /// Structured diff of the change the tool would make (see `diffview`), when known.
+    pub diff: Value,
     pub suggestions: Vec<Value>,
     pub status: String,
     pub choice: usize,
@@ -352,6 +337,8 @@ pub struct Pending {
 /// Tools that run a model-supplied shell command: their `command` is shown like Bash's.
 /// (Mirrors `nemo_permissions::COMMAND_TOOLS`.)
 const COMMAND_TOOLS: &[&str] = &["verify_run", "terminal_spawn"];
+/// Rows of a diff shown in a permission dialog before the "more" footer.
+const DIALOG_DIFF_ROWS: usize = 16;
 /// Characters of a generic tool input shown before the "hidden" marker.
 const INPUT_SHOWN: usize = 400;
 /// Rows of the expanded (`x`) input view.
@@ -437,6 +424,8 @@ pub struct Agent {
     pub prompt_color: Option<String>,
     pub focus_view: bool,
     pub interrupting: bool,
+    /// Verb of a busy line that is not a model turn (`Compacting`); no tokens, no Esc hint.
+    pub activity: Option<String>,
     pub goal: Option<Goal>,
     #[serde(skip)]
     pub config: Option<ModelConfig>,
@@ -502,6 +491,8 @@ pub struct AgentOpts {
     pub bypass_confirmation: bool,
     pub chat_target: Option<String>,
     pub docked: bool,
+    /// Messages typed while a task runs; sent in order when it ends (drawn above the prompt).
+    pub queued: Vec<String>,
     #[serde(skip)]
     pub config: Option<ModelConfig>,
 }
@@ -654,10 +645,8 @@ fn markdown(text: &str, expanded: bool) -> Vec<MdLine> {
         let hl = highlight(&c.lines.join("\n").replace('\t', "  "), &c.lang);
         let (shown, footer) = clamp(hl, expanded, false);
         for line in &shown {
-            let mut runs = vec![r(
-                format!("│ {} ", if expanded { '−' } else { '+' }),
-                C_SUBTLE,
-            )];
+            // a plain bar: a "+" / "−" here read as diff additions
+            let mut runs = vec![r("│ ", C_SUBTLE)];
             runs.extend(line.iter().map(|t| r(&t.t, t.c)));
             out.push(MdLine {
                 runs,
@@ -1038,6 +1027,18 @@ fn image_label(im: &Image, i: usize) -> String {
 // ---------------------------------------------------------------- items -> rows
 
 fn tool_title(it: &Item) -> String {
+    // Same name and path as the finished diff row ("Update(path)"), so the row does not change shape.
+    let base = base_name(&it.name);
+    if matches!(base, "Edit" | "MultiEdit" | "NotebookEdit")
+        && let Some(p) = ["file_path", "notebook_path"].iter().find_map(|k| {
+            it.input
+                .get(k)
+                .and_then(Value::as_str)
+                .filter(|p| !p.is_empty())
+        })
+    {
+        return format!("{}Update({p})", it.name.strip_suffix(base).unwrap_or(""));
+    }
     let s = summarize_tool(&it.name, &it.input);
     let name = if it.name.starts_with("mcp__") {
         it.name.split("__").skip(1).collect::<Vec<_>>().join(":")
@@ -1252,7 +1253,17 @@ fn tool_result_lines(it: &Item, expanded: bool, frame: usize) -> (Vec<String>, O
         return plain(vec![waiting("running…", frame)]);
     }
     if it.status == "interrupted" {
-        return plain(vec!["interrupted".into()]);
+        // what the command had printed stays, marked; the harness's own "Interrupted." is no output
+        let text = it.result.replace('\r', "");
+        let kept: Vec<String> = text
+            .trim_end_matches('\n')
+            .split('\n')
+            .filter(|l| !(l.is_empty() || *l == "Interrupted."))
+            .map(|l| l.replace('\t', "  "))
+            .collect();
+        let (mut v, footer) = clamp(kept, expanded, true);
+        v.push("interrupted".into());
+        return (v, footer);
     }
     let text = it.result.replace('\r', "");
     let text = text.trim_end_matches('\n');
@@ -1968,6 +1979,25 @@ fn window_rows(parts: &[Rc<Vec<Row>>], scroll: usize, h: usize) -> Windowed<'_> 
     }
 }
 
+/// `s` cut from the left (`…/repo`) to fit `w` columns; a path is most telling at its end.
+fn tail_fit(s: &str, w: usize) -> String {
+    if str_w(s) <= w {
+        return s.to_string();
+    }
+    let mut out: Vec<char> = vec![];
+    let mut used = 1;
+    for ch in s.chars().rev() {
+        if used + cw(ch) > w {
+            break;
+        }
+        used += cw(ch);
+        out.push(ch);
+    }
+    out.push('…');
+    out.reverse();
+    out.into_iter().collect()
+}
+
 fn welcome_rows(agent: &Agent, w: usize) -> Vec<Row> {
     let inner = w.saturating_sub(4).max(10);
     let line = |runs: Vec<Run>| -> Row {
@@ -1997,7 +2027,10 @@ fn welcome_rows(agent: &Agent, w: usize) -> Vec<Row> {
             "/help for commands · alt+v pastes an image",
             C_SUBTLE,
         )]),
-        line(vec![r("cwd: ", C_SUBTLE), r(&agent.cwd, C_DIM)]),
+        line(vec![
+            r("cwd: ", C_SUBTLE),
+            r(tail_fit(&agent.cwd, inner.saturating_sub(5)), C_DIM),
+        ]),
         vec![r(format!("╰{}╯", "─".repeat(inner + 2)), C_BORDER)],
         vec![],
         vec![r(" Tips for getting started:", C_DIM)],
@@ -2431,6 +2464,12 @@ fn permission_rows(item: &Pending, w: usize, more: usize, now: i64) -> (Vec<Row>
                 input_json_rows(&mut body, item, &Value::Object(rest), inner);
             }
         }
+    } else if let Some(rows) = (tool == "Edit" || tool == "MultiEdit" || tool == "Write")
+        .then(|| diffview::dialog_rows(&item.diff, inner, DIALOG_DIFF_ROWS))
+        .flatten()
+    {
+        add(&mut body, vec![rb(s("file_path"), C_BRIGHT)], &[]);
+        body.extend(rows);
     } else if tool == "Edit" || tool == "MultiEdit" {
         add(&mut body, vec![rb(s("file_path"), C_BRIGHT)], &[]);
         let lang = lang_from_file(inp.get("file_path").and_then(Value::as_str)).unwrap_or("");
@@ -2720,7 +2759,7 @@ fn input_rows(
     mode: Option<&str>,
     prompt_color: Option<&str>,
     route_hint: Option<&str>,
-) -> Vec<Row> {
+) -> (Vec<Row>, Option<(usize, usize)>) {
     let inner = w.saturating_sub(6).max(4);
     let (shown, pos, top) = layout_input(ed.chars, ed.cur, inner);
     let im = input_mode(mode);
@@ -2751,8 +2790,16 @@ fn input_rows(
         w,
         ..r(t, C_TEXT)
     };
+    let mut caret = None;
     for (ri, chars) in shown.iter().enumerate() {
         let rr = ri + top;
+        if focused && pos.0 == rr {
+            // (x, y) inside the input rows: border + space + lead = 4 cells, then the chars before the caret
+            caret = Some((
+                4 + chars.iter().take(pos.1).map(|c| cw(*c)).sum::<usize>(),
+                out.len(),
+            ));
+        }
         let lead = if rr == 0 {
             match &im {
                 Some(im) => rb(im.lead, im.lead_col.unwrap_or(im.col)),
@@ -2785,7 +2832,10 @@ fn input_rows(
                     if !attachments.is_empty() {
                         "add a message, or press enter to send the image".into()
                     } else {
-                        "Try \"explain this repo\" · / commands · @ files · Alt+A add files · ! shell · # memory".into()
+                        let keys = "Enter send · Shift+Enter newline · / commands · @ files · ! shell · Shift+Tab mode";
+                        // The example prompt only when every key still fits next to it.
+                        let full = format!("Try \"explain this repo\" · {keys}");
+                        if str_w(&full) <= inner.saturating_sub(2) { full } else { keys.into() }
                     }
                 } else {
                     "press tab to talk to the agent".into()
@@ -2796,7 +2846,13 @@ fn input_rows(
             {
                 hint = im.hint.to_string();
             }
-            let h: String = hint.chars().take(inner.saturating_sub(used)).collect();
+            // Whole " · " items only; a single item longer than the room is cut.
+            let room = inner.saturating_sub(used);
+            let mut parts: Vec<&str> = hint.split(" · ").collect();
+            while parts.len() > 1 && str_w(&parts.join(" · ")) > room {
+                parts.pop();
+            }
+            let h: String = parts.join(" · ").chars().take(room).collect();
             used += str_w(&h);
             cells.push(r(h, C_SUBTLE));
         }
@@ -2809,7 +2865,7 @@ fn input_rows(
         out.push(line);
     }
     out.push(vec![r(format!("╰{}╯", "─".repeat(w - 2)), border)]);
-    out
+    (out, caret)
 }
 
 const SUGGEST_ROWS: usize = 8;
@@ -3105,14 +3161,22 @@ fn picker_rows(p: &Picker, w: usize, h: usize, frame: usize) -> Vec<Row> {
         ));
     }
     body.push(vec![]);
-    body.push(vec![
-        r("filter: ", C_DIM),
-        rb(&p.query, C_BRIGHT),
-        r("▍", C_LIGHT),
-    ]);
+    // a yes/no style picker has nothing to filter
+    let filterable = !p.no_filter;
+    if filterable {
+        body.push(vec![
+            r("filter: ", C_DIM),
+            rb(&p.query, C_BRIGHT),
+            r("▍", C_LIGHT),
+        ]);
+    }
     body.extend(wrap(
         &[r(
-            "type to filter · ↑/↓ choose · pgup/pgdn page · home/end · enter select · esc cancel",
+            if filterable {
+                "type to filter · ↑/↓ choose · pgup/pgdn page · home/end · enter select · esc cancel"
+            } else {
+                "↑/↓ choose · enter select · esc cancel"
+            },
             C_SUBTLE,
         )],
         inner,
@@ -3137,6 +3201,8 @@ pub struct AgentOut {
     pub body: Body,
     /// Hit boxes of the pending question dialog, in agent-pane content coordinates.
     pub question_hits: Vec<QHit>,
+    /// Prompt caret `(x, y)` in `lines`: where the hardware cursor goes (IME candidate window).
+    pub caret: Option<(usize, usize)>,
 }
 
 fn mode_label(mode: &str) -> Option<(&'static str, Col)> {
@@ -3182,6 +3248,7 @@ pub fn render_agent(
     };
 
     let mut question_hits_rel: Vec<QHit> = vec![];
+    let mut caret_rel: Option<(usize, usize)> = None;
     let bottom: Vec<Row> = if let Some(p) = &opts.preview {
         preview_banner(p, content_w)
     } else if let Some(p) = pending {
@@ -3211,7 +3278,7 @@ pub fn render_agent(
             }
             _ => None,
         };
-        let mut rows = input_rows(
+        let (mut rows, caret) = input_rows(
             editor,
             content_w,
             focused,
@@ -3220,6 +3287,7 @@ pub fn render_agent(
             agent.prompt_color.as_deref(),
             route_hint.as_deref(),
         );
+        caret_rel = caret;
         rows.extend(suggestion_rows(
             opts.suggestions.as_ref(),
             opts.selected,
@@ -3284,8 +3352,12 @@ pub fn render_agent(
             left_runs = left[..1].to_vec();
             room = room_for(&left_runs);
         }
-        shown = if !model_name.is_empty() && room >= 4 {
-            right_for(&clip_to(&model_name, room as usize))
+        // Never cut a word: priority mode > model > effort; whole items only (QA B-27).
+        let free = content_w as i64 - row_w(&left_runs) as i64 - 2;
+        shown = if !model_name.is_empty() && str_w(&model_name) as i64 <= room {
+            right_for(&model_name)
+        } else if !model_name.is_empty() && str_w(&model_name) as i64 <= free {
+            model_name.clone()
         } else {
             effort_text.clone()
         };
@@ -3317,21 +3389,23 @@ pub fn render_agent(
             .items
             .last()
             .is_some_and(|l| l.kind == "thinking" && l.streaming);
-        let verb = if agent.interrupting {
+        let verb = if let Some(a) = &agent.activity {
+            a.as_str()
+        } else if agent.interrupting {
             "Interrupting"
         } else if agent.status == "starting" {
             "Starting"
         } else {
             turn_verb(agent.turn_start)
         };
-        let mut bits = vec![
-            secs,
-            format!("↓ {} tokens", fmt_tok(agent.turn_tokens as f64)),
-        ];
-        if thinking_now {
-            bits.push("thinking".into());
+        let mut bits = vec![secs];
+        if agent.activity.is_none() {
+            bits.push(format!("↓ {} tokens", fmt_tok(agent.turn_tokens as f64)));
+            if thinking_now {
+                bits.push("thinking".into());
+            }
+            bits.push("esc to interrupt".into());
         }
-        bits.push("esc to interrupt".into());
         working.push(vec![
             rb(format!("{glyph} "), shimmer),
             rb(format!("{} ", waiting(verb, frame)), shimmer),
@@ -3351,6 +3425,22 @@ pub fn render_agent(
     }
     if opts.preview.is_none() && todos.iter().any(|t| t.status != "completed") {
         working.extend(todo_rows(todos, content_w, opts.expanded));
+    }
+    for q in opts.queued.iter().take(3) {
+        let one_line = q.replace('\n', " ");
+        working.push(vec![
+            r("⧗ queued: ", C_WARN),
+            r(clip_to(&one_line, content_w.saturating_sub(12)), C_DIM),
+        ]);
+    }
+    if opts.queued.len() > 3 {
+        working.push(vec![r(
+            format!(
+                "⧗ +{} more queued · esc cancels, ↑ edits",
+                opts.queued.len() - 3
+            ),
+            C_DIM,
+        )]);
     }
 
     let selector: Vec<Row> = if opts.preview.is_some()
@@ -3425,7 +3515,9 @@ pub fn render_agent(
     };
     drop(win);
     let start = lines.len().saturating_sub(h);
+    let caret = caret_rel.and_then(|(x, y)| (bottom_start + y).checked_sub(start).map(|y| (x, y)));
     AgentOut {
+        caret,
         lines: lines.split_off(start),
         max_scroll,
         body: Body {

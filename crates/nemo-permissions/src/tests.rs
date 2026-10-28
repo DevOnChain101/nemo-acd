@@ -283,7 +283,11 @@ fn allow_rules_never_approve_critical_rm_or_protected_writes() {
 #[test]
 fn additional_directories_are_inside_and_their_parent_is_critical_only_as_a_glob() {
     let f = fx();
-    let extra = f.outside.join("extra");
+    // forward slashes only: a `\` join would give mixed separators on Windows
+    let extra = PathBuf::from(format!(
+        "{}/extra",
+        f.outside.display().to_string().replace('\\', "/")
+    ));
     fs::create_dir(&extra).unwrap();
     let mut r = PermissionRules::default();
     r.additional_directories.push(extra.clone());
@@ -299,7 +303,14 @@ fn additional_directories_are_inside_and_their_parent_is_critical_only_as_a_glob
         "extra = {extra:?}, cwd = {:?}",
         f.cwd
     );
-    assert_eq!(d(&p, "Write", json!({ "file_path": extra.join("x") })), A);
+    assert_eq!(
+        d(
+            &p,
+            "Write",
+            json!({ "file_path": format!("{}/x", extra.display()) })
+        ),
+        A
+    );
     assert_eq!(
         d(
             &p,
@@ -1855,7 +1866,6 @@ fn l5_suggestions_are_exact_for_shells_wrappers_and_destructive_commands() {
     for c in [
         "bash -c 'rm -rf x'",
         "sh x.sh",
-        "cd / && ls",
         "cd /tmp",
         "rm -rf x",
         "sudo ls",
@@ -1874,6 +1884,38 @@ fn l5_suggestions_are_exact_for_shells_wrappers_and_destructive_commands() {
         };
         assert_eq!(rules[0].rule_content.as_deref(), Some(c), "{c}");
     }
+}
+
+#[test]
+fn compound_commands_get_one_prefix_rule_per_simple_command() {
+    let f = fx();
+    let mut p = f.perms(Mode::Default);
+    let rules = |p: &Permissions, c: &str| -> Vec<String> {
+        p.suggestions("Bash", &json!({ "command": c }))
+            .iter()
+            .flat_map(|s| match s {
+                Suggestion::AddRules { rules, .. } => rules.clone(),
+                _ => vec![],
+            })
+            .map(|r| r.rule_content.unwrap())
+            .collect()
+    };
+    // read-only parts get no rule, never `whoami;:*`
+    assert_eq!(rules(&p, "ls -la; cargo test"), ["cargo test:*"]);
+    assert_eq!(rules(&p, "whoami; id"), ["whoami:*", "id:*"]);
+    assert_eq!(
+        rules(&p, "git add . && git commit -m x | tee out"),
+        ["git add:*", "git commit:*", "tee:*"]
+    );
+    // cd is exact-only: skipped; nothing left means no "always" option
+    assert!(rules(&p, "cd /tmp && ls").is_empty());
+    assert!(rules(&p, "ls; pwd").is_empty());
+    // already allowed subcommands are skipped
+    p.rules.allow.push("Bash(cargo test:*)".into());
+    assert_eq!(rules(&p, "cargo test && npm test"), ["npm test:*"]);
+    // at most five
+    let many = "a1 x; a2 x; a3 x; a4 x; a5 x; a6 x; a7 x";
+    assert_eq!(rules(&p, many).len(), 5);
 }
 
 #[test]

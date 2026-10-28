@@ -39,7 +39,7 @@ Commands the agent runs are confined by the OS where possible.
 |---|---|---|
 | `--sandbox` | `enforce` (refuse to run if the command cannot be confined), `best-effort`, `off` (loud warning) | `enforce` |
 | `--network` | `deny`, `loopback` (dev server + tests in one sandbox), `allow` (loud warning) | `deny` |
-| `--sandbox-read PATH` | extra read-only path, e.g. a toolchain under `$HOME` | none |
+| `--sandbox-read PATH` | extra read-only path. Toolchains under `$HOME` (`~/.rustup`, `~/.cargo`, `~/.nvm`, `~/.npm`, `~/.pyenv`, `~/.asdf`, `~/.local`, `~/.config`, volta/bun/deno/fnm/rbenv/sdkman, Linuxbrew) are readable by default, except credential files and dirs (`~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config/gh`, `~/.cargo/credentials*`, browser profiles, keychains, `.env*`/`*.pem`/`*.key` entries) | none |
 
 Backends: Seatbelt (macOS), Landlock or bubblewrap (Linux), Job Object only (Windows, no filesystem or network confinement). Most guarantees are **Weak**, meaning defence in depth, not a security boundary. Read [docs/SECURITY.md](docs/SECURITY.md) for the per-OS table.
 

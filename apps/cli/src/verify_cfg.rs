@@ -102,7 +102,7 @@ mod tests {
         let v = p(
             json!({"inferred_only":"SECRET-ish","max_attempts":0,"checks":[{"text":"x"}],"zzz":1}),
         );
-        assert_eq!(v.inferred_only, InferredOnlyPolicy::CapUnverified);
+        assert_eq!(v.inferred_only, InferredOnlyPolicy::AllowPassed);
         assert!(v.max_attempts.is_none() && v.checks.is_empty());
         assert_eq!(v.diagnostics.len(), 4);
         assert!(v.diagnostics.iter().all(|d| !d.contains("SECRET")));

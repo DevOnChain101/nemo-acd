@@ -98,6 +98,7 @@ Transitions not listed are rejected (error + `notice`). Each accepted transition
 | running | waiting_approval | policy decision `ask` |
 | waiting_approval | running | approval resolved (allow or deny; deny is evidence fed back) |
 | running | verifying | model proposes finish (end_turn without tool calls) and gate applies |
+| verifying | waiting_approval | a gate check needs approval (returns to verifying when answered) |
 | verifying | running | verification failed/unverified and verify budget left |
 | verifying | completed / unverified / blocked / failed | gate result (verification.md §4) |
 | running | failed / blocked | budget exhausted, unrecoverable provider error, unsafe workspace |

@@ -116,6 +116,14 @@ async fn m9_hook_payloads_are_redacted() {
     let payloads = std::fs::read_to_string(rig.work().join("payloads.log")).unwrap();
     assert!(payloads.contains("browser_fill") && payloads.contains("[REDACTED]"));
     assert!(!payloads.contains(PW), "hook saw the password: {payloads}");
+    // Claude-compatible stdin fields
+    for key in [
+        "\"permission_mode\":\"",
+        "\"tool_use_id\":\"f1\"",
+        "\"prompt_id\":\"",
+    ] {
+        assert!(payloads.contains(key), "{key} missing: {payloads}");
+    }
 }
 
 // ---- M10 ------------------------------------------------------------------------------------

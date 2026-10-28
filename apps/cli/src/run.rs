@@ -267,6 +267,8 @@ pub struct Prepared {
     pub artifact_root: PathBuf,
     pub label: String,
     pub models: Vec<String>,
+    /// `effort_tiers` the model declares (enables `/effort`).
+    pub effort_tiers: Vec<String>,
     pub sandbox: nemo_tui::SandboxStatus,
     pub link: Option<nemo_tui::UiLink>,
     pub homes: crate::Homes,
@@ -486,6 +488,15 @@ pub fn prepare(
             Some(m @ (Mode::Default | Mode::AcceptEdits | Mode::Plan | Mode::DontAsk)) => m,
             _ => Mode::Default,
         },
+    };
+    // Managed settings beat the CLI flag.
+    let mode = match settings
+        .managed_default_mode
+        .as_deref()
+        .and_then(Mode::parse)
+    {
+        Some(m @ (Mode::Default | Mode::AcceptEdits | Mode::Plan | Mode::DontAsk)) => m,
+        _ => mode,
     };
     let mut budget = resume.map_or_else(
         || budget_from_settings(&settings),
@@ -906,6 +917,19 @@ pub fn prepare(
     if let Some(l) = &link {
         harness = harness.with_input(l.input());
     }
+    // "Allow always" persists to .nemo/settings.local.json, but only in a trusted project: an
+    // untrusted project's allow rules are ignored on load, so writing them would be misleading.
+    if trust == ProjectTrust::Trusted {
+        let root = settings.project_root.clone();
+        harness = harness.with_rule_store(Arc::new(move |rules| {
+            if let Err(e) = nemo_settings::persist_allow_rules(&root, rules) {
+                eprintln!(
+                    "nemo: warning: could not save the rule: {}",
+                    sanitize_for_display(&e.to_string())
+                );
+            }
+        }));
+    }
     if !settings.disable_all_hooks && !settings.hooks.is_empty() {
         harness = harness.with_hooks(Arc::new(Hooks::new(
             rt.clone(),
@@ -938,6 +962,17 @@ pub fn prepare(
         .into_iter()
         .map(|m| m.value)
         .collect();
+    let effort_tiers = res
+        .label
+        .strip_suffix(&format!("/{}", res.model))
+        .and_then(|id| cfg.providers.get(id)?.models_meta.as_ref()?.get(&res.model))
+        .and_then(|m| m.capabilities.get("effort_tiers")?.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
     Ok(Prepared {
         harness: Arc::new(harness),
         session,
@@ -955,6 +990,7 @@ pub fn prepare(
         artifact_root,
         label: res.label,
         models,
+        effort_tiers,
         sandbox: sandbox_status(sandbox_mode, sandbox_mode != SandboxMode::Enforce),
         link,
         homes: h,
@@ -1232,6 +1268,20 @@ fn resolve_provider(
         .ok_or_else(|| format!("unknown provider \"{id}\""))?;
     let cred = resolve_credential(&id, Some(p), nemo_home, env);
     let secrets = cred.iter().map(|c| c.secret.clone()).collect();
+    if cred.is_none() && !p.is_no_auth() {
+        // Name the variable the provider's config points at (the warning only carries the name).
+        let var = cfg
+            .warnings
+            .iter()
+            .filter(|w| w.contains(&format!("provider \"{id}\"")))
+            .find_map(|w| w.split("missing env var \"").nth(1)?.split('"').next());
+        return Err(match var {
+            Some(v) => format!("no API key for provider \"{id}\": set {v} and restart"),
+            None => format!(
+                "no API key for provider \"{id}\": set NEMO_API_KEY (when NEMO_PROVIDER={id}) or add apiKey to its config"
+            ),
+        });
+    }
     let provider = ProviderSpec::from_config(&id, p, cred.as_ref())
         .and_then(|s| s.connect(env, &NetSettings::default(), RetryPolicy::default()))
         .map_err(|e| e.message().to_string())?;

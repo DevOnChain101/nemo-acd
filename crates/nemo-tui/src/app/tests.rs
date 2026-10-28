@@ -18,6 +18,7 @@ fn cfg(cwd: &str) -> AppConfig {
         sandbox: SandboxStatus::default(),
         mode: Mode::Default,
         models: vec!["fake/a".into(), "fake/b".into()],
+        effort_tiers: vec!["low".into(), "medium".into(), "high".into()],
         extra_commands: vec![],
         saved: vec![SavedSession {
             id: "abcdef123456".into(),
@@ -96,17 +97,67 @@ fn ask(
 }
 
 #[test]
-fn typing_and_submit_starts_a_task_and_busy_blocks_a_second() {
+fn typing_and_submit_starts_a_task_and_enter_while_busy_queues_in_order() {
     let mut a = app();
     keys(&mut a, "hello world");
     let cmds = keys(&mut a, "\r");
     assert!(matches!(&cmds[..], [Cmd::StartTask { text, .. }] if text == "hello world"));
     assert!(a.running());
-    keys(&mut a, "again");
-    let cmds = keys(&mut a, "\r");
-    assert!(cmds.is_empty(), "a running task is never silently replaced");
-    assert!(screen(&mut a).contains("a task is running"));
-    assert_eq!(a.editor.text(), "again", "the text stays for later");
+    keys(&mut a, "again\r");
+    keys(&mut a, "!");
+    keys(&mut a, "echo hi\r");
+    assert_eq!(
+        a.queue,
+        ["again", "!echo hi"],
+        "nothing is sent while a task runs"
+    );
+    assert_eq!(a.editor.text(), "");
+    let s = screen(&mut a);
+    assert!(
+        s.contains("⧗ queued: again") && s.contains("⧗ queued: !echo hi"),
+        "{s}"
+    );
+    assert!(a.next_queued(T0).is_empty(), "still running");
+    // the turn ends: the next one starts, one per finished task
+    a.task_done(&Err("done".into()), T0);
+    let cmds = a.next_queued(T0);
+    assert!(matches!(&cmds[..], [Cmd::StartTask { text, .. }] if text == "again"));
+    a.task_done(&Err("done".into()), T0);
+    let cmds = a.next_queued(T0);
+    assert!(
+        matches!(&cmds[..], [Cmd::UserCommand { command, record_only: false, .. }] if command == "echo hi")
+    );
+    assert!(a.queue.is_empty());
+}
+
+#[test]
+fn up_recalls_a_queued_line_and_esc_cancels_the_queue_before_the_task() {
+    let mut a = app();
+    keys(&mut a, "go\r");
+    keys(&mut a, "one\r");
+    keys(&mut a, "two\r");
+    keys(&mut a, "\x1b[A");
+    assert_eq!((a.editor.text().as_str(), a.queue.len()), ("two", 1));
+    keys(&mut a, "\r");
+    assert_eq!(a.queue, ["one", "two"]);
+    let token = a.task.as_ref().unwrap().cancel.clone();
+    keys(&mut a, "\x1b");
+    assert!(!token.is_cancelled(), "first esc only drops the queue");
+    assert!(a.queue.is_empty());
+    assert_eq!(a.editor.text(), "one\ntwo", "nothing typed is lost");
+    keys(&mut a, "\x1b");
+    assert!(a.task.as_ref().unwrap().cancel.is_cancelled());
+}
+
+#[test]
+fn esc_esc_on_an_idle_empty_prompt_edits_the_last_prompt() {
+    let mut a = app();
+    keys(&mut a, "first\r");
+    a.task_done(&Err("done".into()), T0);
+    keys(&mut a, "\x1b");
+    assert_eq!(a.editor.text(), "");
+    keys(&mut a, "\x1b");
+    assert_eq!(a.editor.text(), "first");
 }
 
 #[test]
@@ -1345,7 +1396,7 @@ fn right_click(a: &mut App, x: u32, y: u32) -> Vec<Cmd> {
 #[test]
 fn right_click_in_the_prompt_asks_for_a_paste_and_pasting_never_submits() {
     let mut a = app();
-    let (x, y) = cell(&mut a, "Try \"explain");
+    let (x, y) = cell(&mut a, "Enter send");
     assert!(matches!(
         &right_click(&mut a, x, y)[..],
         [Cmd::PasteClipboard]
@@ -1371,7 +1422,7 @@ fn right_click_in_the_prompt_asks_for_a_paste_and_pasting_never_submits() {
 #[test]
 fn right_click_outside_the_prompt_or_over_a_dialog_or_picker_does_nothing() {
     let mut a = app();
-    let (px, py) = cell(&mut a, "Try \"explain");
+    let (px, py) = cell(&mut a, "Enter send");
     let rect = a.frame.as_ref().unwrap().rects.chat_rect.unwrap();
     assert!(right_click(&mut a, 1, 1).is_empty(), "header");
     assert!(
@@ -1383,7 +1434,7 @@ fn right_click_outside_the_prompt_or_over_a_dialog_or_picker_does_nothing() {
     keys(&mut a, "\x1b");
 
     let mut a = app();
-    let (px, py) = cell(&mut a, "Try \"explain");
+    let (px, py) = cell(&mut a, "Enter send");
     let (q, mut rx) = ask("Bash", json!({"command": "ls"}), vec![]);
     a.on_approval(q, T0 - 10 * ARM_MS); // armed
     a.render(COLS, ROWS, T0);
@@ -1407,7 +1458,7 @@ fn compact_command_asks_the_host_and_blocks_new_tasks_while_it_runs() {
     assert!(
         matches!(&cmds[..], [Cmd::Compact { instructions: Some(i) }] if i == "keep the API notes")
     );
-    a.compact_started();
+    a.compact_started(T0);
     assert!(keys(&mut a, "hello\r").is_empty());
     assert!(screen(&mut a).contains("compacting the conversation"));
     a.compact_done();
@@ -1488,10 +1539,10 @@ fn typed_bang_enters_the_shell_prompt_and_enter_runs_the_command() {
         a.editor.history.last().map(String::as_str),
         Some("!echo hi")
     );
-    // busy: a second one is refused with a toast
+    // busy: a second one is queued, not run
     keys(&mut a, "!");
     assert!(keys(&mut a, "ls\r").is_empty());
-    assert!(screen(&mut a).contains("a task is running"));
+    assert_eq!(a.queue, ["!ls"]);
 }
 
 #[test]
@@ -1563,4 +1614,275 @@ fn ctrl_u_after_a_paste_clears_the_prompt() {
     keys(&mut a, "\x1b[200~!echo pasted\x1b[201~");
     keys(&mut a, "\x15");
     assert_eq!(a.editor.text(), "", "cursor {}", a.editor.cur);
+}
+
+#[test]
+fn shift_tab_visits_every_mode_once_per_press_including_past_the_bypass_dialog() {
+    let mut a = app();
+    let mut seen = vec![];
+    for _ in 0..10 {
+        keys(&mut a, "\x1b[Z");
+        seen.push(if a.picker.is_some() {
+            "bypass?"
+        } else {
+            mode_str(a.mode)
+        });
+    }
+    assert_eq!(
+        seen,
+        [
+            "acceptEdits",
+            "plan",
+            "auto",
+            "bypass?",
+            "default",
+            "acceptEdits",
+            "plan",
+            "auto",
+            "bypass?",
+            "default"
+        ]
+    );
+}
+
+#[test]
+fn edit_approval_shows_a_numbered_hunk_not_an_escaped_one_liner() {
+    let d = tempfile::tempdir().unwrap();
+    let cwd = d.path().canonicalize().unwrap();
+    std::fs::write(cwd.join("f.txt"), "a\nb\nc\nd\n").unwrap();
+    let mut a = App::new(cfg(cwd.to_str().unwrap()), &[], T0);
+    let (ask, _rx) = ask(
+        "Edit",
+        json!({"file_path": "f.txt", "old_string": "b\nc", "new_string": "B\nc"}),
+        vec![],
+    );
+    a.on_approval(ask, T0);
+    let s = screen_at(&mut a, T0 + 1000);
+    assert!(!s.contains("\\n"), "no escaped newlines:\n{s}");
+    assert!(s.contains("+1 −1") || s.contains("+1 -1"), "{s}");
+    assert!(
+        s.contains("2") && s.contains("− b") && s.contains("+ B"),
+        "{s}"
+    );
+}
+
+#[test]
+fn clicking_an_option_in_an_approval_dialog_answers_it_once_armed() {
+    let mut a = app();
+    let (q, mut rx) = ask("Bash", json!({"command": "ls"}), vec![]);
+    a.on_approval(q, T0);
+    let _ = a.render(COLS, ROWS, T0);
+    let (x, y) = find_cell(&mut a, "2. No", 0);
+    click(&mut a, x, y, MouseAction::Down, T0 + 10);
+    assert!(
+        rx.try_recv().is_err(),
+        "ignored while the dialog is still arming"
+    );
+    let _ = a.render(COLS, ROWS, T0 + 1000);
+    click(&mut a, x, y, MouseAction::Down, T0 + 1000);
+    let ans = rx.try_recv().expect("the click answered");
+    assert_eq!(ans.decision, ApprovalDecision::Deny);
+    assert!(a.dialogs.is_empty());
+}
+
+#[test]
+fn compacting_shows_a_working_line_and_errors_are_sentences_not_debug() {
+    let mut a = app();
+    a.compact_started(T0);
+    let s = screen_at(&mut a, T0 + 3000);
+    assert!(s.contains("Compacting") && s.contains("3s"), "{s}");
+    assert!(
+        !s.contains("esc to interrupt"),
+        "compaction cannot be interrupted: {s}"
+    );
+    a.compact_done();
+    assert!(!screen_at(&mut a, T0 + 3000).contains("Compacting"));
+    for e in ["NoProgress { before: 3, after: 11 }", "Nothing"] {
+        let (t, tone) = crate::chat::friendly_compact_error(e);
+        assert!(t.starts_with("nothing to compact") && tone == "warn", "{t}");
+    }
+    let (t, _) = crate::chat::friendly_compact_error("Summarizer(Provider(\"boom\"))");
+    assert!(!t.contains("Summarizer("), "{t}");
+}
+
+#[test]
+fn header_status_panel_and_footer_share_one_context_meter_and_clear_resets_it() {
+    let mut a = app();
+    a.on_event(
+        &env(
+            1,
+            Ev::ContextUsage {
+                used_tokens: 100_000,
+                window_tokens: 200_000,
+                percent: 50.0,
+                source: "provider".into(),
+                stale: false,
+            },
+        ),
+        T0,
+    );
+    let s = screen(&mut a);
+    let head = s.lines().next().unwrap();
+    assert!(head.contains("ctx") && head.contains("50%"), "{head}");
+    assert!(
+        s.contains("100.0k/200.0k") || s.contains("100k/200k"),
+        "{s}"
+    );
+    assert!(s.lines().last().unwrap().contains("ctx 50% 100k/200k"));
+    keys(&mut a, "/clear\r");
+    let s = screen(&mut a);
+    assert!(s.lines().next().unwrap().contains("0%"), "{s}");
+    assert!(!s.lines().last().unwrap().contains("ctx 50%"), "{s}");
+}
+
+#[test]
+fn welcome_box_shows_the_folder() {
+    let mut a = app();
+    let s = screen(&mut a);
+    assert!(s.contains("cwd: /tmp/proj"), "{s}");
+    let long = format!("/tmp/{}/repo", "d".repeat(150));
+    let mut b = App::new(cfg(&long), &[], T0);
+    let s = screen(&mut b);
+    assert!(
+        s.contains("cwd: …") && s.contains("/repo"),
+        "long paths keep their end: {s}"
+    );
+}
+
+#[test]
+fn new_slash_commands_ask_the_host_and_status_has_no_debug_output() {
+    let mut a = app();
+    assert!(matches!(
+        &keys(&mut a, "/mcp\r")[..],
+        [Cmd::Info(Info::Mcp)]
+    ));
+    assert!(matches!(
+        &keys(&mut a, "/agents\r")[..],
+        [Cmd::Info(Info::Agents)]
+    ));
+    assert!(matches!(
+        &keys(&mut a, "/permissions\r")[..],
+        [Cmd::Info(Info::Permissions(PermAction::List))]
+    ));
+    let c = keys(&mut a, "/permissions allow Bash(git status:*)\r");
+    assert!(
+        matches!(&c[..], [Cmd::Info(Info::Permissions(PermAction::Allow(r)))] if r == "Bash(git status:*)")
+    );
+    let c = keys(&mut a, "/permissions remove Bash(git status:*)\r");
+    assert!(matches!(
+        &c[..],
+        [Cmd::Info(Info::Permissions(PermAction::Remove(_)))]
+    ));
+    assert!(keys(&mut a, "/permissions allow\r").is_empty());
+    assert!(screen(&mut a).contains("usage: /permissions"));
+    keys(&mut a, "/status\r");
+    let s = screen(&mut a);
+    assert!(s.contains("mode") && s.contains("manual"), "{s}");
+    assert!(!s.contains("SandboxStatus") && !s.contains("{ mode"), "{s}");
+}
+
+#[test]
+fn resume_picker_lists_this_folder_first_with_the_prompt_and_age() {
+    let mut c = cfg("/tmp/proj");
+    let mk = |id: &str, cwd: &str, title: &str, mtime: i64| SavedSession {
+        id: id.into(),
+        cwd: cwd.into(),
+        title: title.into(),
+        updated_at: "2026-01-01T00:00:00Z".into(),
+        mtime,
+    };
+    c.saved = vec![
+        mk(
+            "aaaaaaaa1",
+            "/tmp/proj",
+            "fix the parser",
+            T0 - 3 * 3_600_000,
+        ),
+        mk("bbbbbbbb2", "/elsewhere", "other folder work", T0 - 60_000),
+    ];
+    let mut a = App::new(c, &[], T0);
+    keys(&mut a, "/resume\r");
+    let s = screen(&mut a);
+    assert!(s.contains("fix the parser") && s.contains("3h ago"), "{s}");
+    assert!(!s.contains("other folder work"), "{s}");
+    assert!(s.contains("show sessions from all folders"), "{s}");
+    keys(&mut a, "\x1b[B");
+    keys(&mut a, "\r");
+    let s = screen(&mut a);
+    assert!(
+        s.contains("other folder work") && s.contains("/elsewhere"),
+        "{s}"
+    );
+}
+
+#[test]
+fn a_big_paste_is_a_chip_that_expands_when_sent() {
+    let mut a = app();
+    let big = (1..=300)
+        .map(|i| format!("line {i}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    a.on_key(Key::Paste(big.clone()), T0);
+    assert_eq!(a.editor.text(), "[Pasted text #1 +300 lines]");
+    keys(&mut a, "see ");
+    let cmds = keys(&mut a, "\r");
+    assert!(matches!(&cmds[..], [Cmd::StartTask { text, .. }] if *text == format!("{big}see ")));
+}
+
+#[test]
+fn modify_other_keys_shift_enter_makes_a_newline() {
+    let mut a = app();
+    keys(&mut a, "a");
+    keys(&mut a, "\x1b[27;2;13~");
+    keys(&mut a, "b");
+    assert_eq!(a.editor.text(), "a\nb");
+}
+
+#[test]
+fn bypass_confirmation_has_no_filter_line() {
+    let mut a = app();
+    for _ in 0..4 {
+        keys(&mut a, "\x1b[Z");
+    }
+    let s = screen(&mut a);
+    assert!(
+        s.contains("Bypass permissions?") && !s.contains("filter:"),
+        "{s}"
+    );
+}
+
+#[test]
+fn effort_cycles_with_alt_t_and_shows_in_the_footer() {
+    let mut a = app();
+    assert!(screen(&mut a).contains("effort: auto"));
+    for want in ["low", "medium", "high"] {
+        let cmds = keys(&mut a, "\x1bt");
+        assert!(
+            matches!(&cmds[..], [Cmd::SetEffort(Some(e))] if e == want),
+            "{cmds:?}"
+        );
+        assert!(screen(&mut a).contains(&format!("effort: {want}")));
+    }
+    let cmds = keys(&mut a, "\x1bt");
+    assert!(matches!(&cmds[..], [Cmd::SetEffort(None)]), "{cmds:?}");
+    let cmds = keys(&mut a, "/effort high\r");
+    assert!(matches!(&cmds[..], [Cmd::SetEffort(Some(e))] if e == "high"));
+    let cmds = keys(&mut a, "/effort bogus\r");
+    assert!(cmds.is_empty() && screen(&mut a).contains("usage: /effort"));
+}
+
+#[test]
+fn hardware_caret_follows_the_prompt_caret() {
+    let mut a = app();
+    keys(&mut a, "abc");
+    a.render(COLS, ROWS, T0);
+    let (x0, y0) = a.caret().expect("prompt shown");
+    keys(&mut a, "d");
+    a.render(COLS, ROWS, T0);
+    assert_eq!(a.caret(), Some((x0 + 1, y0)));
+    // the cell left of the caret holds the last typed char
+    let lines = a.render(COLS, ROWS, T0);
+    let row: Vec<char> = strip_ansi(&lines[y0 as usize]).chars().collect();
+    let x = (x0 + 1) as usize;
+    assert_eq!(row[x - 2..x], ['c', 'd'], "{row:?}");
 }

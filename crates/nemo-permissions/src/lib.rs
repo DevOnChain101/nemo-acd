@@ -343,6 +343,41 @@ fn exact_unsafe(cmd: &str) -> bool {
     cmd.is_empty() || cmd == "*" || cmd.ends_with(":*")
 }
 
+/// Rule content to offer for one simple command (`words`, original text `whole`); None = offer
+/// nothing. `exact_ok == false` (a subcommand of a compound, whose text is re-joined) never
+/// offers an exact rule.
+fn bash_rule(words: &[&str], whole: &str, exact_ok: bool) -> Option<String> {
+    const SUBCOMMAND_TOOLS: &[&str] = &[
+        "git", "npm", "npx", "pnpm", "yarn", "docker", "kubectl", "cargo", "go",
+    ];
+    // a prefix rule on these would allow arbitrary code or destructive calls: exact command only
+    const EXACT_ONLY: &[&str] = &[
+        "cd", "rm", "rmdir", "timeout", "nice", "nohup", "command", "time", "ssh", "su", "doas",
+    ];
+    let first = words.first().copied().unwrap_or("");
+    // a first word with shell syntax glued on (`whoami;`) is not a command name
+    if first.is_empty()
+        || exact_unsafe(first)
+        || first.contains([';', '&', '|', '<', '>', '(', ')', '`'])
+    {
+        return None;
+    }
+    if bash::INTERPRETERS.contains(&first)
+        || EXACT_ONLY.contains(&first)
+        || first.contains(['=', '/', '$', '\\'])
+    {
+        return (exact_ok && !exact_unsafe(whole)).then(|| whole.to_string());
+    }
+    Some(if SUBCOMMAND_TOOLS.contains(&first) {
+        format!(
+            "{}:*",
+            words.iter().take(2).copied().collect::<Vec<_>>().join(" ")
+        )
+    } else {
+        format!("{first}:*")
+    })
+}
+
 #[derive(Debug, Clone)]
 pub struct Permissions {
     pub rules: PermissionRules,
@@ -469,6 +504,30 @@ impl Permissions {
 
     pub fn set_mode(&mut self, m: Mode) {
         self.env.mode = m;
+    }
+
+    /// The allow / deny / ask rules in force (shown by `/permissions`).
+    pub fn rules(&self) -> &PermissionRules {
+        &self.rules
+    }
+
+    /// Adds a session-only allow rule typed by the user; `false` if it was already there.
+    pub fn add_allow(&mut self, rule: &str) -> bool {
+        let new = !self.rules.allow.iter().any(|r| r == rule);
+        if new {
+            self.rules.allow.push(rule.to_string());
+        }
+        new
+    }
+
+    /// Removes `rule` from allow, deny and ask; returns how many entries went.
+    pub fn remove_rule(&mut self, rule: &str) -> usize {
+        let r = &mut self.rules;
+        let before = r.allow.len() + r.deny.len() + r.ask.len();
+        r.allow.retain(|x| x != rule);
+        r.deny.retain(|x| x != rule);
+        r.ask.retain(|x| x != rule);
+        before - (r.allow.len() + r.deny.len() + r.ask.len())
     }
 
     fn policy(&self) -> PathPolicy {
@@ -1384,13 +1443,6 @@ impl Permissions {
 
     /// "Allow always" options offered with a prompt.
     pub fn suggestions(&self, tool: &str, input: &Value) -> Vec<Suggestion> {
-        const SUBCOMMAND_TOOLS: &[&str] = &[
-            "git", "npm", "npx", "pnpm", "yarn", "docker", "kubectl", "cargo", "go",
-        ];
-        // a prefix rule on these would allow arbitrary code or destructive calls: exact command only
-        const EXACT_ONLY: &[&str] = &[
-            "cd", "rm", "rmdir", "timeout", "nice", "nohup", "command", "time", "ssh", "su", "doas",
-        ];
         let add = |tool_name: &str, content: Option<String>| {
             vec![Suggestion::AddRules {
                 rules: vec![RuleSpec {
@@ -1411,28 +1463,38 @@ impl Permissions {
                     add("Bash", Some(cmd.to_string()))
                 };
             }
-            let words: Vec<&str> = cmd.split_whitespace().collect();
-            let first = words.first().copied().unwrap_or("");
-            if first.is_empty() || exact_unsafe(first) {
-                return vec![];
-            }
-            let content = if bash::INTERPRETERS.contains(&first)
-                || EXACT_ONLY.contains(&first)
-                || first.contains(['=', '/', '$', '\\'])
-            {
-                if exact_unsafe(cmd) {
-                    return vec![];
+            // Compound commands: one prefix rule per simple subcommand (max 5), skipping the ones
+            // that never ask (read-only) or are already allowed; exact-only ones (cd, rm, ...) get none.
+            let segs = bash::parse_simple_commands(cmd).unwrap_or_default();
+            if segs.len() > 1 {
+                let mut rules: Vec<RuleSpec> = vec![];
+                for seg in &segs {
+                    let words: Vec<&str> = seg.iter().map(String::as_str).collect();
+                    let text = words.join(" ");
+                    let skip = bash::is_read_only_simple(seg)
+                        || bash::bash_all_match(&self.rules.allow, &text);
+                    let rule = bash_rule(&words, &text, false).filter(|_| !skip);
+                    if let Some(c) =
+                        rule.filter(|c| !rules.iter().any(|r| r.rule_content.as_deref() == Some(c)))
+                    {
+                        rules.push(RuleSpec {
+                            tool_name: "Bash".into(),
+                            rule_content: Some(c),
+                        });
+                    }
                 }
-                cmd.to_string()
-            } else if SUBCOMMAND_TOOLS.contains(&first) {
-                format!(
-                    "{}:*",
-                    words.iter().take(2).copied().collect::<Vec<_>>().join(" ")
-                )
-            } else {
-                format!("{first}:*")
-            };
-            return add("Bash", Some(content));
+                rules.truncate(5);
+                return if rules.is_empty() {
+                    vec![]
+                } else {
+                    vec![Suggestion::AddRules {
+                        rules,
+                        behavior: Decision::Allow,
+                    }]
+                };
+            }
+            let words: Vec<&str> = cmd.split_whitespace().collect();
+            return bash_rule(&words, cmd, true).map_or(vec![], |c| add("Bash", Some(c)));
         }
         if EDIT_TOOLS.contains(&tool) {
             return vec![Suggestion::SetMode(Mode::AcceptEdits)];

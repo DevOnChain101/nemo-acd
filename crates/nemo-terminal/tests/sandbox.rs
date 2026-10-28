@@ -456,4 +456,75 @@ mod seatbelt {
                 && !Path::new("/private/tmp/nemo-std-test").exists()
         );
     }
+    /// Default policy + real HOME toolchains: `cargo test` and `npm test` in a throwaway project
+    /// run inside the sandbox, while credential dirs stay unreadable. Missing tools are skipped.
+    #[tokio::test]
+    async fn toolchains_under_home_run_and_secrets_stay_hidden() {
+        let home = PathBuf::from(std::env::var("HOME").unwrap());
+        let rt = TerminalRuntime::new(SandboxMode::Enforce);
+        let f = open(&rt, None);
+        let tmp = f.root.parent().unwrap().join("priv-tmp2");
+        let ws = WorkspaceContext::open("w", &f.root, &f.root, &[], f.root.join("../art2"), "pg")
+            .unwrap();
+        let env = BTreeMap::from([
+            ("PATH".to_string(), std::env::var("PATH").unwrap()),
+            ("HOME".to_string(), home.display().to_string()),
+        ]);
+        let policy = SandboxPolicy::standard(&f.root, &tmp);
+        rt.open_session_sandboxed(SID, Arc::new(ws), env, Some(policy));
+        let has = |c: &str| {
+            std::process::Command::new("/bin/sh")
+                .args(["-c", &format!("command -v {c}")])
+                .env("PATH", std::env::var("PATH").unwrap())
+                .output()
+                .is_ok_and(|o| o.status.success())
+        };
+        if has("cargo") {
+            let w = f.root.join("rs");
+            fs::create_dir_all(w.join("src")).unwrap();
+            fs::write(
+                w.join("Cargo.toml"),
+                "[package]\nname=\"t\"\nversion=\"0.1.0\"\nedition=\"2021\"\n[workspace]\n",
+            )
+            .unwrap();
+            fs::write(
+                w.join("src/lib.rs"),
+                "#[test] fn ok() { assert_eq!(1 + 1, 2); }\n",
+            )
+            .unwrap();
+            let r = run(&rt, ExecSpec::new("cd rs && cargo test --offline 2>&1")).await;
+            assert_eq!(r.exit_code, Some(0), "{}", r.output);
+            assert!(r.output.contains("1 passed"), "{}", r.output);
+        } else {
+            eprintln!("skipped: cargo not installed");
+        }
+        if has("npm") {
+            let w = f.root.join("js");
+            fs::create_dir_all(&w).unwrap();
+            fs::write(w.join("package.json"), r#"{"name":"t","version":"1.0.0","scripts":{"test":"node -e \"console.log('js-ok')\""}}"#).unwrap();
+            let r = run(&rt, ExecSpec::new("cd js && npm test 2>&1")).await;
+            assert_eq!(r.exit_code, Some(0), "{}", r.output);
+            assert!(r.output.contains("js-ok"), "{}", r.output);
+        } else {
+            eprintln!("skipped: npm not installed");
+        }
+        for secret in [
+            ".ssh",
+            ".aws",
+            ".gnupg",
+            "Library/Keychains",
+            ".config/gh",
+            ".cargo/credentials.toml",
+        ] {
+            let p = home.join(secret);
+            if p.exists() {
+                let r = run(
+                    &rt,
+                    ExecSpec::new(format!("ls '{0}' || cat '{0}'", p.display())),
+                )
+                .await;
+                assert_ne!(r.exit_code, Some(0), "{secret} readable: {}", r.output);
+            }
+        }
+    }
 }

@@ -38,6 +38,10 @@ pub struct Chat {
     /// Event time (ms) of the first delta of the open thinking block.
     think_t0: Option<i64>,
     turn_text: bool,
+    /// The one transcript row of TodoWrite calls (each call updates it, the live panel has the rest).
+    todo_row: Option<usize>,
+    /// A `model.error` was shown during this task (the task's end then says no more about it).
+    model_error_shown: bool,
     pub totals: Totals,
     pub verification: Option<Verification>,
     pub ctx: ContextStatus,
@@ -51,12 +55,25 @@ pub struct Chat {
 /// Most live output text kept per running tool row (the tail).
 const MAX_LIVE: usize = 256 * 1024;
 
+/// The 6-character id the tool rows of a sub-agent carry.
+fn short_id(id: &str) -> String {
+    clean_line(&id.chars().take(6).collect::<String>())
+}
+
+fn tok_k(n: u64) -> String {
+    if n >= 1000 {
+        format!("{:.1}k", n as f64 / 1000.0)
+    } else {
+        n.to_string()
+    }
+}
+
 fn touch(it: &mut Item) {
     it.rev += 1;
 }
 
 /// `tool.completed.diff` with every text made safe to draw (file content is untrusted).
-fn clean_diff(d: &Value) -> Value {
+pub(crate) fn clean_diff(d: &Value) -> Value {
     match d {
         Value::String(s) => Value::String(clean_text(s)),
         Value::Array(a) => Value::Array(a.iter().map(clean_diff).collect()),
@@ -64,6 +81,36 @@ fn clean_diff(d: &Value) -> Value {
             Value::Object(o.iter().map(|(k, v)| (k.clone(), clean_diff(v))).collect())
         }
         v => v.clone(),
+    }
+}
+
+/// The compaction error as a sentence (the context crate reports its enum with `{:?}`) and the
+/// tone to show it in: "nothing to do" is a warning, a real failure an error.
+pub(crate) fn friendly_compact_error(e: &str) -> (String, &'static str) {
+    if e.contains("NoProgress") || e.contains("Nothing") {
+        (
+            "nothing to compact yet (a summary would not be smaller)".into(),
+            "warn",
+        )
+    } else if e.contains("EmptySummary") {
+        (
+            "the model returned an empty summary, try again".into(),
+            "error",
+        )
+    } else if e.contains("cancelled") {
+        ("cancelled".into(), "warn")
+    } else if let Some(i) = e.find("Summarizer") {
+        (
+            format!(
+                "the model could not summarise the conversation ({})",
+                e[i..]
+                    .trim_start_matches("Summarizer")
+                    .trim_matches(|c| "() ".contains(c))
+            ),
+            "error",
+        )
+    } else {
+        (e.to_string(), "error")
     }
 }
 
@@ -120,6 +167,7 @@ impl Chat {
         let sub = env.agent_id.clone();
         match &env.event {
             Event::TaskStarted { .. } => {
+                self.model_error_shown = false;
                 self.task_started = Some(now);
                 self.agent.turn_start = now;
                 self.agent.turn_tokens = 0;
@@ -220,6 +268,7 @@ impl Chat {
                 ..
             } => self.note(format!("model retry {attempt}/{max}: {error}"), "warn"),
             Event::ModelError { message, .. } => {
+                self.model_error_shown = true;
                 self.note(format!("model error: {message}"), "error")
             }
             Event::ContextUsage {
@@ -235,10 +284,11 @@ impl Chat {
             Event::ContextCompacting { .. } if sub.is_none() => self.ctx.on_compacting(),
             Event::ContextCompactionFailed { reason, error } => {
                 self.ctx.on_compaction_failed();
-                self.note(
-                    format!("context compaction failed ({reason}): {error}"),
-                    "warn",
-                );
+                // a manual /compact reports its own failure once, in a sentence
+                if reason != "manual" {
+                    let (why, _) = friendly_compact_error(error);
+                    self.note(format!("context compaction failed: {why}"), "warn");
+                }
             }
             Event::ContextCompacted {
                 trigger,
@@ -248,7 +298,17 @@ impl Chat {
                 window_tokens,
                 ..
             } => {
-                self.note(format!("context compacted ({trigger})"), "");
+                let from_to = if *after_tokens > 0 {
+                    let b = if *before_tokens > 0 {
+                        *before_tokens
+                    } else {
+                        tokens_before.unwrap_or(0)
+                    };
+                    format!(": {} → {} tokens", tok_k(b), tok_k(*after_tokens))
+                } else {
+                    String::new()
+                };
+                self.note(format!("context compacted ({trigger}){from_to}"), "");
                 if sub.is_none() {
                     // logs from before the numbers existed carry only `tokens_before`
                     let before = if *before_tokens > 0 {
@@ -269,6 +329,23 @@ impl Chat {
                 self.finish_streams(now);
                 self.totals.tool_calls += 1;
                 let name = clean_line(name);
+                if name == "TodoWrite"
+                    && sub.is_none()
+                    && let Some(i) = self.todo_row.filter(|i| {
+                        self.agent
+                            .items
+                            .get(*i)
+                            .is_some_and(|it| it.name == "TodoWrite")
+                    })
+                {
+                    let it = &mut self.agent.items[i];
+                    it.input = clean_input_lines(input);
+                    it.status = "running".into();
+                    it.start = Some(now);
+                    touch(it);
+                    self.tools.insert(tool_call_id.clone(), i);
+                    return;
+                }
                 let name = match &sub {
                     Some(a) => format!(
                         "@{}:{name}",
@@ -276,6 +353,7 @@ impl Chat {
                     ),
                     None => name,
                 };
+                let name_is_todo = name == "TodoWrite";
                 let i = self.push(item! {
                     kind: "tool".into(),
                     name,
@@ -283,6 +361,9 @@ impl Chat {
                     status: "running".into(),
                     start: Some(now),
                 });
+                if name_is_todo {
+                    self.todo_row = Some(i);
+                }
                 self.tools.insert(tool_call_id.clone(), i);
             }
             Event::ToolOutput {
@@ -337,7 +418,11 @@ impl Chat {
                     if let Some(d) = diff {
                         it.diff = clean_diff(d);
                     }
-                    it.output.clear();
+                    let live = std::mem::take(&mut it.output);
+                    // an interrupted command keeps what it had printed
+                    if *status == ToolStatus::Interrupted && !live.trim().is_empty() {
+                        it.result = live;
+                    }
                     it.end = Some(now);
                     touch(it);
                 }
@@ -370,11 +455,11 @@ impl Chat {
                 "warn",
             ),
             Event::SubagentStarted(i) => self.note(
-                format!("agent {} started ({})", i.agent_id, i.agent_type),
+                format!("agent {} started ({})", short_id(&i.agent_id), i.agent_type),
                 "",
             ),
             Event::SubagentStopped(i) => self.note(
-                format!("agent {} stopped ({})", i.agent_id, i.agent_type),
+                format!("agent {} stopped ({})", short_id(&i.agent_id), i.agent_type),
                 "",
             ),
             Event::AutoVerdict {
@@ -429,6 +514,13 @@ impl Chat {
                         cost: usage.cost_usd,
                     });
                 } else {
+                    let kept = self
+                        .agent
+                        .items
+                        .iter()
+                        .rev()
+                        .take_while(|it| it.kind != "user")
+                        .any(|it| it.kind == "text" || it.kind == "tool");
                     let (word, tone) = match status {
                         TaskStatus::Failed => ("failed", "error"),
                         TaskStatus::Cancelled => ("cancelled", "warn"),
@@ -436,7 +528,15 @@ impl Chat {
                         TaskStatus::Unverified => ("unverified", "warn"),
                         _ => ("ended", "warn"),
                     };
-                    self.note(format!("task {word}: {reason}"), tone);
+                    if self.model_error_shown && reason.starts_with("model_error") {
+                        // already said by the model error just above
+                        self.push(item! { kind: "note".into(), text: format!("task {word}"), tone: tone.into() });
+                    } else if *status == TaskStatus::Cancelled && reason == "cancelled" {
+                        let kept = if kept { " · partial output kept" } else { "" };
+                        self.note(format!("interrupted{kept}"), tone);
+                    } else {
+                        self.note(format!("task {word}: {reason}"), tone);
+                    }
                 }
                 if matches!(status, TaskStatus::Unverified | TaskStatus::Blocked)
                     && self.verification.is_none()
@@ -704,6 +804,92 @@ mod tests {
             1,
         );
         assert_eq!(chat.agent.items.last().unwrap().result, "old preview");
+    }
+
+    #[test]
+    fn interrupted_bash_keeps_its_output_todo_calls_share_a_row_and_errors_are_said_once() {
+        let mut chat = Chat::default();
+        chat.apply(&env(1, requested("c", "Bash")), 0);
+        chat.apply(
+            &env(
+                2,
+                Event::ToolOutput {
+                    tool_call_id: "c".into(),
+                    stream: "merged".into(),
+                    text: "one\ntwo\n".into(),
+                    seq: 1,
+                    origin: None,
+                },
+            ),
+            0,
+        );
+        let mut done = completed("c", "Interrupted.", Some("Interrupted."), false, false);
+        if let Event::ToolCompleted { status, .. } = &mut done {
+            *status = ToolStatus::Interrupted;
+        }
+        chat.apply(&env(3, done), 1);
+        let it = chat.agent.items.last().unwrap();
+        assert_eq!(
+            (it.status.as_str(), it.result.as_str()),
+            ("interrupted", "one\ntwo\n")
+        );
+        let (rows, _) =
+            nemo_tui_render::agent::transcript_rows(&chat.agent, 80, 20, 0, 0, false, 0);
+        let all = rows
+            .iter()
+            .map(|l| nemo_tui_base::text::strip_ansi(l))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(all.contains("one") && all.contains("interrupted"), "{all}");
+
+        let n = chat.agent.items.len();
+        for id in ["t1", "t2", "t3"] {
+            chat.apply(&env(10, requested(id, "TodoWrite")), 0);
+        }
+        assert_eq!(
+            chat.agent.items.len(),
+            n + 1,
+            "one row for all TodoWrite calls"
+        );
+
+        let mut c2 = Chat::default();
+        c2.apply(
+            &env(
+                1,
+                Event::ModelError {
+                    message: "Invalid API key".into(),
+                    retryable: false,
+                    status: None,
+                    context_overflow: false,
+                },
+            ),
+            0,
+        );
+        let before = c2.agent.items.len();
+        c2.apply(
+            &env(
+                2,
+                Event::TaskEnded {
+                    status: TaskStatus::Blocked,
+                    reason: "model_error:auth: Invalid API key".into(),
+                    usage: nemo_events::Usage {
+                        input_tokens: 0,
+                        output_tokens: 0,
+                        cache_read_input_tokens: None,
+                        cache_creation_input_tokens: None,
+                        cost_usd: None,
+                    },
+                    verification_report_id: None,
+                    changed_files: vec![],
+                    artifacts_root: String::new(),
+                    needed_permissions: vec![],
+                },
+            ),
+            0,
+        );
+        let last = c2.agent.items.last().unwrap();
+        assert_eq!(c2.agent.items.len(), before + 1);
+        assert!(!last.text.contains("Invalid API key"), "{}", last.text);
     }
 
     #[test]

@@ -244,7 +244,7 @@ impl Rig {
 #[test]
 fn prompt_to_answer_then_clean_exit_restores_the_terminal() {
     let mut r = rig(vec![Turn::text("The answer is 42")], Knobs::default());
-    r.wait_for("Try \"explain this repo\"");
+    r.wait_for("Enter send");
     r.tty.send("what is it");
     r.wait_for("what is it");
     r.tty.send("\r");
@@ -312,7 +312,7 @@ fn approval_dialog_allow_then_deny() {
         ],
         Knobs::default(),
     );
-    r.wait_for("Try \"explain this repo\"");
+    r.wait_for("Enter send");
     r.tty.send("change things");
     r.tty.send("\r");
     r.wait_for("Do you want to proceed?");
@@ -356,7 +356,7 @@ fn unanswered_approval_expires_and_the_tool_does_not_run() {
             ..Knobs::default()
         },
     );
-    r.wait_for("Try \"explain this repo\"");
+    r.wait_for("Enter send");
     r.tty.send("x");
     r.tty.send("\r");
     r.wait_for("Do you want to proceed?");
@@ -381,12 +381,12 @@ fn esc_cancels_the_running_task_and_the_app_stays_usable() {
         ],
         Knobs::default(),
     );
-    r.wait_for("Try \"explain this repo\"");
+    r.wait_for("Enter send");
     r.tty.send("slow one");
     r.tty.send("\r");
     r.wait_for("esc to interrupt");
     r.tty.send("\x1b");
-    r.wait_for("task cancelled");
+    r.wait_for("※ interrupted");
     assert!(!r.tty.screen_text().contains("esc to interrupt"));
     // a new task works after a cancel
     r.tty.send("again");
@@ -400,12 +400,12 @@ fn esc_cancels_the_running_task_and_the_app_stays_usable() {
 #[test]
 fn ctrl_c_cancels_first_and_quits_on_the_second() {
     let mut r = rig(vec![Turn::text("never").delayed(60_000)], Knobs::default());
-    r.wait_for("Try \"explain this repo\"");
+    r.wait_for("Enter send");
     r.tty.send("slow");
     r.tty.send("\r");
     r.wait_for("esc to interrupt");
     r.tty.send("\x03");
-    r.wait_for("task cancelled");
+    r.wait_for("※ interrupted");
     // idle again: the next ctrl+c only arms, the one after quits
     r.tty.send("\x03");
     r.wait_for("press ctrl+c again to quit");
@@ -418,7 +418,7 @@ fn ctrl_c_cancels_first_and_quits_on_the_second() {
 #[test]
 fn resize_redraws_at_the_new_size() {
     let mut r = rig(vec![], Knobs::default());
-    r.wait_for("Try \"explain this repo\"");
+    r.wait_for("Enter send");
     assert_eq!(r.tty.screen().len(), 40);
     r.tty.resize(100, 30);
     let t0 = Instant::now();
@@ -445,7 +445,7 @@ fn nemo_tui_base_width(l: &str) -> usize {
 #[test]
 fn bracketed_paste_keeps_newlines_and_reaches_the_model() {
     let mut r = rig(vec![Turn::text("got it")], Knobs::default());
-    r.wait_for("Try \"explain this repo\"");
+    r.wait_for("Enter send");
     r.tty.send("\x1b[200~line one\nline two\x1b[201~");
     r.wait_for("line two");
     std::thread::sleep(Duration::from_millis(100)); // bytes within 50 ms of the end marker are still the paste
@@ -467,7 +467,7 @@ fn huge_forged_paste_cannot_answer_an_armed_approval_dialog() {
         vec![Turn::tool("m1", "Mutate", json!({})), Turn::text("done")],
         Knobs::default(),
     );
-    r.wait_for("Try \"explain this repo\"");
+    r.wait_for("Enter send");
     r.tty.send("go");
     r.tty.send("\r");
     r.wait_for("Do you want to proceed?");
@@ -492,7 +492,7 @@ fn huge_forged_paste_cannot_answer_an_armed_approval_dialog() {
 #[test]
 fn input_closing_ends_the_app_and_restores() {
     let mut r = rig(vec![], Knobs::default());
-    r.wait_for("Try \"explain this repo\"");
+    r.wait_for("Enter send");
     r.tty.close_input();
     let exit = r.finish();
     assert_eq!(exit.reason, ExitReason::InputClosed);
@@ -519,7 +519,7 @@ fn drag_selection_copies_through_the_clipboard_chain() {
             ..Knobs::default()
         },
     );
-    r.wait_for("Try \"explain this repo\"");
+    r.wait_for("Enter send");
     r.tty.send("q");
     r.tty.send("\r");
     r.wait_for("alpha beta gamma");
@@ -548,7 +548,7 @@ fn ctrl_click_opens_a_link_and_a_failing_opener_is_reported() {
                 ..Knobs::default()
             },
         );
-        r.wait_for("Try \"explain this repo\"");
+        r.wait_for("Enter send");
         r.tty.send("q");
         r.tty.send("\r");
         r.wait_for("https://example.com/guide");
@@ -574,7 +574,7 @@ fn frames_are_throttled_while_streaming_and_idle_is_quiet() {
             ..Knobs::default()
         },
     );
-    r.wait_for("Try \"explain this repo\"");
+    r.wait_for("Enter send");
     // idle: nothing is drawn while nothing changes
     std::thread::sleep(Duration::from_millis(100));
     let idle0 = r.tty.raw().len();
@@ -826,8 +826,8 @@ fn right_click_in_the_prompt_pastes_the_clipboard_without_submitting() {
             ..Knobs::default()
         },
     );
-    r.wait_for("Try \"explain this repo\"");
-    let (x, y) = cell_of(&r, "Try \"explain");
+    r.wait_for("Enter send");
+    let (x, y) = cell_of(&r, "Enter send");
     right_click(&r, x, y);
     r.wait_for("line two");
     assert_eq!(paste.reads(), 1);
@@ -858,7 +858,7 @@ fn right_click_never_answers_or_feeds_an_approval_dialog_and_outside_the_prompt_
             ..Knobs::default()
         },
     );
-    r.wait_for("Try \"explain this repo\"");
+    r.wait_for("Enter send");
     right_click(&r, 1, 1); // header, outside the prompt
     r.tty.send("go");
     r.tty.send("\r");
@@ -898,8 +898,8 @@ fn hostile_clipboard_is_sanitised_capped_and_failures_are_a_toast() {
             ..Knobs::default()
         },
     );
-    r.wait_for("Try \"explain this repo\"");
-    let (x, y) = cell_of(&r, "Try \"explain");
+    r.wait_for("Enter send");
+    let (x, y) = cell_of(&r, "Enter send");
     right_click(&r, x, y);
     r.wait_for("a]52;c;ZXZpbA==b[2Jcde"); // escape bytes gone, the rest is plain text
     assert!(
@@ -919,8 +919,8 @@ fn hostile_clipboard_is_sanitised_capped_and_failures_are_a_toast() {
             ..Knobs::default()
         },
     );
-    r.wait_for("Try \"explain this repo\"");
-    let (x, y) = cell_of(&r, "Try \"explain");
+    r.wait_for("Enter send");
+    let (x, y) = cell_of(&r, "Enter send");
     right_click(&r, x, y);
     r.wait_for("paste is too large");
     r.tty.send("\x04");
@@ -934,8 +934,8 @@ fn hostile_clipboard_is_sanitised_capped_and_failures_are_a_toast() {
             ..Knobs::default()
         },
     );
-    r.wait_for("Try \"explain this repo\"");
-    let (x, y) = cell_of(&r, "Try \"explain");
+    r.wait_for("Enter send");
+    let (x, y) = cell_of(&r, "Enter send");
     right_click(&r, x, y);
     r.wait_for("clipboard unavailable: xclip not found");
     r.tty.send("\x04");
@@ -949,7 +949,7 @@ fn ctrl_o_expands_and_collapses_clamped_code_blocks() {
         vec![Turn::text(&format!("here:\n```rs\n{code}```\nbye"))],
         Knobs::default(),
     );
-    r.wait_for("Try \"explain this repo\"");
+    r.wait_for("Enter send");
     r.tty.send("q");
     r.tty.send("\r");
     r.wait_for("… +6 more lines (ctrl+o to expand)");

@@ -228,7 +228,7 @@ pub fn summarize_tool(name: &str, input: &Value) -> String {
         truthy_str(input, a).unwrap_or_else(|| s(b)).to_string()
     };
     match name {
-        "Bash" | "PowerShell" => short(&first("description", "command"), 80),
+        "Bash" | "PowerShell" => short(&first("command", "description"), 80),
         "Read" | "Write" | "Edit" | "MultiEdit" | "NotebookEdit" => {
             basename(&first("file_path", "notebook_path"))
         }

@@ -126,6 +126,28 @@ impl Redaction {
         } else {
             ErrorKind::Network
         };
+        // Gateway down: host[:port] only (userinfo/query may carry credentials), a retry hint, and no
+        // retries: waiting seconds for a refused connection helps nobody.
+        if e.is_connect()
+            && let Some(u) = e.url()
+            && let Some(h) = u.host_str()
+        {
+            let mut root = String::new();
+            let mut src = std::error::Error::source(&e);
+            while let Some(s) = src {
+                root = s.to_string();
+                src = s.source();
+            }
+            let at = u.port().map_or(h.to_string(), |p| format!("{h}:{p}"));
+            let mut err = ProviderError::new(
+                kind,
+                self.text(&format!(
+                    "cannot reach {at} ({root}). Check that the gateway is running and the provider baseURL is right, then retry"
+                )),
+            );
+            err.retryable = false;
+            return err;
+        }
         // `without_url`: the URL may carry credentials in userinfo or query.
         let e = e.without_url();
         let mut msg = e.to_string();

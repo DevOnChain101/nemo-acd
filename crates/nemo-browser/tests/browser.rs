@@ -7,6 +7,15 @@ use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
+/// Prints the test name when it starts and fails it after 120 s, so a hanging test shows in the log.
+async fn traced(name: &str, f: impl std::future::Future<Output = ()>) {
+    eprintln!("START {name}");
+    tokio::time::timeout(Duration::from_secs(120), f)
+        .await
+        .unwrap_or_else(|_| panic!("{name} timed out after 120 s"));
+    eprintln!("END {name}");
+}
+
 const FORM: &str = r#"<html><head><title>Form Page</title></head><body><h1>Contact</h1>
 <label>Email <input id="email" type="text"></label>
 <button onclick="document.getElementById('out').textContent='sent:'+document.getElementById('email').value">Send</button>
@@ -166,6 +175,14 @@ async fn launch(mut opts: BrowserOptions, env: &Env) -> BrowserRuntime {
 #[cfg(unix)]
 #[tokio::test(flavor = "multi_thread")]
 async fn launch_failure_reports_exit_status_and_stderr() {
+    traced(
+        "launch_failure_reports_exit_status_and_stderr",
+        launch_failure_reports_exit_status_and_stderr_body(),
+    )
+    .await;
+}
+
+async fn launch_failure_reports_exit_status_and_stderr_body() {
     use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
     let fake = dir.path().join("fake-chrome");
@@ -216,6 +233,14 @@ const T: Duration = Duration::from_secs(10);
 
 #[tokio::test(flavor = "multi_thread")]
 async fn snapshot_click_fill_keys_tabs_screenshot() {
+    traced(
+        "snapshot_click_fill_keys_tabs_screenshot",
+        snapshot_click_fill_keys_tabs_screenshot_body(),
+    )
+    .await;
+}
+
+async fn snapshot_click_fill_keys_tabs_screenshot_body() {
     let Some(env) = browser_env() else { return };
     let base = serve().await;
     let art = tempfile::tempdir().unwrap();
@@ -300,6 +325,14 @@ async fn snapshot_click_fill_keys_tabs_screenshot() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn console_network_exceptions_redirect_slow_and_denied_redirect() {
+    traced(
+        "console_network_exceptions_redirect_slow_and_denied_redirect",
+        console_network_exceptions_redirect_slow_and_denied_redirect_body(),
+    )
+    .await;
+}
+
+async fn console_network_exceptions_redirect_slow_and_denied_redirect_body() {
     let Some(env) = browser_env() else { return };
     let base = serve().await;
     let art = tempfile::tempdir().unwrap();
@@ -409,6 +442,14 @@ async fn console_network_exceptions_redirect_slow_and_denied_redirect() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn default_policy_blocks_and_close_leaves_no_processes() {
+    traced(
+        "default_policy_blocks_and_close_leaves_no_processes",
+        default_policy_blocks_and_close_leaves_no_processes_body(),
+    )
+    .await;
+}
+
+async fn default_policy_blocks_and_close_leaves_no_processes_body() {
     let Some(env) = browser_env() else { return };
     let art = tempfile::tempdir().unwrap();
     let mut opts = BrowserOptions::new(art.path());
@@ -513,6 +554,14 @@ fn hits(h: &std::sync::atomic::AtomicUsize) -> usize {
 /// popup, cross-site iframe (OOPIF), worker fetch, WebSocket, blob. None may reach the server.
 #[tokio::test(flavor = "multi_thread")]
 async fn policy_covers_popups_iframes_workers_websockets() {
+    traced(
+        "policy_covers_popups_iframes_workers_websockets",
+        policy_covers_popups_iframes_workers_websockets_body(),
+    )
+    .await;
+}
+
+async fn policy_covers_popups_iframes_workers_websockets_body() {
     let Some(env) = browser_env() else { return };
     // `localhost` is denied by name, 127.0.0.1 (the main page) is allowed: a different site.
     let (denied, denied_hits) =
@@ -587,6 +636,14 @@ fn local_opts_deny_localhost(dir: &std::path::Path) -> BrowserOptions {
 /// Control: the same routes to an allowed host do work, so the test above is not vacuous.
 #[tokio::test(flavor = "multi_thread")]
 async fn policy_allows_same_routes_to_allowed_host() {
+    traced(
+        "policy_allows_same_routes_to_allowed_host",
+        policy_allows_same_routes_to_allowed_host_body(),
+    )
+    .await;
+}
+
+async fn policy_allows_same_routes_to_allowed_host_body() {
     let Some(env) = browser_env() else { return };
     let (other, other_hits) = counting_server(|_| ("text/html", "<title>ok</title>".into())).await;
     let (main_port, _) = counting_server(move |path| match path {
@@ -627,6 +684,10 @@ new Worker('/worker.js');
 #[cfg(unix)]
 #[tokio::test(flavor = "multi_thread")]
 async fn screenshots_are_private() {
+    traced("screenshots_are_private", screenshots_are_private_body()).await;
+}
+
+async fn screenshots_are_private_body() {
     use std::os::unix::fs::PermissionsExt;
     let Some(env) = browser_env() else { return };
     let base = serve().await;
@@ -647,6 +708,14 @@ async fn screenshots_are_private() {
 #[cfg(unix)]
 #[tokio::test(flavor = "multi_thread")]
 async fn pipe_transport_has_no_listening_port() {
+    traced(
+        "pipe_transport_has_no_listening_port",
+        pipe_transport_has_no_listening_port_body(),
+    )
+    .await;
+}
+
+async fn pipe_transport_has_no_listening_port_body() {
     let Some(env) = browser_env() else { return };
     let art = tempfile::tempdir().unwrap();
     let rt = launch(local_opts(art.path()), &env).await;
@@ -687,6 +756,14 @@ fn dns_opts(dir: &std::path::Path, answer: &'static str) -> BrowserOptions {
 /// rejects it before the request is released.
 #[tokio::test(flavor = "multi_thread")]
 async fn hostname_resolving_to_private_ip_is_blocked_before_sending() {
+    traced(
+        "hostname_resolving_to_private_ip_is_blocked_before_sending",
+        hostname_resolving_to_private_ip_is_blocked_before_sending_body(),
+    )
+    .await;
+}
+
+async fn hostname_resolving_to_private_ip_is_blocked_before_sending_body() {
     let Some(env) = browser_env() else { return };
     let (port, h) = counting_server(|_| ("text/html", "<title>SECRETBODY</title>".into())).await;
     let art = tempfile::tempdir().unwrap();
@@ -713,6 +790,14 @@ async fn hostname_resolving_to_private_ip_is_blocked_before_sending() {
 /// request itself was already sent (blind GET), hence hits == 1.
 #[tokio::test(flavor = "multi_thread")]
 async fn rebinding_to_private_ip_is_stopped_on_response() {
+    traced(
+        "rebinding_to_private_ip_is_stopped_on_response",
+        rebinding_to_private_ip_is_stopped_on_response_body(),
+    )
+    .await;
+}
+
+async fn rebinding_to_private_ip_is_stopped_on_response_body() {
     let Some(env) = browser_env() else { return };
     let (port, h) = counting_server(|_| {
         (
@@ -747,6 +832,10 @@ async fn rebinding_to_private_ip_is_stopped_on_response() {
 /// check; the runtime must then tear the context down and refuse further calls.
 #[tokio::test(flavor = "multi_thread")]
 async fn event_flood_fails_closed() {
+    traced("event_flood_fails_closed", event_flood_fails_closed_body()).await;
+}
+
+async fn event_flood_fails_closed_body() {
     let Some(env) = browser_env() else { return };
     let base = serve().await;
     let art = tempfile::tempdir().unwrap();

@@ -3,7 +3,7 @@
 //! decoration: a missing fact is shown as missing ("unknown", "unverified"), never as OK.
 
 use nemo_events::Budget;
-use nemo_tui_render::theme::{GREEN, RED, Rgb, T_INACTIVE, YELLOW, fit, paint};
+use nemo_tui_render::theme::{GREEN, RED, Rgb, T_INACTIVE, YELLOW, fit_items, paint};
 use nemo_tui_render::util::{fmt_n, short, to_fixed};
 
 use crate::chat::{Totals, Verification};
@@ -23,7 +23,7 @@ pub struct SandboxStatus {
 }
 
 impl SandboxStatus {
-    fn text(&self) -> (String, bool) {
+    pub(crate) fn text(&self) -> (String, bool) {
         if self.mode.is_empty() {
             return ("sandbox: unknown".into(), true);
         }
@@ -114,6 +114,15 @@ impl ContextStatus {
 
     pub fn on_compaction_failed(&mut self) {
         self.compacting = false;
+    }
+
+    /// `(used, window)` tokens; `(0, 0)` while nothing is known (new or cleared conversation).
+    pub fn numbers(&self) -> (u64, u64) {
+        if self.known {
+            (self.used, self.window)
+        } else {
+            (0, 0)
+        }
     }
 
     /// `ctx 62% 124k/200k`, `⟳ compacting…`, plus the brief compaction note; `None` before any
@@ -245,7 +254,7 @@ pub fn status_line_with(
     let ctx = extra
         .context
         .and_then(|c| c.text(extra.now))
-        .map(|(s, c)| format!(" {dot} {}", paint(c, &s)))
+        .map(|(s, c)| paint(c, &s))
         .unwrap_or_default();
     let view = paint(
         T_INACTIVE,
@@ -255,13 +264,16 @@ pub fn status_line_with(
             "ctrl+o: expand"
         },
     );
-    fit(
-        &format!(
-            " {sandbox} {dot} {}{ctx} {dot} {verify} {dot} {view}",
-            paint(T_INACTIVE, &budgets.join(" · "))
-        ),
-        width,
-    )
+    // Dropped whole, last priority first: key hint, budgets, context, then verify; sandbox stays.
+    let items = [
+        (1, format!(" {sandbox}")),
+        (4, paint(T_INACTIVE, &budgets.join(" · "))),
+        (3, ctx),
+        (2, verify),
+        (5, view),
+    ];
+    let items: Vec<(u8, String)> = items.into_iter().filter(|i| !i.1.is_empty()).collect();
+    fit_items(&items, &format!(" {dot} "), width)
 }
 
 #[cfg(test)]

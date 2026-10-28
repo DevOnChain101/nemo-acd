@@ -31,6 +31,14 @@ A denied write or command (Write, Edit, Bash, MCP write tools, ...) makes the ta
 
 **Interactive app.** Shift+Tab is the only way to switch modes (there is no `/mode` command): it cycles `default -> acceptEdits -> plan -> auto -> bypassPermissions -> default`; the footer shows the current mode. Reaching `bypassPermissions` opens the "Bypass permissions?" dialog: it lists what is turned off and what still stops (deny rules, ask rules, critical removals, destructive MCP asks); "No" is the default, and Esc or "No" stays in the previous mode; only "Yes" switches. The next Shift+Tab leaves bypass. `dontAsk` is reachable only with `--permission-mode`. Bypass is never saved, never restored by `--resume`, and `--permission-mode bypassPermissions` is refused by the TUI. A switch applies to tasks started after it (a running task keeps its mode). Every change emits `session.mode_changed`; hosts call `Harness::set_mode(mode, confirmed_bypass)`, which refuses an unconfirmed bypass in the core.
 
+## Reasoning effort (interactive app)
+
+`/effort` (no argument) or `Alt+T` steps through `auto` and the `effort_tiers` the current model declares in its config (`capabilities.effort_tiers`, e.g. `["low","medium","high"]`); `/effort high` or `/effort auto` sets it directly. The footer shows `effort: <tier>`. It is sent as `reasoning_effort` on the following requests (OpenAI-compatible providers) and resets to `auto` when the model is switched. A model without tiers answers "declares no effort tiers". On macOS terminals Alt+T needs "Use Option as Meta"; `/effort` always works.
+
+## Cursor and IME (interactive app)
+
+While the prompt is shown the real terminal cursor is parked at the prompt caret (so an IME candidate window opens there); it is hidden whenever a dialog or picker owns the screen.
+
 ## Selecting and copying text (interactive app)
 Mouse reporting is on, so the app does the selection itself.
 - Drag over the chat to select (the highlight follows the pointer; a drag may start on a blank cell and run in either direction). On release the text is copied to the system clipboard and a short "Copied N chars" notice shows. A plain click starts afresh; Shift/Alt+click extends a kept selection.

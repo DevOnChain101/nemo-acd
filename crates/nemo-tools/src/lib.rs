@@ -14,6 +14,8 @@ use serde_json::Value;
 mod artifact;
 mod browser;
 mod diff;
+/// Line diff of a file change, for the approval dialog preview.
+pub use diff::for_file as file_diff;
 mod edit;
 mod glob;
 mod grep;

@@ -110,7 +110,18 @@ fn once(a: &TuiArgs, env: &Env) -> Result<u8, String> {
             .chain(sandbox_default_notice(&a.common))
             .collect(),
     };
-    match nemo_tui::render_once(&o, &mut std::io::stdout()) {
+    // colour escapes belong to a terminal: into a pipe or file the frame is plain text
+    let mut frame = Vec::new();
+    let res = nemo_tui::render_once(&o, &mut frame).and_then(|()| {
+        let text = String::from_utf8_lossy(&frame);
+        let text = if std::io::stdout().is_terminal() {
+            text.into_owned()
+        } else {
+            nemo_tui_base::text::strip_ansi(&text)
+        };
+        std::io::Write::write_all(&mut std::io::stdout(), text.as_bytes())
+    });
+    match res {
         Err(e) if e.kind() != std::io::ErrorKind::BrokenPipe => Err(e.to_string()),
         _ => Ok(0),
     }
@@ -132,19 +143,40 @@ pub fn launch(a: TuiArgs, env: Env) -> Result<u8, String> {
         .as_deref()
         .map(|id| load_resume(&h.nemo, id))
         .transpose()?;
+    // `/model NAME` restarts on the same session with that model; a model that cannot be built
+    // falls back to the one in use, with a note.
+    let mut model: Option<String> = None;
+    let mut switch_from: Option<(Option<String>, String)> = None;
+    let mut switch_note: Option<String> = None;
     loop {
         if let Some(r) = &resume {
             cwd = PathBuf::from(&r.record.cwd);
         }
-        let common = common_for(&a.common, &granted, &cwd);
-        let p = prepare(
+        let mut common = common_for(&a.common, &granted, &cwd);
+        if model.is_some() {
+            common.model.clone_from(&model);
+        }
+        let p = match prepare(
             &common,
             &cwd,
             &env,
             &Limits::default(),
             Front::Tui,
             resume.as_ref(),
-        )?;
+        ) {
+            Ok(p) => p,
+            Err(e) => {
+                let Some((prev, sid)) = switch_from.take() else {
+                    return Err(e);
+                };
+                switch_note = Some(format!(
+                    "/model: could not switch ({e}); staying on the previous model"
+                ));
+                model = prev;
+                resume = load_resume(&h.nemo, &sid).ok();
+                continue;
+            }
+        };
         let Prepared {
             harness,
             session,
@@ -156,6 +188,7 @@ pub fn launch(a: TuiArgs, env: Env) -> Result<u8, String> {
             worktree,
             label,
             models,
+            effort_tiers,
             sandbox,
             notices,
             homes: ph,
@@ -171,8 +204,15 @@ pub fn launch(a: TuiArgs, env: Env) -> Result<u8, String> {
         o.version = env!("CARGO_PKG_VERSION").into();
         o.model = Some(label);
         o.models = models;
+        o.effort_tiers = effort_tiers;
         o.sandbox = sandbox;
         o.startup_notes = notices;
+        o.startup_notes.extend(switch_note.take());
+        switch_from = None;
+        if let Some(m) = &mcp {
+            let m = m.clone();
+            o.mcp_report = Some(Box::new(move || mcp_lines(&m)));
+        }
         o.saved = nemo_tui::list_saved(&ph.nemo, None).unwrap_or_default();
         o.resume = resume.take();
         let exit = nemo_tui::run_interactive(o, Tty::stdio(&env)).map_err(|e| e.to_string());
@@ -212,9 +252,57 @@ pub fn launch(a: TuiArgs, env: Env) -> Result<u8, String> {
                 cwd = nemo_core::canonicalize(&p).map_err(|e| format!("{}: {e}", p.display()))?;
             }
             ExitReason::Resume(id) => resume = Some(load_resume(&ph.nemo, &id)?),
+            ExitReason::SwitchModel(m) => {
+                switch_from = Some((model.replace(m), sid.clone()));
+                resume = load_resume(&ph.nemo, &sid).ok();
+            }
             ExitReason::Quit | ExitReason::InputClosed => return Ok(0),
         }
     }
+}
+
+/// `/mcp`: one block per server with state, tools and the last error.
+fn mcp_lines(m: &nemo_mcp::McpManager) -> Vec<String> {
+    use nemo_harness::sanitize_for_display as clean;
+    let status = m.status();
+    if status.is_empty() {
+        return vec!["MCP: no servers are configured for this session".into()];
+    }
+    let tools = m.tools();
+    let mut v = vec![format!("MCP servers ({}):", status.len())];
+    for s in status {
+        let state = format!("{:?}", s.state).to_lowercase();
+        v.push(format!(
+            "  {} · {state} · {}{} · {} tools",
+            clean(&s.name),
+            s.transport,
+            s.scope
+                .as_deref()
+                .map_or(String::new(), |c| format!(" · {}", clean(c))),
+            s.tool_count
+        ));
+        if let Some(e) = &s.error {
+            v.push(format!("    error: {}", clean(e)));
+        }
+        for t in tools.iter().filter(|t| t.server == s.name && !t.synthetic) {
+            v.push(format!(
+                "    {} · {}",
+                clean(&t.tool),
+                clean(t.description.lines().next().unwrap_or(""))
+            ));
+        }
+        if matches!(s.state, nemo_mcp::ServerState::Failed) {
+            v.extend(
+                m.stderr_tail(&s.name)
+                    .iter()
+                    .rev()
+                    .take(3)
+                    .rev()
+                    .map(|l| format!("    stderr: {}", clean(l))),
+            );
+        }
+    }
+    v
 }
 
 #[cfg(all(test, unix, feature = "test-provider"))]

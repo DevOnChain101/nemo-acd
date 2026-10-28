@@ -65,15 +65,31 @@ pub(crate) struct GateAuth<'a> {
     pub harness: &'a Harness,
     pub task: &'a TaskRun,
     pub agent: &'a AgentCtx,
+    /// Commands of this evaluation whose set the person refused.
+    pub denied: Mutex<std::collections::HashSet<String>>,
 }
 
 impl CheckAuthorizer for GateAuth<'_> {
+    fn prepare<'a>(
+        &'a self,
+        checks: &'a [Check],
+        _: &'a tokio_util::sync::CancellationToken,
+    ) -> crate::traits::BoxFut<'a, ()> {
+        Box::pin(
+            self.harness
+                .approve_check_set(self.task, self.agent, checks, &self.denied),
+        )
+    }
+
     fn authorize<'a>(
         &'a self,
         check: &'a Check,
         _: &'a tokio_util::sync::CancellationToken,
     ) -> crate::traits::BoxFut<'a, CheckAuth> {
-        Box::pin(self.harness.authorize_check(self.task, self.agent, check))
+        Box::pin(
+            self.harness
+                .authorize_check(self.task, self.agent, check, &self.denied),
+        )
     }
 }
 
@@ -530,7 +546,7 @@ impl Harness {
                     agent,
                     Some(turn),
                     HookEvent::PreToolUse,
-                    json!({"tool_name": call.name, "tool_input": self.tools.redact_input(&call.name, &input)}),
+                    json!({"tool_name": call.name, "tool_use_id": call.id, "tool_input": self.tools.redact_input(&call.name, &input)}),
                     Some(&call.name),
                 )
                 .await
@@ -797,6 +813,7 @@ impl Harness {
         task: &TaskRun,
         agent: &AgentCtx,
         c: &Check,
+        denied: &Mutex<std::collections::HashSet<String>>,
     ) -> CheckAuth {
         let Some(cmd) = c.command.as_deref() else {
             return CheckAuth::Allow;
@@ -807,6 +824,10 @@ impl Harness {
         let headless = verdict.reason.starts_with("non-interactive");
         match verdict.decision {
             Decision::Allow => return CheckAuth::Allow,
+            Decision::Ask | Decision::Deny if lock(denied).contains(cmd) => {
+                return CheckAuth::Blocked("denied by the user".into());
+            }
+            Decision::Ask if lock(&self.verify_ok).contains(cmd) => return CheckAuth::Allow,
             Decision::Deny if !headless => {
                 return CheckAuth::Blocked(format!("denied by policy: {}", verdict.reason));
             }
@@ -841,6 +862,52 @@ impl Harness {
         CheckAuth::Blocked(format!("{NEEDS_APPROVAL}{rule}"))
     }
 
+    /// One dialog for every check of the set that would ask (allow once / always for the set).
+    /// Approved commands are remembered for the session in `verify_ok` (the gate only; a Bash
+    /// call still follows the normal rules), refused ones in `denied`. Nothing to ask when
+    /// non-interactive: `authorize_check` then reports `needs_approval`.
+    pub(crate) async fn approve_check_set(
+        &self,
+        task: &TaskRun,
+        agent: &AgentCtx,
+        checks: &[Check],
+        denied: &Mutex<std::collections::HashSet<String>>,
+    ) {
+        if !lock(&agent.perms).env.interactive {
+            return;
+        }
+        let mode = *lock(&agent.mode);
+        let asks: Vec<&str> = checks
+            .iter()
+            .filter_map(|c| c.command.as_deref())
+            .filter(|cmd| {
+                let v = lock(&agent.perms).check("Bash", &json!({ "command": cmd }), mode);
+                v.decision == Decision::Ask
+                    && !v.reason.starts_with("non-interactive")
+                    && !lock(&self.verify_ok).contains(*cmd)
+            })
+            .collect();
+        if asks.is_empty() {
+            return;
+        }
+        let input = json!({ "command": asks.join("\n") });
+        let mut verdict = lock(&agent.perms).check("Bash", &input, mode);
+        verdict.reason = format!("verification runs {} check(s) for this task", asks.len());
+        let call = Call {
+            id: "verify-set".into(),
+            name: "Bash".into(),
+            input: Some(input.clone()),
+            problem: None,
+        };
+        let a = self.approve(task, agent, "", &call, &input, &verdict).await;
+        if a.decision == ApprovalDecision::Allow {
+            self.apply_accepted(agent, "Bash", &input, &a);
+            lock(&self.verify_ok).extend(asks.iter().map(|s| s.to_string()));
+        } else if a.decision != ApprovalDecision::AutoDenied {
+            lock(denied).extend(asks.iter().map(|s| s.to_string()));
+        }
+    }
+
     /// Applies "allow always" options, but only ones that were offered for this call.
     fn apply_accepted(&self, agent: &AgentCtx, tool: &str, input: &Value, a: &Approval) {
         if a.accepted.is_empty() {
@@ -857,6 +924,24 @@ impl Harness {
             .collect();
         if let Some(m) = p.apply(&ok) {
             *lock(&agent.mode) = m;
+        }
+        if let Some(store) = &self.rule_store {
+            let rules: Vec<String> = ok
+                .iter()
+                .filter(|s| {
+                    matches!(
+                        s,
+                        Suggestion::AddRules {
+                            behavior: Decision::Allow,
+                            ..
+                        }
+                    )
+                })
+                .flat_map(|s| rule_strings(tool, std::slice::from_ref(s)))
+                .collect();
+            if !rules.is_empty() {
+                store(&rules);
+            }
         }
     }
 
@@ -903,6 +988,8 @@ impl Harness {
                 deadline: None,
             },
         );
+        // An approval during verification returns to `verifying`, not `running`.
+        let before = *lock(&task.status);
         self.set_status(
             task,
             nemo_core::SessionStatus::WaitingApproval,
@@ -940,7 +1027,12 @@ impl Harness {
             },
         );
         if !task.cancel.is_cancelled() {
-            self.set_status(task, nemo_core::SessionStatus::Running, "approval resolved");
+            let back = if before == nemo_core::SessionStatus::Verifying {
+                before
+            } else {
+                nemo_core::SessionStatus::Running
+            };
+            self.set_status(task, back, "approval resolved");
         }
         a
     }
@@ -1061,7 +1153,15 @@ impl Harness {
                 self.record_changed(task, &input);
             }
             SideEffectClass::Execute => {
-                task.side_effects.store(true, Ordering::SeqCst);
+                // Read-only / build / test / lint commands change nothing the gate should verify.
+                let inert = name == "Bash"
+                    && input
+                        .get("command")
+                        .and_then(Value::as_str)
+                        .is_some_and(nemo_permissions::is_auto_safe_bash);
+                if !inert {
+                    task.side_effects.store(true, Ordering::SeqCst);
+                }
                 task.pending_user_need.store(false, Ordering::SeqCst);
                 task.pending_approval.store(false, Ordering::SeqCst);
                 // A shell may have changed anything, even when it fails.
@@ -1101,7 +1201,7 @@ impl Harness {
                 agent,
                 Some(turn),
                 HookEvent::PostToolUse,
-                json!({"tool_name": name, "tool_input": self.tools.redact_input(name, &input), "tool_response": text}),
+                json!({"tool_name": name, "tool_use_id": id, "tool_input": self.tools.redact_input(name, &input), "tool_response": text}),
                 Some(name),
             )
             .await

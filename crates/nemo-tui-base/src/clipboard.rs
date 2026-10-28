@@ -90,6 +90,10 @@ pub enum Encoding {
     Utf16LeBom,
 }
 
+/// A copy tool still running after this is killed (it may hold the selection for xclip, but
+/// the data was already handed over).
+const COPY_TIMEOUT: Duration = Duration::from_secs(5);
+
 /// An OS clipboard tool fed on stdin.
 #[derive(Clone, Debug)]
 pub struct PipeClipboard {
@@ -158,8 +162,17 @@ impl ClipboardSink for PipeClipboard {
         let mut stdin = child.stdin.take().expect("stdin was piped");
         let data = self.payload(text);
         std::thread::spawn(move || {
-            let _ = stdin.write_all(&data); // closes stdin on drop
-            let _ = child.wait();
+            let _ = stdin.write_all(&data);
+            drop(stdin); // EOF: the tool only finishes (and pbcopy only commits) after this
+            let deadline = std::time::Instant::now() + COPY_TIMEOUT;
+            while matches!(child.try_wait(), Ok(None)) {
+                if std::time::Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
         });
         Ok(())
     }
@@ -439,6 +452,59 @@ mod tests {
             args: vec![],
         };
         assert!(missing.paste().is_err());
+    }
+
+    /// The tool must see EOF: a sink that reads to the end then writes a file proves it.
+    #[cfg(unix)]
+    #[test]
+    fn pipe_clipboard_closes_stdin_so_tool_receives_text() {
+        let d = tempfile::tempdir().unwrap();
+        let out = d.path().join("out.txt");
+        let sh = d.path().join("sink.sh");
+        std::fs::write(&sh, format!("#!/bin/sh\ncat > '{}'\n", out.display())).unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&sh, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let sink = PipeClipboard {
+            program: sh,
+            args: vec![],
+            encoding: Encoding::Utf8,
+        };
+        sink.copy("héllo\nworld").unwrap();
+        let t0 = std::time::Instant::now();
+        while !std::fs::read_to_string(&out).is_ok_and(|s| s == "héllo\nworld") {
+            assert!(t0.elapsed() < Duration::from_secs(5), "tool never got EOF");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    /// Real pbcopy round trip; the user's clipboard is restored afterwards.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn pbcopy_really_receives_text() {
+        let paste = || {
+            PasteCommand::new("/usr/bin/pbpaste".into(), &[])
+                .paste()
+                .ok()
+        };
+        let saved = paste();
+        let text = format!("nemo-clip-test-{}", std::process::id());
+        PipeClipboard::pbcopy().copy(&text).unwrap();
+        let t0 = std::time::Instant::now();
+        let mut got = paste();
+        while got.as_deref() != Some(text.as_str()) && t0.elapsed() < Duration::from_secs(5) {
+            std::thread::sleep(Duration::from_millis(50));
+            got = paste();
+        }
+        if let Some(s) = saved {
+            let _ = PipeClipboard::pbcopy().copy(&s);
+        }
+        assert_eq!(got.as_deref(), Some(text.as_str()));
+    }
+
+    #[test]
+    fn osc52_sink_is_last_fallback() {
+        let chain = default_chain(Platform::Other, &Env::from_pairs([("A", "b")]));
+        assert_eq!(chain.len(), 1, "no tool: only OSC 52 remains");
     }
 
     #[cfg(windows)]

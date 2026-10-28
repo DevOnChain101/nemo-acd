@@ -86,10 +86,39 @@ pub fn detect_checks(dir: &Path) -> Vec<Check> {
     out
 }
 
+/// Whether `changed` (workspace-relative paths) can affect what the inferred check `cmd` exercises.
+/// A change set of only unrelated files (a `.txt`, a README) makes the check noise.
+fn relevant(cmd: &str, changed: &[String]) -> bool {
+    let exts: &[&str] = match cmd.split_whitespace().next() {
+        Some("cargo") => &["rs", "toml", "lock"],
+        Some("npm" | "pnpm" | "yarn") => &[
+            "js", "jsx", "ts", "tsx", "mjs", "cjs", "json", "vue", "svelte",
+        ],
+        Some("python" | "python3") => &["py", "toml", "ini", "cfg"],
+        Some("go") => &["go", "mod", "sum"],
+        Some("make") => {
+            return changed
+                .iter()
+                .any(|f| !f.ends_with(".md") && !f.ends_with(".txt"));
+        }
+        _ => return true,
+    };
+    changed.iter().any(|f| {
+        Path::new(f)
+            .extension()
+            .is_some_and(|e| exts.iter().any(|x| e.eq_ignore_ascii_case(x)))
+    })
+}
+
 /// Plan order: user-declared criterion checks, model-registered checks, inferred checks.
 /// Inferred checks duplicating an earlier command are dropped; ids `k1..` are assigned to
-/// checks that have none.
-pub fn plan_checks(criteria: &[Criterion], model_checks: &[Check], dir: &Path) -> Vec<Check> {
+/// checks that have none. With a non-empty `changed`, inferred checks unrelated to it are dropped.
+pub fn plan_checks(
+    criteria: &[Criterion],
+    model_checks: &[Check],
+    dir: &Path,
+    changed: &[String],
+) -> Vec<Check> {
     let mut out: Vec<Check> = vec![];
     for c in criteria
         .iter()
@@ -107,7 +136,8 @@ pub fn plan_checks(criteria: &[Criterion], model_checks: &[Check], dir: &Path) -
         k
     }));
     for k in detect_checks(dir) {
-        if !out.iter().any(|o| o.command == k.command) {
+        let rel = changed.is_empty() || k.command.as_deref().is_none_or(|c| relevant(c, changed));
+        if rel && !out.iter().any(|o| o.command == k.command) {
             out.push(k);
         }
     }
@@ -155,7 +185,7 @@ mod tests {
         assert!(!cmds.iter().any(|c| c.contains("start")));
 
         let crit = [Criterion::user("c1", "works", Some("cargo test"))];
-        let plan = plan_checks(&crit, &[], p);
+        let plan = plan_checks(&crit, &[], p, &[]);
         assert_eq!(plan[0].declared_by, Declarer::User);
         assert_eq!(plan[0].criteria_ids, ["c1"]);
         assert_eq!(
@@ -164,6 +194,19 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn unrelated_changes_drop_inferred_checks() {
+        let d = tempfile::tempdir().unwrap();
+        fs::write(d.path().join("Cargo.toml"), "").unwrap();
+        let cmds = |ch: &[&str]| {
+            let ch: Vec<String> = ch.iter().map(|s| s.to_string()).collect();
+            plan_checks(&[], &[], d.path(), &ch).len()
+        };
+        assert_eq!(cmds(&["hello.txt"]), 0);
+        assert_eq!(cmds(&["src/lib.rs"]), 3);
+        assert_eq!(cmds(&[]), 3);
     }
 
     #[test]

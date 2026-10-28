@@ -176,13 +176,13 @@ pub const LOCAL_COMMANDS: &[(&str, &str, Option<&str>)] = &[
 ];
 
 pub const HELP: &[&str] = &[
-    "enter send · alt+enter / \\+enter newline · alt/option+backspace delete word back · alt+d delete word forward · ctrl+w delete back to whitespace · ctrl+u clear line · esc interrupt · esc esc edit the last prompt · shift+tab mode",
-    "! run a shell command · # remember something in AGENTS.md · / commands and skills · @ mention a file or agent",
-    "alt+a add files or folders · alt+v / ctrl+v paste image · drop or paste an image path · backspace on an empty prompt drops it",
-    "↑/↓ prompt history · ctrl+r search history · ctrl+o show all of long tasks, bash output and code (6 lines by default) · right-click in the prompt pastes the clipboard · pgup/pgdn scroll (alt+pgup/pgdn: docked sub-agent) · ctrl+l redraw a garbled screen",
-    "ctrl+n new workspace (pick a folder) · /new new session in this workspace · ctrl+pgup/pgdn or alt+←/→ switch session · alt+↑/↓ switch workspace · /close close a session · tab workspace selector (when multiple) → sessions → prompt (↑/↓ in the Workspace box switches workspace)",
-    "ctrl+↑/↓ browse sessions (their chat loads here; enter continues one) · a tab waiting for approval blinks red",
-    "dialogs: ↑/↓ or 1-9 choose · space toggles · ←/→ switch question · enter confirm · esc reject",
+    "enter send (while a task runs it is queued: ↑ edits it, esc drops it) · alt+enter / shift+enter / \\+enter newline · alt+backspace delete word back · alt+d delete word forward · ctrl+w delete back to whitespace · ctrl+u clear to line start",
+    "esc interrupt the task (partial output is kept) · esc esc on an empty prompt edits the last prompt · shift+tab cycle the permission mode",
+    "! run a shell command (!! only records it) · / commands and skills · @ mention a file",
+    "/model /mcp /agents /permissions /status /compact /clear /new /resume /focus /exit",
+    "↑/↓ prompt history · ctrl+r search history · ctrl+o show all of long tasks, bash output and code (6 lines by default) · right-click in the prompt pastes the clipboard · drag, double or triple click copies · pgup/pgdn scroll · ctrl+l redraw a garbled screen",
+    "ctrl+n or /new open a session in another folder · /resume continues a saved one (this folder first)",
+    "dialogs: ↑/↓ or 1-9 choose · click an option · space toggles · ←/→ switch question · enter confirm · esc reject · x shows the whole input",
 ];
 
 /// (key, label, mode)

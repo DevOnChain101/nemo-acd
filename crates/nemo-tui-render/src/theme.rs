@@ -202,7 +202,52 @@ pub fn fit(s: &str, w: usize) -> String {
     out
 }
 
+/// Joins `(priority, text)` items with `sep` and drops whole items (largest priority number first, the
+/// later one on ties) until the line fits `w`, so a word is never cut mid-way (QA B-27). One remaining
+/// item that is still too long is ellipsized by `fit`.
+pub fn fit_items(items: &[(u8, String)], sep: &str, w: usize) -> String {
+    let mut keep = vec![true; items.len()];
+    let join = |keep: &[bool]| {
+        let parts: Vec<&str> = items
+            .iter()
+            .zip(keep)
+            .filter(|(_, k)| **k)
+            .map(|(i, _)| i.1.as_str())
+            .collect();
+        parts.join(sep)
+    };
+    while width(&join(&keep)) > w && keep.iter().filter(|k| **k).count() > 1 {
+        if let Some(i) = (0..items.len())
+            .filter(|i| keep[*i])
+            .max_by_key(|i| (items[*i].0, *i))
+        {
+            keep[i] = false;
+        }
+    }
+    fit(&join(&keep), w)
+}
+
 /// A zero-based list `0..n` helper for `' '.repeat(n)`.
 pub fn spaces(n: usize) -> String {
     " ".repeat(n)
+}
+
+#[cfg(test)]
+mod fit_items_tests {
+    use super::*;
+
+    #[test]
+    fn drops_whole_items_by_priority_and_never_cuts_a_word() {
+        let items = [
+            (1, "mode on".to_string()),
+            (3, "ctx 5%".to_string()),
+            (2, "model-x".to_string()),
+        ];
+        assert_eq!(
+            fit_items(&items, " · ", 40).trim_end(),
+            "mode on · ctx 5% · model-x"
+        );
+        assert_eq!(fit_items(&items, " · ", 20).trim_end(), "mode on · model-x");
+        assert_eq!(fit_items(&items, " · ", 9).trim_end(), "mode on");
+    }
 }

@@ -136,7 +136,7 @@ impl Rig {
     }
 }
 
-const READY: &str = "Try \"explain this repo\"";
+const READY: &str = "Enter send";
 const SHIFT_TAB: &str = "\x1b[Z";
 
 #[test]

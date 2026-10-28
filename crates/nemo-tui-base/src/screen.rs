@@ -53,6 +53,9 @@ pub struct Screen<W: Write> {
     active: bool,
     force_next: u32,
     title: String,
+    /// Where the hardware cursor should be (0-based `(x, y)`); `None` hides it.
+    caret: Option<(u32, u32)>,
+    caret_shown: Option<(u32, u32)>,
 }
 
 impl<W: Write> Screen<W> {
@@ -66,7 +69,15 @@ impl<W: Write> Screen<W> {
             active: false,
             force_next: 0,
             title: TITLE.into(),
+            caret: None,
+            caret_shown: None,
         }
+    }
+
+    /// Parks the real cursor at `caret` after the next `draw` (so an IME places its candidate window
+    /// at the prompt); `None` keeps it hidden.
+    pub fn set_caret(&mut self, caret: Option<(u32, u32)>) {
+        self.caret = caret;
     }
 
     pub fn enter(&mut self) -> io::Result<()> {
@@ -99,6 +110,7 @@ impl<W: Write> Screen<W> {
     }
 
     pub fn invalidate(&mut self) {
+        self.caret_shown = None;
         self.prev.clear();
     }
 
@@ -161,6 +173,16 @@ impl<W: Write> Screen<W> {
             ));
         }
         self.prev = lines.iter().take(rows as usize).cloned().collect();
+        let caret = self.caret.filter(|(x, y)| *x < cols && *y < rows);
+        // Writing rows moves the cursor, so it is re-parked after every repaint.
+        match caret {
+            Some((x, y)) if !buf.is_empty() || caret != self.caret_shown => {
+                buf.push_str(&format!("\x1b[{};{}H\x1b[?25h", y + 1, x + 1));
+            }
+            None if self.caret_shown.is_some() => buf.push_str("\x1b[?25l"),
+            _ => {}
+        }
+        self.caret_shown = caret;
         if buf.is_empty() {
             return Ok(());
         }
@@ -185,6 +207,26 @@ mod tests {
     }
 
     // Translated from Node test/screen-leave.test.js.
+    #[test]
+    fn caret_is_parked_after_each_repaint_and_hidden_without_one() {
+        let mut s = screen();
+        s.set_caret(Some((4, 2)));
+        s.draw(&["a".into(), "b".into(), "c".into()], 10, 3)
+            .unwrap();
+        assert!(take(&mut s).ends_with("\x1b[3;5H\x1b[?25h\x1b[?2026l"));
+        s.draw(&["a".into(), "b".into(), "c".into()], 10, 3)
+            .unwrap();
+        assert_eq!(
+            take(&mut s),
+            "",
+            "unchanged frame and caret: nothing written"
+        );
+        s.set_caret(None);
+        s.draw(&["a".into(), "b".into(), "c".into()], 10, 3)
+            .unwrap();
+        assert!(take(&mut s).contains("\x1b[?25l"));
+    }
+
     #[test]
     fn leave_turns_bracketed_paste_off_once() {
         let mut s = screen();

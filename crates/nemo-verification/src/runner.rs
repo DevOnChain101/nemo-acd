@@ -112,6 +112,16 @@ pub enum CheckAuth {
 /// Policy for the commands the gate runs itself. The harness implements it by judging each
 /// check like a `Bash` call, so verification cannot run what the agent itself could not.
 pub trait CheckAuthorizer: Send + Sync {
+    /// Called once with the whole set before the first `authorize`, so an implementation can
+    /// ask the user one question for all checks instead of one per check.
+    fn prepare<'a>(
+        &'a self,
+        _checks: &'a [Check],
+        _cancel: &'a CancellationToken,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
+        Box::pin(async {})
+    }
+
     fn authorize<'a>(
         &'a self,
         check: &'a Check,
@@ -156,6 +166,9 @@ impl VerifyRunner {
         auth: Option<&dyn CheckAuthorizer>,
     ) -> Vec<CheckResult> {
         let mut out = vec![];
+        if let Some(a) = auth {
+            a.prepare(checks, cancel).await;
+        }
         for c in checks {
             if cancel.is_cancelled() {
                 break;

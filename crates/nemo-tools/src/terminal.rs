@@ -94,6 +94,30 @@ async fn start(
     Ok((h, st))
 }
 
+/// Precise note for a sandbox denial in `output` (first absolute path on an EPERM/EACCES line).
+/// Paths inside the workspace are plain permission errors and get no note.
+fn sandbox_hint(output: &str, workspace: &std::path::Path) -> Option<String> {
+    static PATH: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    let re = PATH.get_or_init(|| Regex::new(r"(/[\w.@+~%-]+(?:/[\w.@+~%-]+)*)").unwrap());
+    let line = output.lines().find(|l| {
+        let l = l.to_lowercase();
+        l.contains("operation not permitted") || l.contains("permission denied")
+    })?;
+    let path = re
+        .find_iter(line)
+        .map(|m| m.as_str())
+        .find(|p| p.len() > 1)?;
+    if std::path::Path::new(path).starts_with(workspace) {
+        return None;
+    }
+    Some(format!(
+        "[blocked by Nemo's sandbox, not by an OS permission: access to {path} is outside what commands may use. \
+Reads outside the workspace are limited to system and toolchain directories; writes to the workspace and a private temp dir. \
+If {path} must be READ, tell the user to restart nemo with `--sandbox-read {path}`. \
+Do NOT suggest Full Disk Access, System Settings, sudo or chmod.]"
+    ))
+}
+
 pub(crate) fn bash<'a>(
     sh: &'a Shared,
     input: &'a Value,
@@ -160,6 +184,12 @@ pub(crate) fn bash<'a>(
                 if text.is_empty() { "" } else { "\n\n" },
                 notes.join(" ")
             );
+        }
+        let hint = (r.sandbox.is_some() && r.exit_code.is_some_and(|c| c != 0))
+            .then(|| sandbox_hint(&r.output, &ctx.workspace.root))
+            .flatten();
+        if let Some(h) = hint {
+            text += &format!("\n\n{h}");
         }
         match (r.exit_code, r.signal) {
             (Some(0), _) => {}
@@ -539,4 +569,29 @@ pub(crate) fn status<'a>(
             Err(e) => e,
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sandbox_hint;
+    use std::path::Path;
+
+    #[test]
+    fn sandbox_hint_names_path_and_flag() {
+        let o = "error: could not read settings file: '/Users/u/.rustup/settings.toml': Operation not permitted (os error 1)";
+        let h = sandbox_hint(o, Path::new("/Users/u/proj")).unwrap();
+        assert!(
+            h.contains("--sandbox-read /Users/u/.rustup/settings.toml"),
+            "{h}"
+        );
+        assert!(h.contains("Do NOT suggest Full Disk Access"));
+        assert!(
+            sandbox_hint(
+                "cat: /Users/u/proj/x: Permission denied",
+                Path::new("/Users/u/proj")
+            )
+            .is_none()
+        );
+        assert!(sandbox_hint("all fine", Path::new("/w")).is_none());
+    }
 }
