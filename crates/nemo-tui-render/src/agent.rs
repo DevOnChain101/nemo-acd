@@ -11,6 +11,7 @@ use crate::modelname::{ModelConfig, model_parts};
 use crate::picker::{DEFAULT_WINDOW, Picker};
 use crate::theme::*;
 use crate::util::{one_line, pad_end, pad_start, to_fixed};
+use nemo_tui_base::selection::SelRow;
 use nemo_tui_base::text::{char_width, is_js_space};
 use serde::Deserialize;
 use serde_json::Value;
@@ -61,6 +62,8 @@ pub struct Run {
     pub w: usize,
     /// `false` for decorations (bullets, bars) that are not part of copied chat text.
     pub copy: bool,
+    /// Last run of a row that `wrap` broke to fit the width: the next row continues the same line.
+    pub soft: bool,
 }
 pub type Row = Vec<Run>;
 
@@ -74,6 +77,7 @@ fn run_full(t: impl Into<String>, c: Col, b: bool, i: bool, u: bool) -> Run {
         raw: false,
         w: 0,
         copy: true,
+        soft: false,
     }
 }
 fn r(t: impl Into<String>, c: Col) -> Run {
@@ -792,6 +796,16 @@ fn tokens(s: &str) -> Vec<&str> {
 /// Runs -> rows of at most `w` cells; `first` / `rest` are the prefix runs of the first and the
 /// following rows.
 fn wrap(runs: &[Run], w: usize, first: &[Run], rest: &[Run]) -> Vec<Row> {
+    // prefixes (bullets, indents, prompt marks) are layout, not copied text
+    let deco_all = |rs: &[Run]| -> Vec<Run> {
+        rs.iter()
+            .map(|x| Run {
+                copy: false,
+                ..x.clone()
+            })
+            .collect()
+    };
+    let (first, rest) = (&deco_all(first)[..], &deco_all(rest)[..]);
     let mut rows: Vec<Row> = vec![];
     let mut row: Row = first.to_vec();
     let mut prefix_n = first.len();
@@ -800,6 +814,9 @@ fn wrap(runs: &[Run], w: usize, first: &[Run], rest: &[Run]) -> Vec<Row> {
     macro_rules! new_row {
         () => {{
             rows.push(std::mem::replace(&mut row, rest.to_vec()));
+            if let Some(l) = rows.last_mut().and_then(|r| r.last_mut()) {
+                l.soft = true;
+            }
             prefix_n = rest.len();
             used = row_w(rest);
             fresh = true;
@@ -3451,8 +3468,9 @@ pub fn transcript_rows(
 }
 
 /// Plain text of the chat body rows `from..=to` (counted from the top of the conversation): the
-/// same rows as the screen without colours or trailing spaces; decorations count as blanks.
-pub fn body_text_rows(body: &Body, from: usize, to: usize) -> Vec<String> {
+/// same rows as the screen without colours; decorations count as blanks and `lead` says how many
+/// leading cells are only decoration.
+pub fn body_sel_rows(body: &Body, from: usize, to: usize) -> Vec<SelRow> {
     let mut out = vec![];
     let mut k = -(body.skip as i64);
     for p in &body.parts {
@@ -3462,6 +3480,13 @@ pub fn body_text_rows(body: &Body, from: usize, to: usize) -> Vec<String> {
         }
         for rw in p.iter() {
             if k >= from as i64 && k <= to as i64 {
+                let width = |x: &Run| if x.raw { x.w } else { str_w(&x.t) };
+                let lead = rw
+                    .iter()
+                    .filter(|x| x.raw || !x.t.is_empty())
+                    .take_while(|x| !x.copy)
+                    .map(width)
+                    .sum::<usize>();
                 let copy: Row = rw
                     .iter()
                     .map(|x| {
@@ -3469,17 +3494,17 @@ pub fn body_text_rows(body: &Body, from: usize, to: usize) -> Vec<String> {
                             x.clone()
                         } else {
                             Run {
-                                t: " ".repeat(if x.raw { x.w } else { str_w(&x.t) }),
+                                t: " ".repeat(width(x)),
                                 ..x.clone()
                             }
                         }
                     })
                     .collect();
-                out.push(
-                    nemo_tui_base::text::strip_ansi(&paint_row(&copy))
-                        .trim_end()
-                        .to_string(),
-                );
+                out.push(SelRow {
+                    text: nemo_tui_base::text::strip_ansi(&paint_row(&copy)),
+                    soft: rw.last().is_some_and(|x| x.soft),
+                    lead: lead as i64,
+                });
             }
             k += 1;
         }

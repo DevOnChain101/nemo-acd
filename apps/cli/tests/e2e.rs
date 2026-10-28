@@ -203,6 +203,31 @@ fn edit_with_verification_completes_exit_0() {
 }
 
 #[test]
+fn malformed_settings_stop_nemo_run_with_exit_2_before_anything_runs() {
+    let rig = Rig::new();
+    std::fs::create_dir_all(rig.home()).unwrap();
+    // a trailing comma would otherwise silently drop this deny rule
+    std::fs::write(
+        rig.home().join("settings.json"),
+        r#"{"permissions":{"deny":["Bash(rm:*)"],}}"#,
+    )
+    .unwrap();
+    let (o, ev) = rig.run(
+        json!([{"text": "hi"}]),
+        &["--permission-mode", "acceptEdits"],
+    );
+    assert_eq!(o.status.code(), Some(2));
+    assert!(ev.is_empty(), "no task was started: {ev:?}");
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(
+        err.contains("settings error")
+            && err.contains("malformed JSON")
+            && err.contains("settings.json"),
+        "{err}"
+    );
+}
+
+#[test]
 fn no_session_store_writes_no_database() {
     let rig = Rig::new();
     let (o, ev) = rig.run(json!([{"text": "nothing to do"}]), &["--no-session-store"]);

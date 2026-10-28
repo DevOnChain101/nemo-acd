@@ -147,7 +147,6 @@ fn shift_tab_cycles_default_accept_plan_auto_and_the_footer_follows() {
         (Mode::AcceptEdits, "accept edits"),
         (Mode::Plan, "plan"),
         (Mode::Auto, "auto"),
-        (Mode::Default, "manual"),
     ] {
         r.tty.send(SHIFT_TAB);
         r.wait_engine(m);
@@ -160,26 +159,26 @@ fn shift_tab_cycles_default_accept_plan_auto_and_the_footer_follows() {
 fn bypass_needs_the_confirmation_and_one_shift_tab_leaves_it() {
     let mut r = rig(nemo_core::PermissionMode::Default);
     r.wait_for(READY);
-    // Esc / No keep the mode
-    r.tty.send("/mode bypass\r");
+    // default -> acceptEdits -> plan -> auto, then the fourth press asks about bypass
+    for m in [Mode::AcceptEdits, Mode::Plan, Mode::Auto] {
+        r.tty.send(SHIFT_TAB);
+        r.wait_engine(m);
+    }
+    // Esc keeps the previous mode
+    r.tty.send(SHIFT_TAB);
     r.wait_for("Bypass permissions?");
-    r.wait_for("deny rules");
+    r.wait_for("ask rules");
     r.tty.send("\x1b");
     std::thread::sleep(Duration::from_millis(100));
-    assert_eq!(r.engine_mode(), Mode::Default);
-    r.tty.send("/mode bypass\r");
+    assert_eq!(r.engine_mode(), Mode::Auto);
+    // so does the highlighted default, "No"
+    r.tty.send(SHIFT_TAB);
     r.wait_for("Bypass permissions?");
-    r.tty.send("\r"); // the highlighted choice is "No"
+    r.tty.send("\r");
     std::thread::sleep(Duration::from_millis(100));
-    assert_eq!(r.engine_mode(), Mode::Default);
-    // Shift+Tab never lands on bypass
-    for _ in 0..8 {
-        r.tty.send(SHIFT_TAB);
-        std::thread::sleep(Duration::from_millis(20));
-        assert_ne!(r.engine_mode(), Mode::BypassPermissions);
-    }
+    assert_eq!(r.engine_mode(), Mode::Auto);
     // an explicit yes switches the engine
-    r.tty.send("/mode bypass\r");
+    r.tty.send(SHIFT_TAB);
     r.wait_for("Bypass permissions?");
     r.tty.send("\x1b[B\r");
     r.wait_engine(Mode::BypassPermissions);

@@ -517,7 +517,7 @@ impl Harness {
                 &scope,
                 Event::Notice {
                     level: "warning".into(),
-                    text: "bypassPermissions: tool calls run without approval; only hard stops (deny rules, critical rm, destructive MCP asks) still apply".into(),
+                    text: "bypassPermissions: tool calls run without approval; only deny rules, ask rules, critical rm and destructive MCP asks still stop them; protected paths are not stopped".into(),
                 },
             );
         }

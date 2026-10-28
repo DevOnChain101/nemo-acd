@@ -43,7 +43,7 @@ Rules:
 ## 3. Execution pipeline (per call, calls in one batch run sequentially [from-node agent.js:3489-3508])
 0. **Parse** — tool input cut off or not valid JSON → error `Tool input was cut off …` without running [from-node agent.js:3514-3522]. Unknown name → `Unknown tool "<name>"` [from-node agent.js:3528-3535].
 1. **Validate** [new] — JSON Schema validation of `input` against `input_schema` (Node only checks by hand in each tool). Failure → `is_error`, `soft:false`, message lists the first 5 violations.
-2. **Policy** — `Permissions::check(name, input, turn_mode)` ported verbatim [from-node permissions.js:719-829], order: deny rule → dialog tools → critical `rm` → outside-read (blocked/network) → ask rule → bypassPermissions → plan → protected paths → allow rules → mode defaults. `classify` → auto-mode classifier [from-node agent.js:3723]. `ask` → `tool.approval_required`; headless resolves it `auto_denied`. Then **PreToolUse hooks** (may block or rewrite input) [from-node agent.js:3585-3603].
+2. **Policy** — `Permissions::check(name, input, turn_mode)` ported verbatim [from-node permissions.js:719-829], order: deny rule → dialog tools → critical `rm` → outside-read (blocked/network) → ask rule → bypassPermissions (an ask rule still prompts there) → plan → protected paths → allow rules → mode defaults. `classify` → auto-mode classifier [from-node agent.js:3723]. `ask` → `tool.approval_required`; headless resolves it `auto_denied`. Then **PreToolUse hooks** (may block or rewrite input) [from-node agent.js:3585-3603].
    - Change [new]: if a hook or the approver returns `updatedInput`, re-run `check` on the new input; `deny` → not run, `ask` → ask again. Node skips this re-check, so a hook can change the input after permission was granted.
    - **Headless ask handling by mode [new, owner decision 2026-10-28]**: nobody is prompted (no stdin). `nemo run --permission-mode` accepts all six modes of `nemo_permissions::Mode`. An `allow` rule from `--allow`/settings always applies first; then, for what is still an `ask`:
 
@@ -56,7 +56,7 @@ Rules:
      | `auto` | the judge model decides (below) | same; an ask or unclear answer is auto-denied |
      | `bypassPermissions` | allowed | allowed, except hard stops |
 
-     `bypassPermissions` is typed on the CLI (trusted), never read from project settings, `.mcp.json` or the environment, and prints a loud notice + `notice` event at start. Hard stops are not relaxed: deny rules, critical `rm` (`rm -rf ~`, `/`, the cwd), destructive MCP asks, outside-read blocks. The engine port still lets bypass write protected paths (`.env`, `.git/`...) as Node does; that is a known gap against the owner's intent and is covered by the sandbox deny paths only.
+     `bypassPermissions` is typed on the CLI (trusted), never read from project settings, `.mcp.json` or the environment, and prints a loud notice + `notice` event at start. Not relaxed: deny rules, ask rules (they still prompt; headless denies them), critical `rm` (`rm -rf ~`, `/`, the cwd), destructive MCP asks, outside-read blocks. Plain writes to protected paths (`.env`, `.git/`, `.nemo`, `.ssh` ...) ARE allowed under bypass, exactly like Claude Code (owner decision D9, 2026-10-28); the sandbox (workspace-write, credential dirs denied) is what still confines them.
    - **Blocked, not completed [new]**: when an ask is auto-denied for any non-read tool (Write, Edit, NotebookEdit, Bash, terminal_spawn, verify_run, MCP write/external tools), the task cannot end `completed`: it ends `blocked` / `approval_unavailable` with `needed_permissions` (unless a later write/execute call succeeded). A denied pure read stays evidence the model may work around. A `dontAsk`/`plan`/deny-rule denial is a policy decision, not a missing approval, and does not set this.
    - **Auto mode judge [new]**: `Decision::Classify` in `auto` mode calls the session provider (model: `autoMode.model` of the user settings, else the session model) with the `AutoModeRules` prompt and a data-only user prompt (task, earlier user messages, workspace, the pending call; everything in untrusted tags, closing tags defused; tool output is never sent). The answer must be exactly one JSON object `{"decision":"allow|block|ask",...}`; anything else, a provider error, a timeout (30 s) or the per-task cap (50 calls; identical calls are cached) is an `ask`. Protected-path classifications never reach the judge, and `forced` asks (destructive MCP) are applied after it, so it can only decide what the rules left open. Each decision emits `permission.auto_verdict`; judge tokens/cost count in the task usage. In `plan` mode nothing is judged.
    - Change [new]: Node lets a read outside the working dirs through when no prompt can be shown [from-node agent.js:3543]; the Rust core denies it in headless.
@@ -71,13 +71,13 @@ Rules:
 
 | Tool | properties (required in **bold**) | Source |
 |---|---|---|
-| Read | **file_path**:string, offset:number (1-based), limit:number (default 2000), pages:string ("3", "2-5", PDF only) | tools/read.js:35-44 |
+| Read | **file_path**:string, offset:number (1-based), limit:number (default 2000; a whole-file read of a text file over 256 KB is refused and a result over ~25k tokens (chars/4) is refused, both with offset/limit guidance in the error; line numbering is unchanged, owner decision D4), pages:string ("3", "2-5", PDF only) | tools/read.js:35-44 |
 | Write | **file_path**:string, **content**:string | tools/write.js:8-21 |
 | Edit | **file_path**:string, **old_string**:string, **new_string**:string, replace_all:boolean | tools/edit.js:53-62 |
 | NotebookEdit | **notebook_path**:string, cell_id:string, new_source:string, cell_type:enum[code,markdown], edit_mode:enum[replace,insert,delete] | tools/notebook.js:53-62 |
 | Glob | **pattern**:string, path:string | tools/glob.js:18-24 |
 | Grep | **pattern**:string, path, glob, type:string, output_mode:enum[files_with_matches,content,count], "-i","-n":boolean, "-A","-B","-C":number, multiline:boolean, head_limit:number | tools/grep.js:253-270 |
-| Bash | **command**:string, timeout:number (ms, default 120000, max 600000), description:string, run_in_background:boolean | tools/bash.js:139-148 |
+| Bash | **command**:string, timeout:number (ms, default 120000, max 600000; at the timeout `nemo run` kills the command, the interactive app moves it to the background and tells the model its `bash_id`, owner decision D6), description:string, run_in_background:boolean | tools/bash.js:139-148 |
 | BashOutput | **bash_id**:string, filter:string (regex) | tools/bash.js:259-266 |
 | KillShell | **shell_id**:string | tools/bash.js:277-281 |
 | WebFetch | **url**:string, **prompt**:string | tools/webfetch.js:40-47 |

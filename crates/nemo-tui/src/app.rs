@@ -19,13 +19,13 @@ use nemo_tui_base::selection::{
 use nemo_tui_render::agent::{AgentOpts, EditorView};
 use nemo_tui_render::agent::{
     INPUT_VIEW_ROWS, Opt, Pending, QOption, QState, Question as RQuestion, Search, Sug,
-    Suggestions as RSug, body_text_rows,
+    Suggestions as RSug, body_sel_rows,
 };
 use nemo_tui_render::dash::{
     DashState, DashView, Focus, Frame, Live, MIN_COLS, MIN_ROWS, SessionRow, Usage, Workspace,
     render_frame, workspace_key,
 };
-use nemo_tui_render::dialogs::{HELP, normalize_mode};
+use nemo_tui_render::dialogs::HELP;
 use nemo_tui_render::model::{
     self, Session, apply_event, parse_ts, session_from_events, session_phase,
 };
@@ -53,17 +53,15 @@ const ARM_MS: i64 = 400;
 const PASTE_QUIET_MS: i64 = 300;
 const TOAST_MS: i64 = 1800;
 
-/// Modes the `/mode` picker offers. `bypassPermissions` is last and always asks for confirmation.
-const OFFERED_MODES: [Mode; 6] = [
+/// Shift+Tab, the only way to switch modes. Reaching `bypassPermissions` opens its confirmation;
+/// from it one press goes back to the first.
+const CYCLE: [Mode; 5] = [
     Mode::Default,
     Mode::AcceptEdits,
     Mode::Plan,
     Mode::Auto,
-    Mode::DontAsk,
     Mode::BypassPermissions,
 ];
-/// Shift+Tab. Not `bypassPermissions` (needs a confirmation); from it one press leaves to the first.
-const CYCLE: [Mode; 4] = [Mode::Default, Mode::AcceptEdits, Mode::Plan, Mode::Auto];
 
 pub(crate) struct AppConfig {
     pub cwd: String,
@@ -154,7 +152,6 @@ impl Dialog {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum PickerKind {
     Model,
-    Mode,
     Command,
     Folder,
     Resume,
@@ -185,6 +182,9 @@ struct SelState {
     extending: bool,
     pointer: Option<Point>,
 }
+
+/// Two presses on the same cell within this long are a double click, three a triple click.
+const MULTI_CLICK_MS: i64 = 500;
 
 impl SelState {
     fn mode(&self) -> SelMode {
@@ -234,6 +234,8 @@ pub(crate) struct App {
     quit_armed_at: Option<i64>,
     toast: Option<Toast>,
     sel: SelState,
+    /// Last plain press (time, screen cell, run length) for double/triple click.
+    last_click: Option<(i64, Point, u8)>,
     /// Last drawn frame: hit testing and copy read it.
     frame: Option<Frame>,
     lines: Vec<String>,
@@ -260,11 +262,6 @@ fn local_commands() -> Vec<CmdDef> {
         c("new", "open a session in another folder", ""),
         c("resume", "continue a saved session", "[session id]"),
         c("model", "pick a model, or change it directly", "[model]"),
-        c(
-            "mode",
-            "pick a permission mode",
-            "[default | acceptEdits | plan | dontAsk]",
-        ),
         c(
             "status",
             "session, model, sandbox, budgets, verification",
@@ -342,6 +339,7 @@ impl App {
             quit_armed_at: None,
             toast: None,
             sel: SelState::default(),
+            last_click: None,
             frame: None,
             lines: vec![],
             size: (80, 24),
@@ -630,6 +628,17 @@ impl App {
             self.expanded = !self.expanded; // global: also over dialogs, pickers and a running task
             return out;
         }
+        // ctrl+c with a highlighted selection copies it; with none it keeps its interrupt meaning
+        if is_key(&k, Named::CtrlC)
+            && matches!(self.sel.mode(), SelMode::Selected | SelMode::Pending)
+            && self.dialogs.is_empty()
+            && self.picker.is_none()
+            && self.search.is_none()
+        {
+            self.copy_selection(now, &mut out);
+            self.clear_selection();
+            return out;
+        }
         let paging = is_key(&k, Named::PageUp) || is_key(&k, Named::PageDown);
         if selection_transition(self.sel.mode(), SelEvent::Key { page: paging }).1 == Act::Clear {
             self.clear_selection();
@@ -862,8 +871,13 @@ impl App {
             .iter()
             .position(|m| *m == self.mode)
             .map_or(0, |i| i + 1);
-        self.mode = CYCLE[i % CYCLE.len()];
-        self.mode_changed();
+        match CYCLE[i % CYCLE.len()] {
+            Mode::BypassPermissions => self.open_bypass_confirm(),
+            m => {
+                self.mode = m;
+                self.mode_changed();
+            }
+        }
     }
 
     fn mode_changed(&mut self) {
@@ -1005,13 +1019,6 @@ impl App {
                     self.switch_model(arg, out);
                 }
             }
-            "mode" => {
-                if arg.is_empty() {
-                    self.open_mode_picker();
-                } else {
-                    self.set_mode_arg(arg);
-                }
-            }
             "status" => self.status_item(),
             "focus" => {
                 let on = match arg {
@@ -1024,30 +1031,6 @@ impl App {
             other => self.out_item(format!("unknown command: /{other} (try /help)"), true),
         }
         let _ = now;
-    }
-
-    fn set_mode_arg(&mut self, arg: &str) {
-        let arg = if arg == "bypass" {
-            "bypassPermissions"
-        } else {
-            arg
-        };
-        match normalize_mode(Some(arg)).and_then(Mode::parse) {
-            Some(Mode::BypassPermissions) if self.mode == Mode::BypassPermissions => {}
-            Some(Mode::BypassPermissions) => self.open_bypass_confirm(),
-            Some(m) if OFFERED_MODES.contains(&m) => {
-                self.mode = m;
-                self.mode_changed();
-            }
-            Some(m) => self.out_item(
-                format!(
-                    "mode {} is not available in the interactive app",
-                    m.as_str()
-                ),
-                true,
-            ),
-            None => self.out_item(format!("unknown mode: {arg}"), true),
-        }
     }
 
     /// Esc, "No" (the first item) or anything but "Yes" keeps the current mode.
@@ -1074,7 +1057,7 @@ impl App {
             ),
         ];
         self.out_item(
-            "bypassPermissions turns OFF approval prompts: every tool call runs, including edits and shell commands anywhere the sandbox allows. Still blocked: deny rules, critical removals (rm -rf ~ or /), destructive MCP calls (they still ask). It is never saved and never restored on resume.",
+            "bypassPermissions turns OFF approval prompts: every tool call runs, including edits and shell commands anywhere the sandbox allows. Still stops: deny rules, ask rules, critical removals (rm -rf ~ or /), destructive MCP calls (they still ask). It is never saved and never restored on resume.",
             false,
         );
         self.open_picker(
@@ -1184,29 +1167,6 @@ impl App {
                 PathBuf::new(),
             );
         }
-    }
-
-    fn open_mode_picker(&mut self) {
-        let items = OFFERED_MODES
-            .iter()
-            .map(|m| {
-                (
-                    PickerItem {
-                        label: nemo_tui_render::dialogs::mode_name(Some(m.as_str())),
-                        detail: m.as_str().into(),
-                        current: *m == self.mode,
-                    },
-                    m.as_str().to_string(),
-                )
-            })
-            .collect();
-        self.open_picker(
-            PickerKind::Mode,
-            "Permission mode",
-            "applies from the next task",
-            items,
-            PathBuf::new(),
-        );
     }
 
     fn open_command_picker(&mut self) {
@@ -1365,10 +1325,6 @@ impl App {
             PickerKind::Model => {
                 self.picker = None;
                 self.switch_model(value, out);
-            }
-            PickerKind::Mode => {
-                self.picker = None;
-                self.set_mode_arg(value);
             }
             PickerKind::BypassConfirm => {
                 self.picker = None;
@@ -2011,11 +1967,28 @@ impl App {
         let g = if self.in_chat(p) { self.geom() } else { None };
         let b = g.as_ref().map(sel::body_bounds);
         let in_body = b.is_some_and(|b| p.y >= b.y0 && p.y <= b.y1);
+        let plain = !(mods.shift || mods.alt);
+        let run = match self.last_click {
+            Some((t, q, n)) if plain && q == p && now - t < MULTI_CLICK_MS => (n + 1).min(3),
+            _ => 1,
+        };
+        self.last_click = plain.then_some((now, p, run));
+        if run >= 2
+            && let Some(g) = g
+            && in_body
+            && self.select_unit(&g, p, run, now, out)
+        {
+            return;
+        }
+        // a plain press starts afresh; only shift/alt extend a kept selection
+        if plain {
+            self.clear_selection();
+        }
+        // a drag may start on any cell of the body, blank ones included
         let on_text = in_body
             && b.is_some_and(|b| {
                 let g = g.as_ref().unwrap();
                 !(p.x < b.x0 || p.x >= b.x1 || p.y - g.top + g.row_at0 < 0)
-                    && sel::cell_has_text(&row, p.x)
             });
         let (mode, act) = selection_transition(
             self.sel.mode(),
@@ -2050,23 +2023,71 @@ impl App {
         let _ = now;
     }
 
+    /// Double click selects the word under the pointer, triple click the line; both copy at once.
+    fn select_unit(
+        &mut self,
+        g: &sel::Geom,
+        p: Point,
+        run: u8,
+        now: i64,
+        out: &mut Vec<Cmd>,
+    ) -> bool {
+        let c = sel::point_to_content(g, p);
+        let Some(body) = self.frame.as_ref().and_then(|f| f.chat_body.as_ref()) else {
+            return false;
+        };
+        let row_at = |y: i64| body_sel_rows(body, y.max(0) as usize, y.max(0) as usize).pop();
+        let Some(row) = row_at(c.y) else {
+            return false;
+        };
+        if row.text.trim().is_empty() {
+            return false;
+        }
+        // a word stays on its row; a line is the whole wrapped paragraph
+        let (mut y0, mut y1) = (c.y, c.y);
+        let (from, to) = if run == 2 {
+            match sel::word_span(&row.text, c.x - g.x0) {
+                Some(w) => w,
+                None => return false,
+            }
+        } else {
+            while y0 > 0 && row_at(y0 - 1).is_some_and(|r| r.soft) {
+                y0 -= 1;
+            }
+            while y1 + 1 < g.total && row_at(y1).is_some_and(|r| r.soft) {
+                y1 += 1;
+            }
+            (0, g.x1 - g.x0)
+        };
+        self.sel.selection = Some(Selection {
+            a: Point {
+                x: g.x0 + from,
+                y: y0,
+            },
+            b: Point {
+                x: g.x0 + to - 1,
+                y: y1,
+            },
+        });
+        self.sel.mode = Some(SelMode::Selected);
+        self.copy_selection(now, out);
+        true
+    }
+
     fn copy_selection(&mut self, now: i64, out: &mut Vec<Cmd>) {
         let (Some(s), Some(g)) = (self.sel.selection, self.geom()) else {
             self.clear_selection();
             return;
         };
-        let text = if s.a != s.b {
-            self.frame
-                .as_ref()
-                .and_then(|f| f.chat_body.as_ref())
-                .map_or(String::new(), |body| {
-                    sel::text_of_content(&s, g.x0, g.x1, |from, to| {
-                        body_text_rows(body, from.max(0) as usize, to.max(0) as usize)
-                    })
+        let text = self
+            .frame
+            .as_ref()
+            .and_then(|f| f.chat_body.as_ref())
+            .map_or(String::new(), |body| {
+                sel::text_of_rows(&s, g.x0, g.x1, |from, to| {
+                    body_sel_rows(body, from.max(0) as usize, to.max(0) as usize)
                 })
-        } else {
-            String::new()
-        };
+            });
         if text.is_empty() {
             self.clear_selection();
         } else {

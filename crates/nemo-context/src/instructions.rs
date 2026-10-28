@@ -36,21 +36,26 @@ pub struct InstructionLimits {
 impl Default for InstructionLimits {
     fn default() -> Self {
         Self {
-            file_cap: 40_000,
-            total_cap: 120_000,
+            file_cap: 32 * 1024,
+            total_cap: 32 * 1024,
             max_depth: 5,
         }
     }
 }
 
-/// File names looked up in every directory from the workspace root down to the cwd.
+/// File names looked up in every directory from the workspace root down to the cwd. Per
+/// directory only the first non-empty one wins (NEMO.md > AGENTS.md > CLAUDE.md, owner decision
+/// D2, the Codex one-file-per-directory rule); [`LOCAL_NAME`] is the private extra on top.
 pub const DEFAULT_NAMES: [&str; 5] = [
     "NEMO.md",
+    "AGENTS.md",
     "CLAUDE.md",
     ".claude/CLAUDE.md",
-    "AGENTS.md",
-    "CLAUDE.local.md",
+    LOCAL_NAME,
 ];
+
+/// Gitignored personal notes: loaded next to the winning file, not instead of it.
+pub const LOCAL_NAME: &str = "CLAUDE.local.md";
 
 struct Ctx<'a> {
     ws: &'a WorkspaceContext,
@@ -241,16 +246,16 @@ pub fn load_instructions_with(
     }
     dirs.reverse();
     for dir in dirs.into_iter().filter(|d| Some(*d) != home) {
-        let mut raw_seen: Vec<String> = Vec::new();
+        let mut won = false;
         for name in names {
             let path = dir.join(name);
             let Some(raw) = read_capped(&path, limits.file_cap) else {
                 continue;
             };
-            if raw_seen.contains(&raw) {
+            if raw.trim().is_empty() || (won && *name != LOCAL_NAME) {
                 continue;
             }
-            raw_seen.push(raw);
+            won |= *name != LOCAL_NAME;
             if let Some(content) = load_one(&path, Scope::Project, &mut ctx) {
                 out.push(InstructionFile {
                     path,

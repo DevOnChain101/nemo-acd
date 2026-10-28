@@ -66,7 +66,7 @@ fn merges_permissions_and_ignores_claude_files_and_secrets() {
 }
 
 #[test]
-fn malformed_json_is_a_diagnostic() {
+fn malformed_json_is_an_error_not_a_silent_skip() {
     let f = fx();
     fs::create_dir_all(f.proj.path().join(".nemo")).unwrap();
     fs::write(
@@ -75,8 +75,32 @@ fn malformed_json_is_a_diagnostic() {
     )
     .unwrap();
     let s = f.load(ProjectTrust::Trusted);
+    assert_eq!(s.errors.len(), 1, "{:?}", s.errors);
+    assert!(s.errors[0].contains("malformed JSON") && s.errors[0].contains("settings.json"));
     assert!(s.diagnostics.iter().any(|d| d.contains("malformed JSON")));
     assert!(s.permissions.allow.is_empty());
+}
+
+#[test]
+fn a_trailing_comma_in_the_user_file_does_not_drop_deny_rules_silently() {
+    let f = fx();
+    fs::write(
+        f.home.path().join("settings.json"),
+        r#"{"permissions":{"deny":["Bash(rm:*)"],}}"#,
+    )
+    .unwrap();
+    let s = f.load(ProjectTrust::Untrusted);
+    assert!(s.permissions.deny.is_empty(), "nothing is applied");
+    assert!(
+        s.errors.iter().any(|e| e.contains("user settings")),
+        "{:?}",
+        s.errors
+    );
+    // a top-level array and an unreadable (directory) file are errors too; a missing file is not
+    fs::write(f.home.path().join("settings.json"), "[]").unwrap();
+    assert_eq!(f.load(ProjectTrust::Untrusted).errors.len(), 1);
+    fs::remove_file(f.home.path().join("settings.json")).unwrap();
+    assert!(f.load(ProjectTrust::Untrusted).errors.is_empty());
 }
 
 #[test]

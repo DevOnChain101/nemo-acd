@@ -430,3 +430,22 @@ async fn allow_is_advisory_and_rewrite_still_surfaced() {
     assert!(!r.blocked && r.input_rewritten);
     assert_eq!(r.updated_input, Some(json!({"command": "rm -rf x"})));
 }
+
+#[test]
+fn default_timeout_is_60s_for_gating_events_and_600s_for_the_rest() {
+    use crate::{HookEvent::*, default_timeout_secs};
+    for e in [PreToolUse, UserPromptSubmit] {
+        assert_eq!(default_timeout_secs(e), 60, "{e:?}");
+    }
+    for e in [
+        PostToolUse,
+        Stop,
+        SubagentStop,
+        SessionStart,
+        SessionEnd,
+        Notification,
+        PreCompact,
+    ] {
+        assert_eq!(default_timeout_secs(e), 600, "{e:?}");
+    }
+}

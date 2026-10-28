@@ -199,6 +199,15 @@ impl Registry {
         self
     }
 
+    /// Interactive use: a foreground `Bash` call that reaches its timeout moves to the background
+    /// (the model is told its id) instead of being killed. Headless keeps the kill: deterministic.
+    pub fn with_background_on_timeout(self, on: bool) -> Self {
+        self.shared
+            .background_on_timeout
+            .store(on, std::sync::atomic::Ordering::Relaxed);
+        self
+    }
+
     /// Browser settings (URL policy, image support) used when a session first launches its browser.
     pub fn with_browser(self, cfg: BrowserConfig) -> Self {
         *crate::native::lock(&self.shared.browser_cfg) = cfg;

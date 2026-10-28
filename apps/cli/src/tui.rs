@@ -12,7 +12,10 @@ use nemo_tui_base::Platform;
 use nemo_tui_base::sgr::ColorMode;
 
 use crate::homes;
-use crate::run::{Common, Front, Limits, Prepared, prepare, sandbox_notices, sandbox_status};
+use crate::run::{
+    Common, Front, Limits, Prepared, prepare, sandbox_default_notice, sandbox_notices,
+    sandbox_status,
+};
 
 #[derive(Args)]
 pub struct TuiArgs {
@@ -93,7 +96,7 @@ fn once(a: &TuiArgs, env: &Env) -> Result<u8, String> {
             .as_ref()
             .map(|r| r.record.budget.clone())
             .unwrap_or_default(),
-        sandbox: sandbox_status(a.common.sandbox.mode(), false),
+        sandbox: sandbox_status(a.common.sandbox_mode(), false),
         mode: nemo_permissions::Mode::Default,
         events: resume.map(|r| r.events).unwrap_or_default(),
         saved: nemo_tui::list_saved(&h.nemo, None).unwrap_or_default(),
@@ -102,7 +105,10 @@ fn once(a: &TuiArgs, env: &Env) -> Result<u8, String> {
         now: now_ms(),
         color: ColorMode::detect(env, Platform::current()),
         // --once starts nothing (no MCP, no agents): only the flag warnings apply.
-        startup_notes: sandbox_notices(a.common.sandbox.mode(), a.common.network),
+        startup_notes: sandbox_notices(a.common.sandbox_mode(), a.common.network)
+            .into_iter()
+            .chain(sandbox_default_notice(&a.common))
+            .collect(),
     };
     match nemo_tui::render_once(&o, &mut std::io::stdout()) {
         Err(e) if e.kind() != std::io::ErrorKind::BrokenPipe => Err(e.to_string()),

@@ -528,7 +528,7 @@ fn drag_selection_copies_through_the_clipboard_chain() {
     r.tty.send(&format!("\x1b[<0;{x};{y}M"));
     r.tty.send(&format!("\x1b[<32;{};{y}M", x + 16));
     r.tty.send(&format!("\x1b[<0;{};{y}m", x + 16));
-    r.wait_for("copied 16 characters");
+    r.wait_for("Copied 16 chars");
     assert_eq!(*log.copied.lock().unwrap(), ["alpha beta gamma"]);
     r.tty.send("\x04");
     r.finish();

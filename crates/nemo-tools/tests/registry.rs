@@ -239,3 +239,53 @@ async fn cancelled_walks_stop() {
         "{g:?}"
     );
 }
+
+#[tokio::test]
+async fn read_refuses_huge_whole_files_and_huge_windows_with_guidance() {
+    let d = tempfile::tempdir().unwrap();
+    let (reg, c) = (Registry::unsandboxed_for_tests(), ctx(d.path()));
+    // 300 KB over 6000 lines: a whole-file read is refused, a window is not
+    let big: String = (1..=6000).map(|i| format!("line {i:0>44}\n")).collect();
+    assert!(big.len() > 256 * 1024);
+    std::fs::write(d.path().join("big.txt"), &big).unwrap();
+    let o = reg
+        .execute("Read", json!({"file_path": "big.txt"}), &c)
+        .await;
+    assert!(o.is_error, "{o:?}");
+    let msg = text(&o.content);
+    assert!(
+        msg.contains("offset") && msg.contains("limit") && msg.contains("256 KB"),
+        "{msg}"
+    );
+    let o = reg
+        .execute(
+            "Read",
+            json!({"file_path": "big.txt", "offset": 5000, "limit": 3}),
+            &c,
+        )
+        .await;
+    assert!(!o.is_error, "{o:?}");
+    // line numbers keep counting from the file start
+    assert!(
+        text(&o.content).starts_with("  5000\tline "),
+        "{}",
+        text(&o.content)
+    );
+    // a small file still reads whole
+    std::fs::write(d.path().join("s.txt"), "a\nb\n").unwrap();
+    let o = reg.execute("Read", json!({"file_path": "s.txt"}), &c).await;
+    assert_eq!(text(&o.content), "     1\ta\n     2\tb");
+    // a window of long lines can exceed 25k tokens even under the whole-file cap
+    let wide: String = (0..200)
+        .map(|_| format!("{}\n", "x".repeat(1900)))
+        .collect();
+    std::fs::write(d.path().join("wide.txt"), &wide).unwrap();
+    let o = reg
+        .execute("Read", json!({"file_path": "wide.txt", "limit": 100}), &c)
+        .await;
+    assert!(o.is_error && text(&o.content).contains("token"), "{o:?}");
+    let o = reg
+        .execute("Read", json!({"file_path": "wide.txt", "limit": 20}), &c)
+        .await;
+    assert!(!o.is_error, "{o:?}");
+}

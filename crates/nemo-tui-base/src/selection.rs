@@ -377,12 +377,44 @@ pub fn slice_cells(line: &str, from: i64, to: i64) -> String {
     let mut cell = 0i64;
     let mut out = String::new();
     for ch in strip_ansi(line).chars() {
-        if cell >= from && cell < to {
+        let w = char_width(ch) as i64;
+        // a wide glyph is in when either of its two cells is (a drag may end on its right half)
+        if cell + w > from && cell < to {
             out.push(ch);
         }
-        cell += char_width(ch) as i64;
+        cell += w;
     }
     out
+}
+
+/// Cells `[from, to)` of the word under `cell` (double click): a run of letters/digits/`_`, of
+/// punctuation, or of the same wide script. `None` on blank cells.
+pub fn word_span(line: &str, cell: i64) -> Option<(i64, i64)> {
+    let class = |c: char| match c {
+        c if is_js_space(c) => 0,
+        c if c.is_alphanumeric() || c == '_' => 1,
+        _ => 2,
+    };
+    let mut cells = vec![]; // (start, end, class)
+    let mut at = 0i64;
+    for ch in strip_ansi(line).chars() {
+        let w = char_width(ch) as i64;
+        cells.push((at, at + w, class(ch)));
+        at += w;
+    }
+    let i = cells.iter().position(|&(f, t, _)| cell >= f && cell < t)?;
+    let k = cells[i].2;
+    if k == 0 {
+        return None;
+    }
+    let (mut a, mut b) = (i, i);
+    while a > 0 && cells[a - 1].2 == k {
+        a -= 1;
+    }
+    while b + 1 < cells.len() && cells[b + 1].2 == k {
+        b += 1;
+    }
+    Some((cells[a].0, cells[b].1))
 }
 
 /// What was selected, as text: rows joined by newlines, trailing spaces dropped, no blank lines
@@ -404,7 +436,19 @@ pub fn text_of_selection(
             })
         })
         .collect();
-    let joined = rows.join("\n");
+    collapse(&rows.iter().map(|r| (r.as_str(), false)).collect::<Vec<_>>())
+}
+
+/// Rows joined by newlines (a soft-wrapped row continues straight into the next), no blank lines
+/// at either end, a run of blank lines in the middle reduced to one.
+fn collapse(rows: &[(&str, bool)]) -> String {
+    let mut joined = String::new();
+    for (i, (t, soft)) in rows.iter().enumerate() {
+        joined.push_str(t);
+        if i + 1 < rows.len() && !soft {
+            joined.push('\n');
+        }
+    }
     let mut out = String::new();
     let mut run = 0;
     for c in joined.trim_matches('\n').chars() {
@@ -414,6 +458,57 @@ pub fn text_of_selection(
         }
     }
     out
+}
+
+/// A painted chat row for copying: `text` has decorations blanked (so cells line up with the
+/// screen), `lead` leading cells that are only decoration, `soft` = the line goes on in the next row.
+#[derive(Clone, Debug, Default)]
+pub struct SelRow {
+    pub text: String,
+    pub soft: bool,
+    pub lead: i64,
+}
+
+/// Like [`text_of_content`] for rows that know their decorations and soft wraps: the bar of a
+/// gutter is never copied and a wrapped paragraph comes out as one line.
+pub fn text_of_rows(
+    sel: &Selection,
+    x0: i64,
+    x1: i64,
+    rows_of: impl Fn(i64, i64) -> Vec<SelRow>,
+) -> String {
+    let (s, e) = ordered(sel);
+    let rows = rows_of(s.y, e.y);
+    let shift = |p: Point| Point {
+        x: p.x - x0,
+        y: p.y,
+    };
+    let (a, b) = (shift(sel.a), shift(sel.b));
+    let bounds = Bounds {
+        x0: 0,
+        x1: x1 - x0,
+        y0: s.y,
+        y1: e.y,
+    };
+    let parts: Vec<(String, bool)> = (s.y..=e.y)
+        .filter_map(|y| {
+            let r = rows.get((y - s.y) as usize)?;
+            let (f, t) = row_range(&Selection { a, b }, &bounds, y)?;
+            let text = slice_cells(&r.text, f.max(r.lead), t);
+            Some(if r.soft {
+                (text, true)
+            } else {
+                (text.trim_end_matches(is_js_space).to_string(), false)
+            })
+        })
+        .collect();
+    let mut view: Vec<(&str, bool)> = parts.iter().map(|(t, s)| (t.as_str(), *s)).collect();
+    // nothing follows the last selected row, so its soft wrap does not matter: drop its trailing blanks
+    let tail = view.last().map(|(t, _)| t.trim_end_matches(is_js_space));
+    if let (Some(l), Some(t)) = (view.last_mut(), tail) {
+        *l = (t, false);
+    }
+    collapse(&view)
 }
 
 /// The text of a content-row selection, rows on or off screen alike. `rows_of(from, to)` gives
@@ -466,6 +561,22 @@ mod tests {
         };
         let t = text_of_selection(|y| lines[y as usize].clone(), Some(&sel), Some(&b));
         assert_eq!(t, "a\n\nb");
+    }
+
+    #[test]
+    fn word_span_picks_words_punctuation_and_wide_glyphs() {
+        assert_eq!(word_span("let foo_bar = 1;", 6), Some((4, 11)));
+        assert_eq!(word_span("let foo_bar = 1;", 3), None);
+        assert_eq!(word_span("a.b", 1), Some((1, 2)));
+        // wide glyphs take two cells; either half selects the whole word
+        assert_eq!(word_span("x 日本 y", 3), Some((2, 6)));
+        assert_eq!(word_span("x 日本 y", 2), Some((2, 6)));
+    }
+
+    #[test]
+    fn slice_keeps_a_wide_glyph_cut_on_its_right_half() {
+        assert_eq!(slice_cells("日本語", 1, 3), "日本");
+        assert_eq!(slice_cells("日本語", 2, 4), "本");
     }
 
     #[test]

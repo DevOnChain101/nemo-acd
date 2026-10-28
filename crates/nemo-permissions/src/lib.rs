@@ -26,7 +26,10 @@
 //!   Bash allowlist is a per-command flag allowlist and its operands must be inside the workspace.
 //! - Path rules are evaluated on the lexical path and the realpath; tool input uses a per-tool
 //!   path field and an unexpected extra path-like field asks; `Read(..)` deny/ask rules also
-//!   cover Grep and Glob.
+//!   cover Grep, Glob and the edit tools, and a `Read(..)` deny rule blocks Bash file readers
+//!   (`cat`, `head`, `grep`, `sed`, `awk`, `< file` ...) on that path.
+//! - `mcp__*` and `mcp__server__*` are prefix globs (deny/ask); `mcp__*` never works as allow.
+//! - An ask rule still prompts under bypassPermissions (Claude Code does the same).
 //! - Inner commands are seen by deny/ask rules through `find -exec/-execdir/-ok/-okdir` and
 //!   `-delete` (as `rm -rf`), `xargs`, `env`, `nice`, `nohup`, `timeout`, `time`, `sudo`, `doas`,
 //!   `watch`, `parallel`, `git -c alias.x=!cmd` / `core.pager|editor|sshCommand|...=cmd`, and
@@ -487,8 +490,14 @@ impl Permissions {
         // An `Edit(...)` rule also governs Write/MultiEdit/NotebookEdit; `Task` and `Agent` are one
         // tool; `mcp__server` covers `mcp__server__*`; `browser_*` is a prefix glob on the name.
         // A deny/ask `Read(..)` rule also covers Grep and Glob (they read the same files).
-        let read_family = any && rt == "Read" && matches!(tool, "Grep" | "Glob");
-        let named = if rt.starts_with("mcp__") {
+        // (and the edit tools: a file you may not read you may not overwrite blind either)
+        let read_family =
+            any && rt == "Read" && (matches!(tool, "Grep" | "Glob") || EDIT_TOOLS.contains(&tool));
+        let named = if let (true, Some(prefix)) = (rt.starts_with("mcp__"), rt.strip_suffix('*')) {
+            // `mcp__*` / `mcp__server__*`; `mcp__*` as an allow rule is never broad enough to matter:
+            // callers skip it (see `allow_rules`)
+            tool.starts_with(prefix)
+        } else if rt.starts_with("mcp__") {
             rt == tool || tool.starts_with(&format!("{rt}__"))
         } else if let Some(prefix) = rt.strip_suffix('*') {
             tool.starts_with(prefix)
@@ -593,6 +602,8 @@ impl Permissions {
             .allow
             .iter()
             .filter(|r| !(suspend && is_broad_allow(r, all)))
+            // `mcp__*` would allow every MCP tool, destructive ones included: never as an allow
+            .filter(|r| bash::parse_rule(r).0 != "mcp__*")
             .cloned()
             .collect()
     }
@@ -955,6 +966,79 @@ impl Permissions {
         false
     }
 
+    /// Does the command read a path a `Read(..)` deny rule protects: operands of the commands that
+    /// print or scan files and `<` redirects, found with the lenient splitter. Operands that need
+    /// the shell to be known (`$VAR`, braces) cannot be checked and are left to the other rules.
+    fn bash_reads_denied(&self, cmd: &str) -> bool {
+        const READERS: &[&str] = &[
+            "cat", "head", "tail", "less", "more", "grep", "egrep", "fgrep", "rg", "sed", "awk",
+            "gawk", "nl", "tac", "od", "xxd", "hexdump", "strings", "cut", "sort", "uniq", "wc",
+            "diff", "cmp", "bat", "cp", "mv", "tee", "source", ".", "base64", "paste", "fold",
+        ];
+        let specs: Vec<&str> = self
+            .rules
+            .deny
+            .iter()
+            .filter_map(|r| {
+                let (rt, spec) = bash::parse_rule(r);
+                spec.filter(|_| rt == "Read")
+            })
+            .collect();
+        if specs.is_empty() {
+            return false;
+        }
+        let Some(segs) = bash::deep_segments(cmd, 0) else {
+            return false;
+        };
+        let mut base = self.env.cwd.clone();
+        for seg in segs {
+            let w = bash::unwrap_words(&seg, true);
+            let name = paths::basename(w.first().map_or("", String::as_str), self.policy());
+            if name == "cd" {
+                if let Some((p, _)) = w.get(1).and_then(|d| self.resolve_operand(d, &base)) {
+                    base = p;
+                }
+                continue;
+            }
+            // `< file`, `<file`, `cat<file` (here-documents and `<(..)` read no file)
+            let mut ops: Vec<String> = Vec::new();
+            for (i, x) in seg.iter().enumerate() {
+                if let Some(k) = x.rfind('<').filter(|k| !x[..=*k].ends_with("<<")) {
+                    match &x[k + 1..] {
+                        "" => ops.extend(seg.get(i + 1).cloned()),
+                        r if !r.starts_with('(') => ops.push(r.to_string()),
+                        _ => {}
+                    }
+                }
+            }
+            if READERS.contains(&name) {
+                ops.extend(w[1..].iter().filter(|a| !a.starts_with('-')).cloned());
+            }
+            for o in ops {
+                let Some((p, wild)) = self.resolve_operand(&o, &base) else {
+                    continue;
+                };
+                // a wildcard resolves to its directory: test a file in it too
+                let hit = |p: &Path| {
+                    specs.iter().any(|sp| {
+                        paths::match_path_rule_real(
+                            sp,
+                            &p.to_string_lossy(),
+                            &self.env.cwd,
+                            &self.env.home,
+                            self.policy(),
+                            true,
+                        )
+                    })
+                };
+                if hit(&p) || (wild && hit(&p.join("x"))) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     /// acceptEdits view of a Bash command: `ok` = every segment is allowed by `seg_safe` or is an
     /// fs command whose operands are all inside the workspace; `targets` = the resolved fs
     /// operands (collected even when `ok` is false).
@@ -1088,6 +1172,12 @@ impl Permissions {
         if self.some_match(&self.rules.deny, tool, input) {
             return v(Deny, "blocked by a deny rule");
         }
+        if tool == "Bash" && self.bash_reads_denied(command_of(input)) {
+            return v(
+                Deny,
+                "blocked by a Read deny rule (the command reads that path)",
+            );
+        }
         // a recursive Grep/Glob would read what a `Read(..)` deny rule protects: never silent
         if let Some(rule) = self.recursive_read_hit(tool, input) {
             if mode == Mode::DontAsk {
@@ -1154,7 +1244,8 @@ impl Permissions {
 
         let asked = self.some_match(&self.rules.ask, tool, input);
 
-        if mode == Mode::BypassPermissions {
+        // an ask rule is a tripwire the user set on purpose: it prompts in every mode but dontAsk
+        if mode == Mode::BypassPermissions && !asked {
             return v(Allow, "bypassPermissions mode");
         }
 

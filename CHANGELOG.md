@@ -4,6 +4,12 @@ Format: Keep a Changelog. Versioning: SemVer (pre-1.0: minor versions may break)
 
 ## [Unreleased]
 
+### Changed
+- TUI: drag-select may start on any cell, double-click selects a word, triple-click a line, Ctrl+C copies a selection (else keeps its interrupt meaning), copies leave out gutters and join wrapped rows, notice "Copied N chars". `/mode` removed: Shift+Tab cycles default, acceptEdits, plan, auto, bypassPermissions (confirmation dialog), default.
+- Permissions: `Read(..)` deny now also blocks Bash file readers and Write/Edit of that path; `mcp__*` / `mcp__server__*` deny rules match; ask rules still prompt under bypassPermissions; `--help` and docs state what bypass still stops.
+- A malformed or unreadable `settings.json` is a hard error (`nemo run` exit 2, TUI does not open) instead of a warning that dropped its deny rules.
+- Memory files: first non-empty of NEMO.md > AGENTS.md > CLAUDE.md per directory, 32 KiB combined. Hook default timeout 600 s except PreToolUse/UserPromptSubmit (60 s). Read refuses whole-file reads over 256 KB and results over ~25k tokens. Interactive Bash timeouts move the command to the background. Windows defaults to `--sandbox best-effort` with a notice.
+
 ### Security
 - Release tag allowlist now fails closed: `scripts/check-release-tag.sh` exits non-zero when `.github/release-maintainers.txt` is missing or has no entries, unless repository variable `NEMO_ALLOW_ANY_VERIFIED_TAGGER` is exactly `true`. Tests: `scripts/test-check-release-tag.sh` (run in CI). Owner must add maintainer emails before the first tag.
 - release.yml: `release` checkout no longer persists credentials; publishing moved to a separate `publish` job (environment approval) that re-checks the tag and the draft's `targetCommitish` before un-drafting.

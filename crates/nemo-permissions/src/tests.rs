@@ -2502,3 +2502,114 @@ fn user_typed_command_auto_approves_a_plain_ask_but_not_hard_blocks() {
         assert!(v.decision == D || (v.decision == Q && v.hard), "{c}: {v:?}");
     }
 }
+
+// --- conformance P0: Read deny covers shell readers and edits; mcp globs; settings ask under bypass
+
+#[test]
+fn read_deny_blocks_bash_file_readers_and_redirects() {
+    let f = fx();
+    fs::write(f.cwd.join(".env"), "k=v").unwrap();
+    fs::write(f.cwd.join("sec.txt"), "s").unwrap();
+    let p = f.with(
+        rules(&[], &["Read(**/.env)", "Read(sec.txt)"], &[]),
+        Mode::Default,
+    );
+    for c in [
+        "cat .env",
+        "cat sec.txt",
+        "head -n1 .env",
+        "tail -f sec.txt",
+        "less .env",
+        "grep k .env",
+        "grep -rn k sec.txt",
+        "sed -n 1p sec.txt",
+        "awk '{print}' .env",
+        "cat < .env",
+        "cat<sec.txt",
+        "cat sub/../.env",
+        "cd sub && cat ../.env",
+        "echo hi && cat .env",
+        "/bin/cat .env",
+        "sudo cat sec.txt",
+        "bash -c 'cat sec.txt'",
+        "cp sec.txt copy.txt",
+        &format!("cat {}", f.path(".env")),
+    ] {
+        assert_eq!(bx(&p, c), D, "{c}");
+    }
+    // other files, and commands that merely mention the name, are not affected
+    for c in ["cat a.rs", "ls -la", "echo .env"] {
+        assert_ne!(bx(&p, c), D, "{c}");
+    }
+    // no Read deny rule: nothing changes
+    assert_ne!(bx(&f.perms(Mode::Default), "cat .env"), D);
+    // the sandbox of bypass does not lift it
+    let b = f.with(rules(&[], &["Read(sec.txt)"], &[]), Mode::BypassPermissions);
+    assert_eq!(bx(&b, "cat sec.txt"), D);
+}
+
+#[test]
+fn read_deny_also_denies_write_and_edit_of_that_path() {
+    let f = fx();
+    let p = f.with(rules(&[], &["Read(sec.txt)"], &[]), Mode::Default);
+    for tool in ["Write", "Edit", "MultiEdit"] {
+        assert_eq!(
+            d(&p, tool, json!({ "file_path": f.path("sec.txt") })),
+            D,
+            "{tool}"
+        );
+        assert_eq!(
+            d(&p, tool, json!({ "file_path": f.path("other.txt") })),
+            Q,
+            "{tool}"
+        );
+    }
+    let b = f.with(rules(&[], &["Read(sec.txt)"], &[]), Mode::BypassPermissions);
+    assert_eq!(d(&b, "Write", json!({ "file_path": f.path("sec.txt") })), D);
+}
+
+#[test]
+fn mcp_wildcard_rules_match_deny_and_ask_but_never_allow() {
+    let f = fx();
+    let call = |p: &Permissions, t: &str| d(p, t, json!({}));
+    let deny_all = f.with(rules(&[], &["mcp__*"], &[]), Mode::BypassPermissions);
+    assert_eq!(call(&deny_all, "mcp__srv__do"), D);
+    assert_eq!(call(&deny_all, "mcp__other__x"), D);
+    let deny_srv = f.with(rules(&[], &["mcp__srv__*"], &[]), Mode::Default);
+    assert_eq!(call(&deny_srv, "mcp__srv__do"), D);
+    assert_ne!(call(&deny_srv, "mcp__other__do"), D);
+    let by_name = f.with(rules(&[], &["mcp__srv", "mcp__a__b"], &[]), Mode::Default);
+    assert_eq!(call(&by_name, "mcp__srv__x"), D);
+    assert_eq!(call(&by_name, "mcp__a__b"), D);
+    assert_ne!(call(&by_name, "mcp__a__c"), D);
+    // `mcp__*` as an allow rule is ignored; a server glob is a normal allow
+    let allow_all = f.with(rules(&["mcp__*"], &[], &[]), Mode::Default);
+    assert_eq!(call(&allow_all, "mcp__srv__do"), Q);
+    let allow_srv = f.with(rules(&["mcp__srv__*"], &[], &[]), Mode::Default);
+    assert_eq!(call(&allow_srv, "mcp__srv__do"), A);
+    assert_eq!(call(&allow_srv, "mcp__other__do"), Q);
+}
+
+#[test]
+fn ask_rules_still_prompt_under_bypass_and_other_calls_do_not() {
+    let f = fx();
+    let p = f.with(
+        rules(&[], &[], &["Bash(git push:*)", "Write(//never/**)"]),
+        Mode::BypassPermissions,
+    );
+    let v = p.check_current("Bash", &json!({ "command": "git push origin main" }));
+    assert_eq!((v.decision, v.rule), (Q, true));
+    assert_eq!(bx(&p, "ls"), A);
+    // nobody to ask (nemo run): denied, never run
+    let mut h = f.with(
+        rules(&[], &[], &["Bash(git push:*)"]),
+        Mode::BypassPermissions,
+    );
+    h.env.interactive = false;
+    assert_eq!(bx(&h, "git push"), D);
+    // protected paths stay allowed under bypass, as in Claude Code
+    assert_eq!(
+        d(&p, "Write", json!({ "file_path": f.path(".git/config") })),
+        A
+    );
+}

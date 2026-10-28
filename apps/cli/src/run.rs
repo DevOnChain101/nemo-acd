@@ -44,7 +44,8 @@ pub enum ModeArg {
     DontAsk,
     /// Headless: no classifier is wired, so asks the classifier would review are denied.
     Auto,
-    /// Everything except hard stops (deny rules, protected paths, critical rm). CLI only.
+    /// Skips approval prompts. Still stops: deny rules, ask rules, critical rm, destructive MCP asks.
+    /// Does NOT stop plain writes to protected paths (.git, .nemo, .ssh ...), as in Claude Code. CLI only.
     #[value(name = "bypassPermissions")]
     BypassPermissions,
 }
@@ -127,12 +128,38 @@ pub(crate) fn sandbox_preflight(
         })
 }
 
+/// The sandbox mode when `--sandbox` is not given: enforce, except where the only backend is the
+/// Windows Job Object (no filesystem or network confinement), where enforce would refuse every
+/// command: best-effort then (owner decision D10). An explicit flag always wins.
+pub fn default_sandbox_mode(job_object_only: bool) -> SandboxMode {
+    if job_object_only {
+        SandboxMode::BestEffort
+    } else {
+        SandboxMode::Enforce
+    }
+}
+
+/// The loud one-liner for a defaulted best-effort mode (`None` when the mode is not defaulted).
+pub fn sandbox_default_notice(c: &Common) -> Option<String> {
+    (c.sandbox.is_none() && c.sandbox_mode() == SandboxMode::BestEffort).then(|| {
+        "sandbox: this OS has no command confinement (Windows Job Object only), so commands run UNCONFINED with your privileges; pass --sandbox enforce to refuse them instead".to_string()
+    })
+}
+
+impl Common {
+    pub fn sandbox_mode(&self) -> SandboxMode {
+        self.sandbox
+            .map_or_else(|| default_sandbox_mode(cfg!(windows)), SandboxArg::mode)
+    }
+}
+
 /// Flags shared by `nemo run` and the interactive app.
 #[derive(Args, Clone)]
 pub struct Common {
-    /// Command confinement: enforce (default), best-effort, or off (loud warning).
-    #[arg(long, value_enum, default_value = "enforce")]
-    pub sandbox: SandboxArg,
+    /// Command confinement: enforce (default), best-effort, or off (loud warning). On Windows,
+    /// where no OS backend can confine, the default is best-effort with a notice at start.
+    #[arg(long, value_enum)]
+    pub sandbox: Option<SandboxArg>,
     /// Network for tool commands: deny (default), loopback, or allow (loud warning).
     #[arg(long, value_enum, default_value = "deny")]
     pub network: NetworkArg,
@@ -363,6 +390,7 @@ pub fn prepare(
         rules_arg(&c.allow, "--allow")?,
         rules_arg(&c.deny, "--deny")?,
     );
+    let is_tui = matches!(front, Front::Tui);
     let h = homes(env)?;
     let nemo_deny = [h.nemo.join("auth.json"), h.nemo.join("settings.json")];
     // Before anything is created (worktree, store): a bad grant is a usage error.
@@ -396,6 +424,14 @@ pub fn prepare(
         cfg.clone()
     };
     let settings = load_settings(&lc, trust);
+    // A settings file we cannot read would silently drop its deny rules: stop before anything runs
+    // (`nemo run` exits 2; the TUI never opens).
+    if !settings.errors.is_empty() {
+        return Err(format!(
+            "settings error: {}\nnemo: fix or remove the file; nothing was started because its deny/ask rules would not apply",
+            sanitize_for_display(&settings.errors.join("; "))
+        ));
+    }
     let user_settings = if c.trust_project {
         load_settings(&lc, ProjectTrust::Untrusted)
     } else {
@@ -439,7 +475,7 @@ pub fn prepare(
             // never reaches it); the flag is for `nemo run`.
             if matches!(front, Front::Tui) {
                 return Err(
-                    "--permission-mode bypassPermissions is only for `nemo run`; in the TUI use /mode bypass"
+                    "--permission-mode bypassPermissions is only for `nemo run`; in the TUI press Shift+Tab until the bypass dialog opens"
                         .into(),
                 );
             }
@@ -548,7 +584,7 @@ pub fn prepare(
     };
     let ws = Arc::new(ws);
 
-    let sandbox_mode = c.sandbox.mode();
+    let sandbox_mode = c.sandbox_mode();
     let net = c.network.policy();
     let git_dir = worktree.as_ref().map(|w| w.info.git_dir.clone());
     let build = Arc::new(move |ws: &nemo_core::WorkspaceContext| {
@@ -577,9 +613,10 @@ pub fn prepare(
         sandbox_preflight(&*nemo_sandbox::detect(), policy.as_ref().ok())?;
     }
     let mut notices = sandbox_notices(sandbox_mode, c.network);
+    notices.extend(sandbox_default_notice(c));
     match mode {
         Mode::BypassPermissions => notices.push(
-            "bypassPermissions: tool calls run without approval; only deny rules, critical removals and destructive MCP asks still stop them"
+            "bypassPermissions: tool calls run without approval; only deny rules, ask rules, critical removals and destructive MCP asks still stop them; protected paths are not stopped"
                 .to_string(),
         ),
         Mode::Auto => notices.push(
@@ -845,8 +882,12 @@ pub fn prepare(
         (Some(m), Some(t))
     };
 
-    let mut toolbox =
-        ToolBox::new(Registry::with_terminal_policy(rt.clone(), make_policy).with_new_tools());
+    // interactive: a Bash call that times out moves to the background; headless kills it (D6)
+    let mut toolbox = ToolBox::new(
+        Registry::with_terminal_policy(rt.clone(), make_policy)
+            .with_new_tools()
+            .with_background_on_timeout(is_tui),
+    );
     if let Some(a) = mcp_attach {
         toolbox = a.apply(toolbox);
     }
@@ -1314,6 +1355,37 @@ fn artifact_to_dir(dir: PathBuf) -> PutArtifact {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sandbox_defaults_to_enforce_except_where_nothing_can_confine() {
+        use clap::Parser;
+        #[derive(Parser)]
+        struct W {
+            #[command(flatten)]
+            c: Common,
+        }
+        assert_eq!(default_sandbox_mode(false), SandboxMode::Enforce);
+        assert_eq!(default_sandbox_mode(true), SandboxMode::BestEffort);
+        let none = W::parse_from(["x"]).c;
+        let want = if cfg!(windows) {
+            SandboxMode::BestEffort
+        } else {
+            SandboxMode::Enforce
+        };
+        assert_eq!(none.sandbox_mode(), want);
+        // the loud one-liner exists exactly when the default turned best-effort
+        assert_eq!(sandbox_default_notice(&none).is_some(), cfg!(windows));
+        // an explicit flag always wins, and then there is no "defaulted" notice
+        for (flag, mode) in [
+            ("enforce", SandboxMode::Enforce),
+            ("best-effort", SandboxMode::BestEffort),
+            ("off", SandboxMode::Off),
+        ] {
+            let c = W::parse_from(["x", "--sandbox", flag]).c;
+            assert_eq!(c.sandbox_mode(), mode);
+            assert!(sandbox_default_notice(&c).is_none());
+        }
+    }
 
     fn outcome(rules: &[&str]) -> TaskOutcome {
         TaskOutcome {

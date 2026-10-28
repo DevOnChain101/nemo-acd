@@ -670,11 +670,7 @@ fn exec(
         Cmd::Copy(text) => {
             let sinks: Vec<&dyn ClipboardSink> = clipboard.iter().map(|b| &**b).collect();
             if copy_to_clipboard(&text, &sinks) {
-                app.toast(
-                    format!("copied {} characters", text.chars().count()),
-                    now,
-                    false,
-                );
+                app.toast(format!("Copied {} chars", text.chars().count()), now, false);
             } else {
                 app.toast(
                     "copy failed: no clipboard tool accepted the text",

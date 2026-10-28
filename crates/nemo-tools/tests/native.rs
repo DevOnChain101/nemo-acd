@@ -143,6 +143,49 @@ async fn timeout_kills_tree() {
 }
 
 #[tokio::test]
+async fn interactive_timeout_moves_bash_to_the_background_and_tells_the_model() {
+    let f = fx_with(
+        Registry::unsandboxed_for_tests()
+            .with_new_tools()
+            .with_background_on_timeout(true),
+        &[],
+    );
+    let o = f
+        .run(
+            "Bash",
+            json!({"command": "echo begin; sleep 1; echo end", "timeout": 300}),
+        )
+        .await;
+    assert!(!o.is_error, "{o:?}");
+    let id = o.meta["bash_id"]
+        .as_str()
+        .expect("backgrounded")
+        .to_string();
+    let t = text(&o);
+    assert!(
+        t.contains("begin")
+            && t.contains("NOT killed")
+            && t.contains("BashOutput")
+            && t.contains(&id),
+        "{t}"
+    );
+    // the model can read the rest with BashOutput once it finishes
+    let mut last = String::new();
+    for _ in 0..100 {
+        let r = f.run("BashOutput", json!({"bash_id": id})).await;
+        last = text(&r).to_string();
+        if last.contains("exited") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(30)).await;
+    }
+    assert!(
+        last.contains("end") && last.contains("exit code 0"),
+        "{last}"
+    );
+}
+
+#[tokio::test]
 async fn truncation_keeps_head_and_tail_and_reports_artifact() {
     let f = fx();
     let o = f

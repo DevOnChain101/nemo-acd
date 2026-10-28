@@ -812,7 +812,53 @@ fn instruction_file_cap_applies() {
         &names(),
         &InstructionLimits::default(),
     );
-    assert_eq!(f[0].content.len(), 40_000);
+    assert_eq!(f[0].content.len(), 32 * 1024);
+}
+
+#[test]
+fn one_memory_file_per_directory_nemo_then_agents_then_claude() {
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path().join("proj");
+    let sub = root.join("pkg");
+    let deep = sub.join("deep");
+    fs::create_dir_all(&deep).unwrap();
+    // root: all three -> NEMO.md only
+    for (n, t) in [
+        ("NEMO.md", "root nemo"),
+        ("AGENTS.md", "root agents"),
+        ("CLAUDE.md", "root claude"),
+    ] {
+        fs::write(root.join(n), t).unwrap();
+    }
+    // pkg: empty NEMO.md falls through to AGENTS.md; CLAUDE.md is not read as well
+    fs::write(sub.join("NEMO.md"), "  \n").unwrap();
+    fs::write(sub.join("AGENTS.md"), "pkg agents").unwrap();
+    fs::write(sub.join("CLAUDE.md"), "pkg claude").unwrap();
+    // deep: only CLAUDE.md, plus the private CLAUDE.local.md next to it
+    fs::write(deep.join("CLAUDE.md"), "deep claude").unwrap();
+    fs::write(deep.join("CLAUDE.local.md"), "deep local").unwrap();
+    let w = WorkspaceContext::open("w", &root, &deep, &[], root.join(".a"), "p").unwrap();
+    let f = load_instructions(&w, &[], None, &names(), &InstructionLimits::default());
+    let got: Vec<&str> = f.iter().map(|x| x.content.as_str()).collect();
+    assert_eq!(
+        got,
+        ["root nemo", "pkg agents", "deep claude", "deep local"]
+    );
+}
+
+#[test]
+fn memory_files_share_one_32_kib_budget() {
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path().join("proj");
+    let sub = root.join("pkg");
+    fs::create_dir_all(&sub).unwrap();
+    fs::write(root.join("NEMO.md"), "a".repeat(20_000)).unwrap();
+    fs::write(sub.join("NEMO.md"), "b".repeat(20_000)).unwrap();
+    let w = WorkspaceContext::open("w", &root, &sub, &[], root.join(".a"), "p").unwrap();
+    let f = load_instructions(&w, &[], None, &names(), &InstructionLimits::default());
+    let total: usize = f.iter().map(|x| x.content.len()).sum();
+    assert!(total <= 32 * 1024, "{total}");
+    assert_eq!(f[0].content.len(), 20_000);
 }
 
 // ---------- goal / state ----------

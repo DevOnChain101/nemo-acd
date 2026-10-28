@@ -7,6 +7,10 @@ use crate::{Block, Content, ImageSource, ToolOutput};
 
 const DEFAULT_LIMIT: i64 = 2000;
 const MAX_LINE_LENGTH: usize = 2000;
+/// A whole-file read (no offset/limit) of a text file over this many bytes is refused.
+const WHOLE_FILE_MAX_BYTES: usize = 256 * 1024;
+/// Most estimated tokens (4 chars each) one call may return.
+const MAX_RESULT_TOKENS: usize = 25_000;
 
 fn image_type(ext: &str) -> Option<&'static str> {
     Some(match ext {
@@ -189,6 +193,15 @@ pub(crate) fn run(input: &Value, ctx: &ToolContext) -> ToolOutput {
     let text = String::from_utf8_lossy(&buf);
     let text = text.strip_suffix('\n').unwrap_or(&text);
 
+    let windowed = int_field(input, "offset").is_some() || int_field(input, "limit").is_some();
+    if !windowed && text.len() > WHOLE_FILE_MAX_BYTES {
+        return ToolOutput::error(format!(
+            "Read: {} is {} KB, over the {} KB whole-file limit. Read it in parts with offset and limit (e.g. offset=1, limit=500) or search it with Grep.",
+            abs.display(),
+            text.len().div_ceil(1024),
+            WHOLE_FILE_MAX_BYTES >> 10
+        ));
+    }
     let offset = int_field(input, "offset").filter(|&n| n > 0).unwrap_or(1);
     let limit = int_field(input, "limit")
         .filter(|&n| n > 0)
@@ -203,6 +216,13 @@ pub(crate) fn run(input: &Value, ctx: &ToolContext) -> ToolOutput {
         .collect::<Vec<_>>()
         .join("\n");
 
+    let tokens = out.chars().count().div_ceil(4);
+    if tokens > MAX_RESULT_TOKENS {
+        return ToolOutput::error(format!(
+            "Read: this window of {} is about {tokens} tokens, over the {MAX_RESULT_TOKENS}-token limit. Use a smaller limit (fewer lines) with offset, or search it with Grep.",
+            abs.display()
+        ));
+    }
     ledger_set(ctx, &abs, mtime(&md));
     ToolOutput::text(out)
 }

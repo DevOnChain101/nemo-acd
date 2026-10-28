@@ -37,6 +37,9 @@ pub(crate) struct Shared {
     policy: PolicyFactory,
     pub browser_cfg: Mutex<BrowserConfig>,
     pub web_cfg: Mutex<WebConfig>,
+    /// A foreground Bash call that times out keeps running in the background (interactive app)
+    /// instead of being killed (headless).
+    pub background_on_timeout: std::sync::atomic::AtomicBool,
     sessions: Mutex<HashMap<String, Arc<SessionState>>>,
 }
 
@@ -47,6 +50,7 @@ impl Shared {
             policy,
             browser_cfg: Mutex::default(),
             web_cfg: Mutex::default(),
+            background_on_timeout: Default::default(),
             sessions: Mutex::default(),
         }
     }

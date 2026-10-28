@@ -545,16 +545,38 @@ fn slash_commands_pickers_and_unknowns() {
     keys(&mut a, "/nope\r");
     assert!(screen(&mut a).contains("unknown command: /nope"));
 
-    // /mode with an argument; auto is offered, bypass only through its confirmation
+    // /mode is gone: Shift+Tab is the only way to switch
     keys(&mut a, "/mode plan\r");
-    assert_eq!(a.mode, Mode::Plan);
-    keys(&mut a, "/mode auto\r");
-    assert_eq!(a.mode, Mode::Auto);
-    keys(&mut a, "/mode bypass\r");
+    assert!(screen(&mut a).contains("unknown command: /mode"));
+    assert_eq!(a.mode, Mode::Default);
+    assert!(!a.commands.iter().any(|c| c.name == "mode"));
+    let cycle = [Mode::AcceptEdits, Mode::Plan, Mode::Auto];
+    for m in cycle {
+        keys(&mut a, "\x1b[Z");
+        assert_eq!(a.mode, m);
+    }
+    // bypass opens its dialog; Esc stays in auto, "No" is the default, yes switches
+    keys(&mut a, "\x1b[Z");
     assert_eq!(a.mode, Mode::Auto);
     assert!(screen(&mut a).contains("Bypass permissions?"));
     keys(&mut a, "\x1b");
     assert_eq!(a.mode, Mode::Auto);
+    keys(&mut a, "\x1b[Z\r");
+    assert_eq!(a.mode, Mode::Auto);
+    let cmds = {
+        keys(&mut a, "\x1b[Z\x1b[B");
+        keys(&mut a, "\r")
+    };
+    assert_eq!(a.mode, Mode::BypassPermissions);
+    assert!(matches!(
+        &cmds[..],
+        [Cmd::SetMode {
+            mode: Mode::BypassPermissions,
+            confirmed_bypass: true
+        }]
+    ));
+    keys(&mut a, "\x1b[Z");
+    assert_eq!(a.mode, Mode::Default);
 
     // model picker -> choose second entry
     keys(&mut a, "/model\r");
@@ -656,6 +678,8 @@ fn mode_cycle_and_status_line_facts() {
     assert_eq!(a.mode, Mode::Plan);
     keys(&mut a, "\x1b[Z");
     assert_eq!(a.mode, Mode::Auto);
+    keys(&mut a, "\x1b[Z\x1b[B\r"); // bypass dialog: Yes
+    assert_eq!(a.mode, Mode::BypassPermissions);
     keys(&mut a, "\x1b[Z");
     assert_eq!(a.mode, Mode::Default);
     let s = screen(&mut a);
@@ -860,6 +884,155 @@ fn selection_drag_copies_chat_text() {
         T0,
     );
     assert!(a.on_key(click_up, T0).is_empty());
+}
+
+/// Screen cell (0-based column, row) of the first `needle` after `skip` chars, in the rendered frame.
+fn find_cell(a: &mut App, needle: &str, skip: usize) -> (u32, u32) {
+    let lines = a.render(COLS, ROWS, T0);
+    for (y, l) in lines.iter().enumerate() {
+        let plain = strip_ansi(l);
+        if let Some(i) = plain.find(needle) {
+            return (plain[..i].chars().count() as u32 + skip as u32, y as u32);
+        }
+    }
+    panic!("{needle:?} not on screen");
+}
+
+fn click(a: &mut App, x: u32, y: u32, action: MouseAction, now: i64) -> Vec<Cmd> {
+    a.on_key(
+        Key::Mouse {
+            x: x + 1,
+            y: y + 1,
+            button: 0,
+            action,
+            mods: Mods::default(),
+        },
+        now,
+    )
+}
+
+/// Press at `from`, drag to `to`, release; returns what the release asked for.
+fn drag(a: &mut App, from: (u32, u32), to: (u32, u32)) -> Vec<Cmd> {
+    click(a, from.0, from.1, MouseAction::Down, T0);
+    a.on_key(
+        Key::MouseDrag {
+            x: to.0 + 1,
+            y: to.1 + 1,
+            button: 0,
+            mods: Mods::default(),
+        },
+        T0,
+    );
+    click(a, to.0, to.1, MouseAction::Up, T0)
+}
+
+fn copied(cmds: &[Cmd]) -> Option<&str> {
+    match cmds {
+        [Cmd::Copy(t)] => Some(t),
+        _ => None,
+    }
+}
+
+fn say(a: &mut App, kind: &str, text: &str, seq: u64) {
+    a.on_event(
+        &env(
+            seq,
+            Ev::ModelDelta {
+                block_index: seq as i64,
+                kind: kind.into(),
+                text: text.into(),
+            },
+        ),
+        T0,
+    );
+}
+
+#[test]
+fn drag_may_start_on_a_blank_cell_and_run_backwards() {
+    let mut a = app();
+    streamed(&mut a);
+    let (x, y) = find_cell(&mut a, "The answer is 42", 0);
+    let cmds = drag(&mut a, (x + 30, y), (x, y));
+    assert_eq!(copied(&cmds), Some("The answer is 42"));
+}
+
+#[test]
+fn a_plain_click_after_a_selection_starts_over_instead_of_extending_it() {
+    let mut a = app();
+    streamed(&mut a);
+    let (x, y) = find_cell(&mut a, "The answer is 42", 0);
+    assert!(copied(&drag(&mut a, (x, y), (x + 5, y))).is_some());
+    let (hx, hy) = find_cell(&mut a, "> hi", 2);
+    click(&mut a, hx, hy, MouseAction::Down, T0 + 5000);
+    assert!(click(&mut a, hx, hy, MouseAction::Up, T0 + 5000).is_empty());
+    assert!(a.sel.selection.is_none());
+}
+
+#[test]
+fn double_click_selects_a_word_and_triple_click_the_line() {
+    let mut a = app();
+    streamed(&mut a);
+    let (x, y) = find_cell(&mut a, "The answer is 42", 5);
+    let t = std::cell::Cell::new(T0);
+    let press = |a: &mut App| {
+        t.set(t.get() + 100);
+        let c = click(a, x, y, MouseAction::Down, t.get());
+        click(a, x, y, MouseAction::Up, t.get());
+        c
+    };
+    assert!(press(&mut a).is_empty());
+    assert_eq!(copied(&press(&mut a)), Some("answer"));
+    assert!(a.sel.selection.is_some(), "the word stays highlighted");
+    assert_eq!(copied(&press(&mut a)), Some("The answer is 42"));
+    // too slow is a new first click
+    t.set(t.get() + 2000);
+    assert!(press(&mut a).is_empty());
+}
+
+#[test]
+fn ctrl_c_copies_a_selection_and_otherwise_interrupts() {
+    let mut a = app();
+    streamed(&mut a);
+    let (x, y) = find_cell(&mut a, "The answer is 42", 0);
+    drag(&mut a, (x, y), (x + 5, y));
+    let cmds = keys(&mut a, "\x03");
+    assert_eq!(copied(&cmds), Some("The an"));
+    assert!(a.sel.selection.is_none());
+    // nothing selected any more: ctrl+c has its old meaning (arm quit)
+    assert!(keys(&mut a, "\x03").is_empty());
+    assert!(screen(&mut a).contains("press ctrl+c again to quit"));
+}
+
+#[test]
+fn copied_text_leaves_out_gutters_and_joins_wide_and_wrapped_rows() {
+    let mut a = app();
+    streamed(&mut a);
+    say(&mut a, "thinking", "pondering the weather today", 30);
+    say(
+        &mut a,
+        "text",
+        &format!(
+            "\n\n{} {}",
+            "日本語のテキスト".repeat(12),
+            "tail".repeat(40)
+        ),
+        31,
+    );
+    let (x, y) = find_cell(&mut a, "pondering", 0);
+    let cmds = drag(&mut a, (x, y), (x + 8, y));
+    assert_eq!(copied(&cmds), Some("pondering"));
+    // from the gutter's own column too: the bar is not text
+    let cmds = drag(&mut a, (x - 2, y), (x + 8, y));
+    let t = copied(&cmds).expect("copied");
+    assert!(!t.contains('│'), "{t:?}");
+    // a selection across the wrapped wide-char paragraph keeps every glyph exactly once
+    let para = "日本語のテキスト".repeat(12);
+    let (wx, wy) = find_cell(&mut a, "日本語", 0);
+    let cmds = drag(&mut a, (wx, wy), (COLS - 1, wy + 3));
+    let t = copied(&cmds).expect("copied").to_string();
+    // wrapped over four screen rows, copied as the one line it is (no indent, no breaks)
+    assert!(t.starts_with(&format!("{para} tail")), "{t:?}");
+    assert!(!t.contains('\n') && !t.starts_with(' '), "{t:?}");
 }
 
 #[test]

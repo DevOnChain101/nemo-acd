@@ -11,7 +11,7 @@
 //!   `UserPromptSubmit` a hook that times out, fails to start, exits with anything but 0 or 2, is
 //!   killed, or prints malformed JSON BLOCKS with the reason (`HookOutcome::failed_closed`).
 //!   Opt out per hook with `"fail_open": true`. Cancellation is not a failure. Other events
-//!   keep Node's fail-open behaviour.
+//!   keep Node's fail-open behaviour. Default timeout: 60 s for those two, 600 s otherwise.
 //! - Hook output never grants permission: see [`HookOutcome::hook_decision`].
 //! - Not ported: `stripSecretEnv` (the injected env is already stripped), `updatedInput` that is a
 //!   non-object truthy JS value (only JSON objects count).
@@ -65,7 +65,7 @@ pub struct HookCommand {
     pub kind: String,
     #[serde(default)]
     pub command: String,
-    /// Seconds; absent or 0 means 60 (Node `h.timeout || 60`).
+    /// Seconds; absent or 0 means [`default_timeout_secs`] for the event.
     #[serde(default)]
     pub timeout: Option<u64>,
     /// Failures of this hook do not block `PreToolUse` / `UserPromptSubmit` (default false).
@@ -237,7 +237,10 @@ impl Hooks {
                 stdin.clone(),
                 cancel.clone(),
             );
-            let secs = h.timeout.filter(|t| *t > 0).unwrap_or(60);
+            let secs = h
+                .timeout
+                .filter(|t| *t > 0)
+                .unwrap_or(default_timeout_secs(event));
             set.spawn(async move {
                 (
                     i,
@@ -265,6 +268,17 @@ impl Hooks {
         }
         out.input_rewritten = out.updated_input.is_some();
         out
+    }
+}
+
+/// Default hook timeout: 60 s for the gating events (PreToolUse, UserPromptSubmit), which fail
+/// closed and so hold the turn; 600 s (Claude Code's default) for the rest (owner decision D3).
+/// A per-hook `timeout` always wins.
+pub fn default_timeout_secs(event: HookEvent) -> u64 {
+    if matches!(event, HookEvent::PreToolUse | HookEvent::UserPromptSubmit) {
+        60
+    } else {
+        600
     }
 }
 

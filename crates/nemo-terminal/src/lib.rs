@@ -185,6 +185,10 @@ pub struct ExecSpec {
     pub unconfined: bool,
     /// Live output while the command runs (see [`OutputSink`]).
     pub on_output: Option<OutputSink>,
+    /// At the timeout keep the command running as a background process of the session (same as
+    /// `spawn`: poll it with `read_logs` / `get_status`, stop it with `signal`) instead of killing
+    /// it. If the session has no room for another one the command is killed as usual.
+    pub background_on_timeout: bool,
 }
 
 /// Receives the new output of a running `exec`, UTF-8 safe, coalesced to at least 4 KiB or 50 ms,
@@ -263,6 +267,7 @@ impl ExecSpec {
             sandbox: None,
             unconfined: false,
             on_output: None,
+            background_on_timeout: false,
         }
     }
 }
@@ -292,6 +297,9 @@ pub struct ExecResult {
     pub sandbox: Option<SandboxCapabilities>,
     /// Ran unconfined because the runtime's [`SandboxMode`] allowed it (`sandbox` is None).
     pub unsandboxed_by_request: bool,
+    /// `background_on_timeout` fired: the command is still running under this process id.
+    /// `output` is what it had written so far; `timed_out` is false.
+    pub background_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -906,19 +914,25 @@ impl TerminalRuntime {
             Io {
                 stdin: spec.stdin.take(),
                 stderr_log: spec.stderr == StderrMode::Separate,
-                max_runtime: None,
+                max_runtime: spec
+                    .background_on_timeout
+                    .then_some(self.limits.spawn_max_runtime),
                 sandbox: spec.sandbox.take(),
                 unconfined: spec.unconfined,
             },
         )?;
         let deadline = Instant::now() + spec.timeout;
-        let (mut timed_out, mut cancelled) = (false, false);
+        let (mut timed_out, mut cancelled, mut background_id) = (false, false, None);
         let mut tail = spec.on_output.take().map(|s| Tail::new(&p.log, s));
         while p.poll().is_none() {
             if let Some(t) = &mut tail {
                 t.pump(false);
             }
             if Instant::now() >= deadline {
+                if spec.background_on_timeout && self.adopt(session_id, &p).is_ok() {
+                    background_id = Some(p.id.clone());
+                    break;
+                }
                 timed_out = true;
             }
             if timed_out || cancelled || p.enforce() {
@@ -931,7 +945,9 @@ impl TerminalRuntime {
                 () = sleep(POLL) => {}
             }
         }
-        p.kill_tree(); // grandchildren that outlived the leader
+        if background_id.is_none() {
+            p.kill_tree(); // grandchildren that outlived the leader
+        }
         p.enforce(); // a fast writer may have exited between polls
         if let Some(t) = &mut tail {
             t.pump(true);
@@ -959,15 +975,11 @@ impl TerminalRuntime {
             stderr_log_path: p.err_log.clone(),
             sandbox: p.sandbox.clone(),
             unsandboxed_by_request: p.unsandboxed_by_request,
+            background_id,
         })
     }
 
-    /// Starts a service that outlives this call (not the session). With `spec.ready` it waits
-    /// for the check, giving up on timeout or when the process exits first (`ready == false`).
-    pub async fn spawn(&self, session_id: &str, spec: SpawnSpec) -> Result<ProcessHandle> {
-        if let Some(Readiness::LogPattern(re)) = &spec.ready {
-            regex::Regex::new(re).map_err(|e| Error::InvalidSpec(e.to_string()))?;
-        }
+    fn check_room(&self, session_id: &str) -> Result<()> {
         let cap = self.limits.max_live_procs;
         let live = self
             .procs_of(session_id)?
@@ -979,6 +991,41 @@ impl TerminalRuntime {
                 "{live} live spawned processes in session (max {cap}); stop one first"
             )));
         }
+        Ok(())
+    }
+
+    /// Makes a launched process a session process (listed, pollable, killable, monitored) if the
+    /// session has room, as `spawn` does.
+    fn adopt(&self, session_id: &str, p: &Arc<Proc>) -> Result<()> {
+        self.check_room(session_id)?;
+        lock(&self.sessions)
+            .get_mut(session_id)
+            .ok_or_else(|| Error::UnknownSession(session_id.into()))?
+            .procs
+            .insert(p.id.clone(), p.clone());
+        // Nobody polls a service, so a monitor enforces the limits (and reaps) until it exits
+        // or the session drops it.
+        let weak = Arc::downgrade(p);
+        tokio::spawn(async move {
+            loop {
+                sleep(MONITOR).await;
+                let Some(p) = weak.upgrade() else { break };
+                p.enforce();
+                if p.poll().is_some() {
+                    break;
+                }
+            }
+        });
+        Ok(())
+    }
+
+    /// Starts a service that outlives this call (not the session). With `spec.ready` it waits
+    /// for the check, giving up on timeout or when the process exits first (`ready == false`).
+    pub async fn spawn(&self, session_id: &str, spec: SpawnSpec) -> Result<ProcessHandle> {
+        if let Some(Readiness::LogPattern(re)) = &spec.ready {
+            regex::Regex::new(re).map_err(|e| Error::InvalidSpec(e.to_string()))?;
+        }
+        self.check_room(session_id)?;
         let p = self.launch(
             session_id,
             &spec.command,
@@ -991,24 +1038,7 @@ impl TerminalRuntime {
                 ..Io::default()
             },
         )?;
-        lock(&self.sessions)
-            .get_mut(session_id)
-            .ok_or_else(|| Error::UnknownSession(session_id.into()))?
-            .procs
-            .insert(p.id.clone(), p.clone());
-        // Nobody polls a service, so a monitor enforces the limits (and reaps) until it exits
-        // or the session drops it.
-        let weak = Arc::downgrade(&p);
-        tokio::spawn(async move {
-            loop {
-                sleep(MONITOR).await;
-                let Some(p) = weak.upgrade() else { break };
-                p.enforce();
-                if p.poll().is_some() {
-                    break;
-                }
-            }
-        });
+        self.adopt(session_id, &p)?;
         let ready = match &spec.ready {
             None => true,
             Some(r) => wait_ready(&p, r, spec.ready_timeout).await,

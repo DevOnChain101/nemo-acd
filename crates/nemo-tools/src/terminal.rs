@@ -131,6 +131,9 @@ pub(crate) fn bash<'a>(
         spec.max_output_bytes = MAX_OUTPUT;
         spec.on_output = LIVE_OUTPUT.try_with(Clone::clone).ok();
         spec.unconfined = UNCONFINED.try_with(|u| *u).unwrap_or(false);
+        spec.background_on_timeout = sh
+            .background_on_timeout
+            .load(std::sync::atomic::Ordering::Relaxed);
         let r = match sh.rt.exec(&ctx.session_id, spec, &ctx.cancel).await {
             Ok(r) => r,
             Err(e) => return ToolOutput::error(format!("Bash: {e}")),
@@ -138,6 +141,11 @@ pub(crate) fn bash<'a>(
         let mut notes = vec![];
         if r.timed_out {
             notes.push(format!("[timed out after {timeout_ms}ms]"));
+        }
+        if let Some(id) = &r.background_id {
+            notes.push(format!(
+                "[timed out after {timeout_ms}ms; the command was NOT killed, it now runs in the background as {id}. Read its output with BashOutput (bash_id: \"{id}\"); stop it with KillShell (shell_id: \"{id}\")]"
+            ));
         }
         if r.cancelled {
             notes.push("[aborted]".into());
@@ -169,14 +177,17 @@ pub(crate) fn bash<'a>(
             }
             _ => {}
         }
-        let failed =
-            r.timed_out || r.cancelled || r.output_limit_exceeded || r.exit_code != Some(0);
+        let failed = r.background_id.is_none()
+            && (r.timed_out || r.cancelled || r.output_limit_exceeded || r.exit_code != Some(0));
         let mut out = ToolOutput::text(text).with_meta(json!({
             "exit_code": r.exit_code, "signal": r.signal, "timed_out": r.timed_out,
             "truncated": r.truncated, "total_bytes": r.total_bytes,
             "artifact_path": r.log_path, "shell_kind": shell_kind,
         }));
         out.is_error = failed;
+        if let Some(id) = &r.background_id {
+            out.meta["bash_id"] = json!(id);
+        }
         out
     })
 }

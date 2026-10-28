@@ -119,6 +119,47 @@ async fn timeout_kills_process_and_grandchild() {
 }
 
 #[tokio::test]
+async fn timeout_can_move_the_command_to_the_background_instead_of_killing_it() {
+    let f = fx();
+    let mut spec = ExecSpec::new("echo started; sleep 1; echo finished");
+    spec.timeout = Duration::from_millis(300);
+    spec.background_on_timeout = true;
+    let r = exec(&f, spec).await;
+    let id = r.background_id.clone().expect("backgrounded");
+    assert!(!r.timed_out && r.exit_code.is_none(), "{r:?}");
+    assert!(r.output.contains("started") && !r.output.contains("finished"));
+    // it is a normal session process now: listed, still running, finishes on its own
+    assert!(f.rt.get_status(SID, &id).unwrap().running);
+    for _ in 0..300 {
+        if !f.rt.get_status(SID, &id).unwrap().running {
+            break;
+        }
+        sleep(Duration::from_millis(20)).await;
+    }
+    let st = f.rt.get_status(SID, &id).unwrap();
+    assert_eq!(st.exit_code, Some(0));
+    assert!(f.rt.read_logs(SID, &id, None, 1000).unwrap().data.contains("finished"));
+    // a command that ends in time is a plain result
+    let mut quick = ExecSpec::new("echo hi");
+    quick.background_on_timeout = true;
+    assert!(exec(&f, quick).await.background_id.is_none());
+}
+
+#[tokio::test]
+async fn background_on_timeout_kills_when_the_session_is_full() {
+    let rt = TerminalRuntime::new(SandboxMode::Off).with_limits(Limits {
+        max_live_procs: 0,
+        ..Limits::default()
+    });
+    let f = fx_with(rt);
+    let mut spec = ExecSpec::new("sleep 30");
+    spec.timeout = Duration::from_millis(200);
+    spec.background_on_timeout = true;
+    let r = exec(&f, spec).await;
+    assert!(r.timed_out && r.background_id.is_none());
+}
+
+#[tokio::test]
 async fn cancellation_kills_tree() {
     let f = fx();
     let cancel = CancellationToken::new();

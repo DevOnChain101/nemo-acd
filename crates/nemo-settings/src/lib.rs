@@ -3,7 +3,7 @@
 //!
 //! Layers, lowest to highest: `<nemo_home>/settings.json` (user), `<project_root>/.nemo/settings.json`
 //! (project). Lists are unions (deduped, order kept); scalars: last layer wins. Unknown keys are
-//! ignored, malformed files give a diagnostic and are skipped. Node has no third "local" layer.
+//! ignored. A file that exists but is malformed, not an object or unreadable is an ERROR (`Settings::errors`, also in `diagnostics`): its deny rules cannot apply, so the CLI refuses to start (owner decision D5, as Claude Code's Settings Error). Node only warned and went on without it. Node has no third "local" layer.
 //!
 //! SECURITY (deviation from Node): the project file comes from a possibly hostile repository.
 //! Unless the caller passes [`ProjectTrust::Trusted`], it can only TIGHTEN: `deny`/`ask` rules, the
@@ -115,6 +115,10 @@ pub struct Settings {
     pub nemo: NemoSettings,
     /// Non-secret notes: malformed files, ignored/refused items. Never contains setting values.
     pub diagnostics: Vec<String>,
+    /// A settings file that exists but cannot be used (malformed JSON, not an object, unreadable,
+    /// oversized): its deny/ask rules are NOT in force, so callers must refuse to start (`nemo run`
+    /// exits 2, the TUI does not open) instead of running without them. Also in `diagnostics`.
+    pub errors: Vec<String>,
 }
 
 /// Nearest ancestor of `cwd` (inclusive) holding `.nemo` or `.git`, else `cwd`. Pure lexical walk
@@ -165,39 +169,46 @@ pub fn load_settings(ctx: &LoadContext<'_>, trust: ProjectTrust) -> Settings {
     };
     let user = ctx.nemo_home.join("settings.json");
     let project = project_root.join(".nemo").join("settings.json");
-    if let Some(raw) = read_json(&user, "user settings", &mut s.diagnostics) {
-        s.apply(&raw, true, true);
-    }
-    if let Some(raw) = read_json(&project, "project settings", &mut s.diagnostics) {
-        s.apply(&raw, false, trust == ProjectTrust::Trusted);
+    for (path, what, user_file) in [
+        (&user, "user settings", true),
+        (&project, "project settings", false),
+    ] {
+        match read_json(path, what) {
+            Ok(Some(raw)) => s.apply(&raw, user_file, user_file || trust == ProjectTrust::Trusted),
+            Ok(None) => {}
+            Err(e) => {
+                s.diagnostics.push(e.clone());
+                s.errors.push(e);
+            }
+        }
     }
     s
 }
 
-/// Missing file: silent. Unreadable, oversized, not a regular file or malformed: diagnostic.
-fn read_json(path: &Path, what: &str, diag: &mut Vec<String>) -> Option<Value> {
-    let meta = std::fs::metadata(path).ok()?;
+/// `Ok(None)`: no such file. `Err`: it exists but is unusable (names the file, never a value).
+fn read_json(path: &Path, what: &str) -> Result<Option<Value>, String> {
+    let meta = match std::fs::metadata(path) {
+        Ok(m) => m,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(format!("{what} {}: {e}", path.display())),
+    };
     if !meta.is_file() || meta.len() > MAX_FILE_BYTES {
-        diag.push(format!(
-            "{what}: not a regular file or larger than 1 MiB, skipped"
+        return Err(format!(
+            "{what} {}: not a regular file or larger than 1 MiB",
+            path.display()
         ));
-        return None;
     }
     let mut text = String::new();
-    if std::fs::File::open(path)
+    std::fs::File::open(path)
         .and_then(|f| f.take(MAX_FILE_BYTES).read_to_string(&mut text))
-        .is_err()
-    {
-        diag.push(format!("{what}: unreadable, skipped"));
-        return None;
-    }
+        .map_err(|e| format!("{what} {}: unreadable ({e})", path.display()))?;
     match serde_json::from_str::<Value>(&text) {
-        Ok(v @ Value::Object(_)) => Some(v),
-        Ok(_) => None,
-        Err(e) => {
-            diag.push(format!("malformed JSON in {what}: {e}"));
-            None
-        }
+        Ok(v @ Value::Object(_)) => Ok(Some(v)),
+        Ok(_) => Err(format!(
+            "{what} {}: the top level must be a JSON object",
+            path.display()
+        )),
+        Err(e) => Err(format!("malformed JSON in {what} {}: {e}", path.display())),
     }
 }
 
