@@ -182,6 +182,7 @@ async fn launch_failure_reports_exit_status_and_stderr() {
     .await;
 }
 
+#[cfg(unix)]
 async fn launch_failure_reports_exit_status_and_stderr_body() {
     use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
@@ -687,6 +688,7 @@ async fn screenshots_are_private() {
     traced("screenshots_are_private", screenshots_are_private_body()).await;
 }
 
+#[cfg(unix)]
 async fn screenshots_are_private_body() {
     use std::os::unix::fs::PermissionsExt;
     let Some(env) = browser_env() else { return };
@@ -715,6 +717,7 @@ async fn pipe_transport_has_no_listening_port() {
     .await;
 }
 
+#[cfg(unix)]
 async fn pipe_transport_has_no_listening_port_body() {
     let Some(env) = browser_env() else { return };
     let art = tempfile::tempdir().unwrap();

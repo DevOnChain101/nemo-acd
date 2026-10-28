@@ -153,7 +153,9 @@ impl SandboxPolicy {
         deny.retain(|d| !workspace_root.starts_with(d) && !tmp_dir.starts_with(d));
         deny.sort();
         deny.dedup();
-        let reads = home.map_or(vec![], |h| toolchain_read_roots(&h, &deny));
+        let reads = home.map_or(vec![], |h| {
+            toolchain_read_roots(&h, &deny, std::env::var_os("PATH").as_deref())
+        });
         Self {
             readable_roots: reads,
             writable_roots: vec![workspace_root.to_path_buf()],
@@ -465,7 +467,11 @@ const TOOLCHAIN_DIRS: &[&str] = &[
 /// path inside an allowed root, so a dir that contains a denied path is replaced by its
 /// children minus the denied ones, recursively; `.env*`, `*.pem` and `*.key` entries are
 /// dropped. shortcut: dirs created later under an expanded dir are not covered, restart to refresh.
-fn toolchain_read_roots(home: &Path, deny: &[PathBuf]) -> Vec<PathBuf> {
+fn toolchain_read_roots(
+    home: &Path,
+    deny: &[PathBuf],
+    path_var: Option<&std::ffi::OsStr>,
+) -> Vec<PathBuf> {
     fn add(dir: PathBuf, deny: &[PathBuf], out: &mut Vec<PathBuf>) {
         let real = canon_lossy(&dir);
         if deny.iter().any(|d| real.starts_with(canon_lossy(d))) {
@@ -483,9 +489,45 @@ fn toolchain_read_roots(home: &Path, deny: &[PathBuf]) -> Vec<PathBuf> {
     }
     let mut out = vec![];
     let dirs = TOOLCHAIN_DIRS.iter().map(|d| home.join(d));
-    for d in dirs.chain(cfg!(target_os = "linux").then(|| "/home/linuxbrew/.linuxbrew".into())) {
-        if d.is_dir() {
+    let fixed = dirs.chain(cfg!(target_os = "linux").then(|| "/home/linuxbrew/.linuxbrew".into()));
+    for d in fixed.chain(path_install_prefixes(home, path_var)) {
+        if d.is_dir() && !out.iter().any(|o| d.starts_with(o)) {
             add(d, deny, &mut out);
+        }
+    }
+    out
+}
+
+/// Install prefixes under `home` of the toolchains on `PATH` (CI runners keep node under
+/// `~/hostedtoolcache/node/<v>/<arch>`): per PATH entry, its parent when it is named `bin`
+/// (else the entry); plus the same for the real path of well-known tools. Never `home` itself.
+fn path_install_prefixes(home: &Path, path_var: Option<&std::ffi::OsStr>) -> Vec<PathBuf> {
+    const TOOLS: &[&str] = &[
+        "node", "npm", "npx", "cargo", "rustc", "python3", "pip", "go", "ruby", "java",
+    ];
+    let home = canon_lossy(home);
+    let entries: Vec<PathBuf> = path_var
+        .map(|p| std::env::split_paths(p).collect())
+        .unwrap_or_default();
+    let prefix = |bin_dir: &Path| {
+        let up = bin_dir.parent().filter(|u| *u != home);
+        let p = match bin_dir.file_name() {
+            Some(n) if n == "bin" => up.unwrap_or(bin_dir),
+            _ => bin_dir,
+        };
+        (p != home && p.starts_with(&home)).then(|| p.to_path_buf())
+    };
+    let mut out: Vec<PathBuf> = vec![];
+    let mut push = |p: Option<PathBuf>| {
+        if let Some(p) = p.filter(|p| !out.contains(p)) {
+            out.push(p);
+        }
+    };
+    for e in entries.iter().filter(|e| e.is_absolute()) {
+        push(dunce::canonicalize(e).ok().and_then(|c| prefix(&c)));
+        for t in TOOLS {
+            let real = dunce::canonicalize(e.join(t)).ok();
+            push(real.and_then(|r| prefix(r.parent()?)));
         }
     }
     out
@@ -628,7 +670,7 @@ mod tests {
             std::fs::write(h.join(f), "x").unwrap();
         }
         let deny = credential_paths(&h, None, None);
-        let r = toolchain_read_roots(&h, &deny);
+        let r = toolchain_read_roots(&h, &deny, std::env::var_os("PATH").as_deref());
         let ok = |p: &str| r.iter().any(|x| h.join(p).starts_with(x));
         for yes in [
             ".rustup/toolchains",
@@ -651,6 +693,33 @@ mod tests {
             r.iter()
                 .all(|x| !deny.iter().any(|d| d.starts_with(x) || x.starts_with(d)))
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn path_install_prefixes_cover_runner_style_node_and_never_home() {
+        let td = tempfile::tempdir().unwrap();
+        let h = dunce::canonicalize(td.path()).unwrap();
+        let root = h.join("hostedtoolcache/node/22.1.0/arm64");
+        let npm_dir = root.join("lib/node_modules/npm/bin");
+        std::fs::create_dir_all(root.join("bin")).unwrap();
+        std::fs::create_dir_all(&npm_dir).unwrap();
+        std::fs::create_dir_all(h.join(".ssh")).unwrap();
+        std::fs::write(root.join("bin/node"), "").unwrap();
+        std::fs::write(npm_dir.join("npm-cli.js"), "").unwrap();
+        std::fs::write(root.join("lib/node_modules/npm/.env"), "S=1").unwrap();
+        std::os::unix::fs::symlink(npm_dir.join("npm-cli.js"), root.join("bin/npm")).unwrap();
+        std::fs::create_dir_all(h.join("bin")).unwrap(); // ~/bin: its parent is $HOME
+        let path =
+            std::env::join_paths([root.join("bin"), h.join("bin"), "/usr/bin".into()]).unwrap();
+        let pre = path_install_prefixes(&h, Some(&path));
+        assert!(pre.contains(&root), "{pre:?}");
+        assert!(!pre.contains(&h) && pre.contains(&h.join("bin")), "{pre:?}");
+        let deny = credential_paths(&h, None, None);
+        let r = toolchain_read_roots(&h, &deny, Some(&path));
+        let ok = |p: &Path| r.iter().any(|x| p.starts_with(x));
+        assert!(ok(&npm_dir.join("npm-cli.js")) && ok(&root.join("bin/node")));
+        assert!(!ok(&h.join(".ssh/id_rsa")) && !r.contains(&h));
     }
 
     #[test]
