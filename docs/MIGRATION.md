@@ -4,7 +4,7 @@ The Node CLI (`~/Vibe/nemo-cli`) is frozen and retired: the owner no longer uses
 
 ## Coexistence
 
-- **Command names.** The Rust binary is `nemo`; the Node CLI also uses `nemo`/`nemocode`. The npm package and shim for the Rust build are named `nemo-acd` (command `nemo-acd`) so installs never collide. `install.sh`/`install.ps1` take `NEMO_BIN_NAME` (e.g. `nemo-rs`).
+- **Command names.** The Rust binary is `nemo`; the Node CLI also uses `nemo`/`nemocode`. The npm package for the Rust build is `@devonchain101/nemo` (command `nemo`); pass `--bin-names` to `scripts/package-npm.mjs` for another command name if you must coexist. `install.sh`/`install.ps1` take `NEMO_BIN_NAME` (e.g. `nemo-rs`).
 - **PATH precedence.** Whichever directory comes first wins for plain `nemo`. The installers warn when another `nemo` is already earlier on PATH. Check with `which -a nemo` (`where nemo` on Windows).
 - **Shared `NEMO_HOME`** (default `~/.nemo`). Both read `settings.json`, provider config and `projects/<cwd>/<session>.jsonl` transcripts. The Rust store adds `nemo.db` and `sessions/` next to them; the Node CLI ignores these. Use a separate home for experiments: `NEMO_HOME=/tmp/nemo-try nemo ...`.
 - **`compat.write_node_transcripts`** (default ON): the Rust session store also mirrors each session as a Node-format JSONL transcript so Node can resume/list it. Node is retired, so turn it off unless you still use Node.

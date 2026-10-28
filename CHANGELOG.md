@@ -4,6 +4,9 @@ Format: Keep a Changelog. Versioning: SemVer (pre-1.0: minor versions may break)
 
 ## [Unreleased]
 
+### Changed (release engineering)
+- License is Apache-2.0 (LICENSE, NOTICE). npm packages are `@devonchain101/nemo` and `@devonchain101/nemo-<os>-<arch>[-musl]` (command `nemo`, `publishConfig` access public + provenance). Installers moved to `scripts/install.sh` / `scripts/install.ps1` (default repo built in, run `nemo doctor` after install, attestation verified whenever `gh` exists). `release.yml`: `workflow_dispatch` dry run, no private signing secrets, optional `npm-publish` job with provenance.
+
 ### Changed
 - TUI: drag-select may start on any cell, double-click selects a word, triple-click a line, Ctrl+C copies a selection (else keeps its interrupt meaning), copies leave out gutters and join wrapped rows, notice "Copied N chars". `/mode` removed: Shift+Tab cycles default, acceptEdits, plan, auto, bypassPermissions (confirmation dialog), default.
 - Permissions: `Read(..)` deny now also blocks Bash file readers and Write/Edit of that path; `mcp__*` / `mcp__server__*` deny rules match; ask rules still prompt under bypassPermissions; `--help` and docs state what bypass still stops.

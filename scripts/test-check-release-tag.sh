@@ -4,16 +4,18 @@ set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 w=$(mktemp -d); trap 'rm -rf "$w"' EXIT
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
-git init -q "$w/origin"; cd "$w/origin"
+git init -q -b main "$w/origin"; cd "$w/origin"
 git -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m c
 git -c user.name=t -c user.email=Dev@Example.com tag -a v1.0.0 -m v1.0.0
 git clone -q "$w/origin" "$w/work"
 sha=$(git rev-parse HEAD); obj=$(git rev-parse v1.0.0)
 mkdir "$w/bin"
+# Stub behaviour via env: STUB_VERIFIED, STUB_STATUS (compare), STUB_EMAIL.
 cat >"$w/bin/gh" <<GH
 #!/bin/sh
 case "\$2" in
-  repos/*/git/tags/*) printf 'true\tv1.0.0\tcommit\t$sha\tdev@example.com\n' ;;
+  repos/*/compare/*) echo "\${STUB_STATUS:-behind}" ;;
+  repos/*/git/tags/*) printf '%s\tv1.0.0\tcommit\t$sha\t%s\n' "\${STUB_VERIFIED:-true}" "\${STUB_EMAIL:-dev@example.com}" ;;
   repos/*/git/ref/tags/*) echo $obj ;;
 esac
 GH
@@ -38,4 +40,13 @@ run "listed email passes"     0 MAINTAINERS="$w/listed.txt"
 run "unlisted email fails"    1 MAINTAINERS="$w/other.txt"
 run "unlisted beats flag"     1 MAINTAINERS="$w/other.txt" NEMO_ALLOW_ANY_VERIFIED_TAGGER=true
 run "GH_TOKEN header fetch ok" 0 MAINTAINERS="$w/listed.txt" GH_TOKEN=dummy
+run "unsigned tag (not verified) fails" 1 MAINTAINERS="$w/listed.txt" STUB_VERIFIED=false
+run "unsigned beats flag"     1 MAINTAINERS="$w/empty.txt" NEMO_ALLOW_ANY_VERIFIED_TAGGER=true STUB_VERIFIED=false
+run "wrong tagger fails"      1 MAINTAINERS="$w/listed.txt" STUB_EMAIL=evil@example.com
+run "not on main fails"       1 MAINTAINERS="$w/listed.txt" STUB_STATUS=diverged
+run "ahead of main fails"     1 MAINTAINERS="$w/listed.txt" STUB_STATUS=ahead
+run "bad tag name fails"      1 MAINTAINERS="$w/listed.txt" TAG=release-1
+run "bad tag name 2 fails"    1 MAINTAINERS="$w/listed.txt" TAG=v1.0
+(cd "$w/origin" && git tag v1.0.1 && cd "$w/work" && git fetch -q --tags)
+run "lightweight tag fails"   1 MAINTAINERS="$w/listed.txt" TAG=v1.0.1
 exit $fails

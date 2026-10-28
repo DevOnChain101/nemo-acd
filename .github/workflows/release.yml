@@ -1,5 +1,7 @@
-# Release pipeline. Trigger: push of a tag v*. Produces a DRAFT GitHub Release; the `publish` job (environment approval) makes it public.
-# Needs (all optional; steps skip with a log line when absent): see docs/RELEASE.md "Secrets".
+# Release pipeline. Trigger: push of a tag v*. Produces a DRAFT GitHub Release; the `publish` job (environment approval) makes it public,
+# then `npm-publish` pushes the npm packages (with provenance) if an npm credential is configured (docs/RELEASE.md "npm").
+# Manual run (workflow_dispatch, any branch) = DRY RUN: builds and packages everything, uploads artifact `release-assets`,
+# skips the tag checks, attestation, GitHub Release and npm. Nothing is published.
 # UNVERIFIED: never run on GitHub. All actions are pinned to commit SHAs; the gate job refuses the release otherwise.
 # Security notes: trigger is tag push only (no pull_request_target, no untrusted PR code with secrets); no ${{ }} of
 # user-controlled data inside run: scripts (values go through env:); signing secrets are ENVIRONMENT secrets of `release`.
@@ -8,6 +10,7 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 concurrency:
   group: release-${{ github.ref }}
@@ -34,10 +37,12 @@ jobs:
         with:
           fetch-depth: 0
       - name: Tagged commit is on main
+        if: github.event_name == 'push'
         run: |
           git fetch --no-tags origin main
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main || { echo "::error::$GITHUB_SHA is not an ancestor of origin/main"; exit 1; }
       - name: Tag policy (annotated, verified, points at this commit, maintainer allowlist, fail closed)
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
@@ -71,10 +76,13 @@ jobs:
           persist-credentials: false
       - id: v
         run: |
-          tag="${GITHUB_REF_NAME#v}"
           crate=$(awk -F'"' '/^version *=/ {print $2; exit}' Cargo.toml)
-          case "$tag" in ''|*[!0-9A-Za-z.+-]*) echo "::error::bad tag"; exit 1;; esac
-          [ "$tag" = "$crate" ] || { echo "::error::tag v$tag != workspace version $crate"; exit 1; }
+          tag="$crate"   # dry run (workflow_dispatch): no tag, use the workspace version
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            tag="${GITHUB_REF_NAME#v}"
+            case "$tag" in ''|*[!0-9A-Za-z.+-]*) echo "::error::bad tag"; exit 1;; esac
+            [ "$tag" = "$crate" ] || { echo "::error::tag v$tag != workspace version $crate"; exit 1; }
+          fi
           echo "version=$tag" >>"$GITHUB_OUTPUT"
           case "$tag" in *-*) echo "prerelease=true" >>"$GITHUB_OUTPUT";; *) echo "prerelease=false" >>"$GITHUB_OUTPUT";; esac
 
@@ -83,7 +91,6 @@ jobs:
     needs: [ci, version]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
-    environment: release   # signing secrets live here (environment secrets + required reviewers), not in repo secrets
     permissions:
       contents: read
     continue-on-error: ${{ matrix.experimental }}
@@ -104,10 +111,6 @@ jobs:
       VERSION: ${{ needs.version.outputs.version }}
       TARGET: ${{ matrix.target }}
       EXT: ${{ matrix.ext }}
-      # Signing material (empty when the secret is not configured).
-      HAVE_MACOS_SIGN: ${{ secrets.MACOS_CERTIFICATE != '' && secrets.MACOS_CERTIFICATE_PASSWORD != '' && secrets.MACOS_SIGN_IDENTITY != '' }}
-      HAVE_MACOS_NOTARY: ${{ secrets.APPLE_ID != '' && secrets.APPLE_TEAM_ID != '' && secrets.APPLE_APP_PASSWORD != '' }}
-      HAVE_WINDOWS_SIGN: ${{ secrets.WINDOWS_CERTIFICATE != '' && secrets.WINDOWS_CERTIFICATE_PASSWORD != '' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -141,59 +144,13 @@ jobs:
           grep -q "nemo $VERSION" version.txt
           "$BIN" doctor --cwd "$RUNNER_TEMP"
 
-      - name: Sign macOS binary
-        if: startsWith(matrix.os, 'macos')
-        run: |
-          if [ "$HAVE_MACOS_SIGN" != true ]; then echo "SKIP codesign: secrets MACOS_CERTIFICATE, MACOS_CERTIFICATE_PASSWORD, MACOS_SIGN_IDENTITY not all set (binary stays unsigned)"; exit 0; fi
-          kc="$RUNNER_TEMP/build.keychain-db"; kp=$(uuidgen)
-          echo "$MACOS_CERTIFICATE" | base64 --decode >"$RUNNER_TEMP/cert.p12"
-          security create-keychain -p "$kp" "$kc"
-          security set-keychain-settings -lut 3600 "$kc"
-          security unlock-keychain -p "$kp" "$kc"
-          security import "$RUNNER_TEMP/cert.p12" -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$kc"
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$kp" "$kc"
-          security list-keychains -d user -s "$kc" login.keychain
-          codesign --force --options runtime --timestamp --sign "$MACOS_SIGN_IDENTITY" "$BIN"
-          codesign --verify --strict --verbose=2 "$BIN"
-          rm -f "$RUNNER_TEMP/cert.p12"
-        env:
-          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
-      - name: Notarize macOS binary
-        if: startsWith(matrix.os, 'macos')
-        run: |
-          if [ "$HAVE_MACOS_SIGN" != true ] || [ "$HAVE_MACOS_NOTARY" != true ]; then echo "SKIP notarization: needs the codesign secrets plus APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD"; exit 0; fi
-          ditto -c -k --keepParent "$BIN" "$RUNNER_TEMP/notarize.zip"
-          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
-          # A bare Mach-O cannot be stapled; Gatekeeper verifies the ticket online.
-        env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-      - name: Sign Windows binary (Authenticode)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          if ($env:HAVE_WINDOWS_SIGN -ne 'true') { Write-Host "SKIP Authenticode: secrets WINDOWS_CERTIFICATE, WINDOWS_CERTIFICATE_PASSWORD not both set (binary stays unsigned)"; exit 0 }
-          $pfx = Join-Path $env:RUNNER_TEMP 'cert.pfx'
-          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
-          $st = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" | Sort-Object FullName | Select-Object -Last 1
-          & $st.FullName sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f $pfx /p $env:WINDOWS_CERTIFICATE_PASSWORD $env:BIN
-          if ($LASTEXITCODE -ne 0) { exit 1 }
-          & $st.FullName verify /pa $env:BIN
-          Remove-Item $pfx
-        env:
-          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-
       - name: Package
         run: |
           name="nemo-$VERSION-$TARGET"
           mkdir -p "dist/$name"
           cp "$BIN" "dist/$name/"
           if [ -n "${HELPER:-}" ]; then cp "$HELPER" "dist/$name/"; fi
-          cp LICENSE README.md "dist/$name/"
+          cp LICENSE NOTICE README.md "dist/$name/"
           cd dist || exit 1
           if [ "$EXT" = zip ]; then 7z a -tzip "$name.zip" "$name" >/dev/null; else tar -czf "$name.tar.gz" "$name"; fi
           ls -l
@@ -257,7 +214,7 @@ jobs:
         with:
           pattern: raw-*
           path: raw
-      - name: Generate and pack npm packages (publish is manual, see docs/RELEASE.md)
+      - name: Generate and pack npm packages (published by the npm-publish job)
         run: |
           node scripts/package-npm.mjs --version "$VERSION" --raw raw --out npm-out --require-all
           mkdir -p npm-tgz
@@ -282,16 +239,8 @@ jobs:
           pattern: "{archive-*,sbom,npm-tarballs}"
           path: assets
           merge-multiple: true
-      - name: Stamp the installers with the repository slug (packaging/REPO)
-        working-directory: assets
-        run: |
-          slug=$(tr -d '[:space:]' <../packaging/REPO)
-          printf '%s' "$slug" | grep -Eq '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' || { echo "::error::bad slug"; exit 1; }
-          for f in install.sh install.ps1; do
-            sed "s#@NEMO_REPO@#$slug#g" "../packaging/$f" >"$f"
-            if grep -q '@NEMO_REPO@' "$f"; then echo "::error::$f still has the placeholder"; exit 1; fi
-          done
-          chmod +x install.sh
+      - name: Add the installers
+        run: cp scripts/install.sh scripts/install.ps1 assets/
       - name: Checksums
         working-directory: assets
         run: |
@@ -311,9 +260,10 @@ jobs:
           path: assets/*
           if-no-files-found: error
 
-  # Only job with id-token/attestations. SHA256SUMS is attested too, so installers can authenticate it.
+  # Attestation job (npm-publish also has id-token, for npm provenance). SHA256SUMS is attested too, so installers can authenticate it.
   attest:
     needs: checksums
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -337,6 +287,7 @@ jobs:
 
   release:
     needs: [attest, version]
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -373,6 +324,7 @@ jobs:
   # Separate small job so publishing needs its own environment approval and re-verifies the draft before going public.
   publish:
     needs: release
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -395,3 +347,44 @@ jobs:
           [ "$draft" = true ] || { echo "::error::release $TAG is not a draft"; exit 1; }
           [ "$target" = "$GITHUB_SHA" ] || { echo "::error::draft targets '$target', expected $GITHUB_SHA"; exit 1; }
           gh release edit "$TAG" --draft=false
+
+  # Publishes the npm tarballs built above. Skips (green, with a log line) unless an npm credential is configured:
+  # secret NPM_TOKEN (granular, publish-only), or repo variable NEMO_NPM_TRUSTED_PUBLISHING=true once npm trusted publishing
+  # is set up for this repo + workflow file `release.yml` + environment `release` (then no token exists at all).
+  npm-publish:
+    needs: [publish, version]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write       # npm provenance + trusted publishing (OIDC)
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      PRE: ${{ needs.version.outputs.prerelease }}
+      HAVE_NPM_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
+      NPM_TRUSTED: ${{ vars.NEMO_NPM_TRUSTED_PUBLISHING }}
+    steps:
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"   # npm >= 11.5.1 is required for trusted publishing
+          registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-assets
+          path: assets
+      - name: npm publish --provenance (platform packages first, the main package last)
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ "$HAVE_NPM_TOKEN" != true ] && [ "$NPM_TRUSTED" != true ]; then
+            echo "SKIP npm publish: no NPM_TOKEN secret and NEMO_NPM_TRUSTED_PUBLISHING is not 'true' (docs/RELEASE.md, npm)"; exit 0
+          fi
+          # An empty NODE_AUTH_TOKEN would make npm try (and fail) token auth instead of OIDC.
+          if [ "$HAVE_NPM_TOKEN" != true ]; then unset NODE_AUTH_TOKEN; fi
+          tag=latest; [ "$PRE" = true ] && tag=next
+          main="assets/devonchain101-nemo-$VERSION.tgz"
+          [ -f "$main" ] || { echo "::error::$main missing"; exit 1; }
+          for f in assets/devonchain101-nemo-*-"$VERSION".tgz "$main"; do
+            npm publish "$f" --provenance --access public --tag "$tag"
+          done

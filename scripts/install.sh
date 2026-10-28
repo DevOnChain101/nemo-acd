@@ -1,17 +1,17 @@
 #!/bin/sh
 # Nemo installer (macOS, Linux). No sudo: installs to ~/.local/bin by default.
 #   NEMO_VERSION=0.1.0        version to install (default: latest release)
-#   NEMO_REPO=owner/repo      GitHub repository. The default is stamped in by release.yml from packaging/REPO;
-#                             an unstamped copy (or a value containing OWNER) refuses to run.
+#   NEMO_REPO=owner/repo      GitHub repository (default DevOnChain101/nemo-acd; scripts/check-placeholders.mjs keeps it equal to packaging/REPO)
 #   NEMO_INSTALL_DIR=DIR      default $HOME/.local/bin
 #   NEMO_BIN_NAME=nemo        name of the installed command (e.g. nemo-rs to coexist with the Node CLI)
-#   (default)                 requires `gh` and a passing `gh attestation verify` of SHA256SUMS (signer workflow + source ref v$version); no gh = refuse
-#   NEMO_SKIP_ATTESTATION=1   accept checksum-only (SHA256SUMS itself unauthenticated; a loud warning is printed)
+#   (default)                 with `gh` present, a failing `gh attestation verify` of SHA256SUMS (signer workflow + source ref v$version) aborts;
+#                             without `gh` only the checksum is checked and a warning says so
+#   NEMO_SKIP_ATTESTATION=1   skip the attestation check even when gh exists (warning printed)
 #   NEMO_DOWNLOAD_BASE=URL    override the download base URL (mirrors, tests); must be https://
 #   NEMO_INSECURE_DOWNLOAD_BASE_I_KNOW=1  allow a non-https NEMO_DOWNLOAD_BASE (tests only)
 set -eu
 
-REPO=${NEMO_REPO:-@NEMO_REPO@}
+REPO=${NEMO_REPO:-DevOnChain101/nemo-acd}
 DIR=${NEMO_INSTALL_DIR:-$HOME/.local/bin}
 NAME=${NEMO_BIN_NAME:-nemo}
 
@@ -20,8 +20,7 @@ need() { command -v "$1" >/dev/null 2>&1 || die "missing required tool: $1"; }
 need curl; need tar; need uname
 
 case $REPO in
-  *OWNER*) die "repository '$REPO' is the unreplaced placeholder; set NEMO_REPO=owner/repo" ;;
-  */*/*|*[!A-Za-z0-9_./-]*|/*|*/|'') die "bad repository '$REPO' (unstamped installer? set NEMO_REPO=owner/repo)" ;;
+  */*/*|*[!A-Za-z0-9_./-]*|/*|*/|'') die "bad repository '$REPO' (expected owner/repo)" ;;
   */*) ;;
   *) die "bad repository '$REPO'" ;;
 esac
@@ -85,7 +84,7 @@ elif command -v gh >/dev/null 2>&1; then
     || die "attestation verification of SHA256SUMS failed (not logged in to gh? set NEMO_SKIP_ATTESTATION=1 to accept checksum-only)"
   echo "attestation ok"
 else
-  die "gh (GitHub CLI) not found, so SHA256SUMS cannot be authenticated. Install gh (https://cli.github.com) and run 'gh auth login', or set NEMO_SKIP_ATTESTATION=1 to accept a checksum-only install"
+  echo "WARNING: gh (GitHub CLI) not found: SHA256SUMS was NOT authenticated, only the archive hash against it was checked. Install gh (https://cli.github.com), run 'gh auth login' and re-run for full verification." >&2
 fi
 
 tar -xzf "$tmp/$archive" -C "$tmp"
@@ -102,3 +101,5 @@ other=$(command -v "$NAME" 2>/dev/null || true)
 if [ -n "$other" ] && [ "$other" != "$DIR/$NAME" ]; then
   echo "warning: '$NAME' on PATH currently resolves to $other (Node CLI?). Put $DIR first or use NEMO_BIN_NAME." >&2
 fi
+echo "Running: $DIR/$NAME doctor"
+"$DIR/$NAME" doctor || echo "warning: '$NAME doctor' reported problems (exit $?)" >&2

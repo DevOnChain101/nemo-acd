@@ -10,20 +10,20 @@ curl --proto '=https' --tlsv1.2 -fsSL https://github.com/DevOnChain101/nemo-acd/
 
 Environment: `NEMO_VERSION` (must match `^[0-9A-Za-z.+-]+$`), `NEMO_REPO`, `NEMO_INSTALL_DIR` (default `~/.local/bin`), `NEMO_BIN_NAME` (default `nemo`), `NEMO_SKIP_ATTESTATION=1` (accept a checksum-only install; the default requires `gh`), `NEMO_DOWNLOAD_BASE` (must be https; `NEMO_INSECURE_DOWNLOAD_BASE_I_KNOW=1` allows others, tests only).
 
-Verification: all downloads use `curl --proto '=https' --tlsv1.2`. The archive's sha256 is checked against `SHA256SUMS`, and `SHA256SUMS` itself is checked with `gh attestation verify` (build provenance from `release.yml`) (also pinned to the `release.yml` workflow and the `refs/tags/v<version>` source ref); this requires `gh` installed and logged in. Without `gh` the installer **refuses** (exit 1) and explains how to install `gh`; `NEMO_SKIP_ATTESTATION=1` proceeds with a loud warning that only the checksum was checked (the checksum file then comes from the same server as the archive and proves integrity, not origin). The `install.sh` you pipe into `sh` is not covered by this: download it, read it, and verify it with `gh attestation verify install.sh --repo DevOnChain101/nemo-acd`. The installer copy in a release is stamped with the repository slug; a copy taken from the git tree refuses to run without `NEMO_REPO`. Prefer downloading `install.sh` first and reading it. musl systems get the x86_64 musl build when published.
+Verification: all downloads use `curl --proto '=https' --tlsv1.2`. The archive's sha256 is checked against `SHA256SUMS`. When `gh` is installed, `SHA256SUMS` itself is checked with `gh attestation verify` (build provenance from `release.yml`, pinned to that workflow and the `refs/tags/v<version>` source ref; needs `gh auth login`) and a failure aborts. Without `gh` the installer prints a warning and continues with the checksum only (the checksum file then comes from the same server as the archive and proves integrity, not origin); `NEMO_SKIP_ATTESTATION=1` does the same even when `gh` exists. After installing it runs `nemo doctor`. The `install.sh` you pipe into `sh` is not covered by this: download it, read it, and verify it with `gh attestation verify install.sh --repo DevOnChain101/nemo-acd`. Prefer downloading `install.sh` first and reading it. musl systems get the x86_64 musl build when published.
 
 ## 2. Windows
 
-`install.ps1` from the release (needs PowerShell 7+ (`pwsh`); same variables; `packaging/install.ps1` in the tree is unstamped and needs `$env:NEMO_REPO`, installs to `%LOCALAPPDATA%\Programs\Nemo`). Unsigned builds trigger SmartScreen until Authenticode signing is configured (docs/RELEASE.md).
+`install.ps1` from the release (needs PowerShell 7+ (`pwsh`); same variables and the same checksum/attestation behaviour; installs to `%LOCALAPPDATA%\Programs\Nemo` and runs `nemo doctor`). Binaries are not Authenticode-signed, so SmartScreen may warn; release provenance is the GitHub attestation. To test a dry-run build (docs/RELEASE.md, Dry run) without a release, unzip the `nemo-<version>-x86_64-pc-windows-msvc.zip` from the `release-assets` artifact and run `nemo.exe doctor`.
 
 ## 3. npm (any OS with Node >= 18)
 
 ```sh
-npm install -g nemo-acd
-nemo-acd --version
+npm install -g @devonchain101/nemo
+nemo --version
 ```
 
-`nemo-acd` is a small JS shim that resolves the platform package `nemo-acd-<os>-<arch>` (an optional dependency holding the binary) and runs it, forwarding the exit code and SIGTERM/SIGHUP/SIGQUIT. SIGINT is not forwarded because the terminal already sends Ctrl-C to the child. Do not install with `--omit=optional`/`--no-optional`; the shim then reports that no native binary was found. By default only the `nemo-acd` command is created so it cannot shadow the Node CLI's `nemo`.
+`@devonchain101/nemo` is a small JS shim that resolves the platform package `@devonchain101/nemo-<os>-<arch>` (an optional dependency holding the binary) and runs it, forwarding the exit code and SIGTERM/SIGHUP/SIGQUIT. SIGINT is not forwarded because the terminal already sends Ctrl-C to the child. Do not install with `--omit=optional`/`--no-optional`; the shim then reports that no native binary was found.
 
 ## 4. Manual
 
@@ -31,7 +31,7 @@ Download `nemo-<version>-<target>.tar.gz|zip` and `SHA256SUMS` from the release,
 
 ## 5. Homebrew / winget
 
-Templates only: `packaging/homebrew/nemo.rb.tmpl`, `packaging/winget/*.tmpl`. Not published. Fill `@REPO@` (owner/repo), `@REPO_OWNER@`, `@VERSION@` and the `@SHA256_*@` values from the release `SHA256SUMS`.
+Templates only: `packaging/homebrew/nemo.rb.tmpl`, `packaging/winget/*.tmpl`. Not published. Fill `@VERSION@` and the `@SHA256_*@` values from the release `SHA256SUMS`.
 
 ## Requirements and checks
 
@@ -42,4 +42,4 @@ Templates only: `packaging/homebrew/nemo.rb.tmpl`, `packaging/winget/*.tmpl`. No
 
 ## Uninstall
 
-Delete the binary (and `nemo-sandbox-exec`), or `npm rm -g nemo-acd`. State lives in `$NEMO_HOME` (default `~/.nemo`), which is shared with the Node CLI; remove it only if you want to drop sessions too.
+Delete the binary (and `nemo-sandbox-exec`), or `npm rm -g @devonchain101/nemo`. State lives in `$NEMO_HOME` (default `~/.nemo`), which is shared with the Node CLI; remove it only if you want to drop sessions too.

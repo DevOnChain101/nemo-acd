@@ -1,4 +1,5 @@
 # Release-tag allowlist, read by scripts/check-release-tag.sh from the tagged commit.
-# One tagger email per line (the address in the signed tag; GitHub verifies the signature against it).
-# FAIL CLOSED: with no entries (only comments/blank lines) every release is refused, unless the repository
-# variable NEMO_ALLOW_ANY_VERIFIED_TAGGER is exactly "true". Add maintainer emails BEFORE the first tag. See docs/RELEASE.md.
+# One tagger email per line: the user.email of the git identity that runs `git tag -s` (GitHub verifies the signature against it).
+# FAIL CLOSED: with no entries every release is refused, unless the repository variable NEMO_ALLOW_ANY_VERIFIED_TAGGER is exactly "true". See docs/RELEASE.md.
+# Owner DevOnChain101 (GitHub noreply form; set `git config user.email` to the same address before tagging, or add the address you do use):
+43412094+DevOnChain101@users.noreply.github.com

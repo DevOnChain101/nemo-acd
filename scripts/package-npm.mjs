@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Writes the npm packages for a release from already-built binaries.
-//   node scripts/package-npm.mjs --version 0.1.0 --raw <dir> --out <dir> [--name nemo-acd]
-//        [--bin-names nemo-acd[,nemo]] [--require-all]
+//   node scripts/package-npm.mjs --version 0.1.0 --raw <dir> --out <dir> [--name @devonchain101/nemo]
+//        [--bin-names nemo[,other]] [--require-all]
 // <dir> holds one subdirectory per Rust target (optionally prefixed "raw-"), each with `nemo[.exe]`
 // and, on Linux, `nemo-sandbox-exec`. Only targets that are present are emitted (and listed in
 // optionalDependencies); --require-all fails unless the 5 release-gating targets are present.
@@ -14,9 +14,9 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const { values: a } = parseArgs({
   options: {
     version: { type: "string" }, raw: { type: "string" }, out: { type: "string" },
-    name: { type: "string", default: "nemo-acd" },
+    name: { type: "string", default: "@devonchain101/nemo" },
     repo: { type: "string" }, // owner/repo; default: packaging/REPO (the single source, scripts/check-placeholders.mjs --set)
-    "bin-names": { type: "string", default: "" }, // default: same as --name. Add "nemo" only if the Node CLI is gone.
+    "bin-names": { type: "string", default: "nemo" }, // default: "nemo" (the Node CLI is retired)
     "require-all": { type: "boolean", default: false },
   },
 });
@@ -34,12 +34,12 @@ const TARGETS = {
   "aarch64-pc-windows-msvc": ["win32-arm64", "win32", "arm64"],
 };
 const REQUIRED = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu", "x86_64-pc-windows-msvc"];
-const binNames = (a["bin-names"] || a.name).split(",");
+const binNames = a["bin-names"].split(",");
 const slug = (a.repo ?? readFileSync(join(root, "packaging/REPO"), "utf8")).trim();
 if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(slug) || /\bOWNER\b/.test(slug))
   throw new Error(`repository slug ${JSON.stringify(slug)} is a placeholder or malformed; run scripts/check-placeholders.mjs --set <owner>/<repo>`);
 const repo = `https://github.com/${slug}`;
-const common = { version: a.version, license: "MIT", repository: { type: "git", url: `git+${repo}.git` }, homepage: repo };
+const common = { version: a.version, license: "Apache-2.0", publishConfig: { access: "public", provenance: true }, repository: { type: "git", url: `git+${repo}.git` }, homepage: repo };
 
 rmSync(a.out, { recursive: true, force: true });
 const optional = {};
@@ -49,7 +49,7 @@ for (const [target, [suffix, os, cpu, libc]] of Object.entries(TARGETS)) {
   const exe = os === "win32" ? "nemo.exe" : "nemo";
   if (!src || !existsSync(join(src, exe))) { if (REQUIRED.includes(target)) missing.push(target); continue; }
   const name = `${a.name}-${suffix}`;
-  const dir = join(a.out, name);
+  const dir = join(a.out, name.split("/").pop()); // scoped names: no nested @scope dir
   mkdirSync(join(dir, "bin"), { recursive: true });
   for (const f of readdirSync(src)) {
     copyFileSync(join(src, f), join(dir, "bin", f));
@@ -57,25 +57,25 @@ for (const [target, [suffix, os, cpu, libc]] of Object.entries(TARGETS)) {
   }
   if (os === "linux" && !existsSync(join(dir, "bin", "nemo-sandbox-exec")))
     throw new Error(`${target}: nemo-sandbox-exec missing (Landlock backend requires it next to nemo)`);
-  for (const f of ["LICENSE", "README.md"]) copyFileSync(join(root, f), join(dir, f));
+  for (const f of ["LICENSE", "NOTICE", "README.md"]) copyFileSync(join(root, f), join(dir, f));
   writeFileSync(join(dir, "package.json"), JSON.stringify({
     name, ...common, description: `Nemo native binary for ${suffix}`, os: [os], cpu: [cpu],
-    ...(libc ? { libc: [libc] } : {}), files: ["bin", "LICENSE", "README.md"],
+    ...(libc ? { libc: [libc] } : {}), files: ["bin", "LICENSE", "NOTICE", "README.md"],
   }, null, 2) + "\n");
   optional[name] = a.version;
 }
 if (a["require-all"] && missing.length) throw new Error(`missing required targets: ${missing.join(", ")}`);
 if (!Object.keys(optional).length) throw new Error(`no binaries found under ${a.raw}`);
 
-const main = join(a.out, a.name);
+const main = join(a.out, a.name.split("/").pop());
 mkdirSync(join(main, "bin"), { recursive: true });
 copyFileSync(join(root, "packaging/npm/bin/nemo.js"), join(main, "bin/nemo.js"));
 chmodSync(join(main, "bin/nemo.js"), 0o755);
-for (const f of ["LICENSE", "README.md"]) copyFileSync(join(root, f), join(main, f));
+for (const f of ["LICENSE", "NOTICE", "README.md"]) copyFileSync(join(root, f), join(main, f));
 writeFileSync(join(main, "package.json"), JSON.stringify({
   name: a.name, ...common, description: "Nemo autonomous coding agent (native binary, installed via platform packages)",
   bin: Object.fromEntries(binNames.map((n) => [n, "bin/nemo.js"])),
-  files: ["bin", "LICENSE", "README.md"], engines: { node: ">=18" },
+  files: ["bin", "LICENSE", "NOTICE", "README.md"], engines: { node: ">=18" },
   optionalDependencies: optional, nemo: { platformPrefix: a.name },
 }, null, 2) + "\n");
 console.log(`wrote ${Object.keys(optional).length + 1} packages to ${a.out}: ${[a.name, ...Object.keys(optional)].join(", ")}`);

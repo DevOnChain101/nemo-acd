@@ -9,13 +9,13 @@ Status: **pre-1.0 (0.1.0 draft)**. See [Status and limitations](#status-and-limi
 Pick one (details in [docs/INSTALL.md](docs/INSTALL.md)):
 
 ```sh
-# macOS / Linux: checksum + provenance verified (needs gh, else refuses), no sudo, installs to ~/.local/bin
+# macOS / Linux: checksum + provenance verified (provenance needs gh, else checksum only with a warning), no sudo, installs to ~/.local/bin
 curl --proto '=https' --tlsv1.2 -fsSL https://github.com/DevOnChain101/nemo-acd/releases/latest/download/install.sh | sh
 # any OS with Node >= 18: native binary via platform packages
-npm install -g nemo-acd        # installs the command `nemo-acd`
+npm install -g @devonchain101/nemo   # installs the command `nemo`
 ```
 
-Windows: `packaging/install.ps1`. Release archives, SHA256SUMS and build provenance are on the GitHub Releases page. (`DevOnChain101/nemo-acd` is replaced by `node scripts/check-placeholders.mjs --set <owner>/<repo>`; releases refuse to run until then.)
+Windows (PowerShell 7+): `irm https://github.com/DevOnChain101/nemo-acd/releases/latest/download/install.ps1 | iex`. Release archives, SHA256SUMS and build provenance are on the GitHub Releases page. License: Apache-2.0.
 
 ## Quick start
 

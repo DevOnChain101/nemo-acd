@@ -4,11 +4,15 @@
 # Optional: MAINTAINERS (default .github/release-maintainers.txt; one tagger email per line, # comments).
 # FAIL CLOSED: a missing or entry-less allowlist fails unless NEMO_ALLOW_ANY_VERIFIED_TAGGER is exactly "true"
 # (repository variable, an explicit owner decision: then any GitHub-verified tagger passes).
-# Checks: annotated tag; refs/tags/$TAG^{commit} == $GITHUB_SHA; API tag object has verified signature, name == $TAG,
+# Checks: tag name vX.Y.Z[-pre]; commit reachable from main (API compare); annotated tag; refs/tags/$TAG^{commit} == $GITHUB_SHA; API tag object has verified signature, name == $TAG,
 # points at $GITHUB_SHA, and is what the API ref resolves to; tagger email in the allowlist when one exists.
 set -euo pipefail
 : "${TAG:?}" "${REPO:?}" "${GITHUB_SHA:?}"
 fail() { echo "::error::$*"; exit 1; }
+[[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || fail "tag name '$TAG' is not vX.Y.Z"
+# 'behind'/'identical' = the tagged commit is an ancestor of (or is) main. Works on shallow checkouts.
+status=$(gh api "repos/$REPO/compare/main...$GITHUB_SHA" --jq .status) || fail "cannot compare $GITHUB_SHA with main"
+case "$status" in behind|identical) ;; *) fail "commit $GITHUB_SHA is not on main (compare status: $status)" ;; esac
 
 # Checkout may not persist credentials: pass the token as a header for this one command only (never written to .git/config).
 auth=()

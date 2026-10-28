@@ -285,7 +285,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - run: shellcheck -S warning packaging/install.sh scripts/*.sh
+      - run: shellcheck -S warning scripts/*.sh
       - name: Tracked paths are portable to Windows
         run: node scripts/check-portable-paths.mjs
       - name: Release tag policy tests (local origin + stub gh)
