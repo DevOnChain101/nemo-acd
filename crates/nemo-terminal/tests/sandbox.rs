@@ -105,6 +105,38 @@ async fn unsupported_wrap_degrades_in_best_effort_but_enforce_refuses() {
 }
 
 #[tokio::test]
+async fn best_effort_degrades_to_next_backend_then_unconfined_enforce_stays_on_first() {
+    let chain = || -> Vec<Arc<dyn SandboxBackend>> {
+        vec![Arc::new(NoWrap), Arc::new(Fake(Guarantee::Weak))]
+    };
+    let rt = TerminalRuntime::new(SandboxMode::BestEffort).with_sandbox_chain(chain());
+    let _f = open(&rt, Some(SandboxPolicy::default()));
+    let r = run(&rt, ExecSpec::new("true")).await;
+    assert!(
+        r.sandbox.is_some() && !r.unsandboxed_by_request,
+        "second backend confines"
+    );
+    let rt = TerminalRuntime::new(SandboxMode::BestEffort)
+        .with_sandbox_chain(vec![Arc::new(NoWrap), Arc::new(NoWrap)]);
+    let _f = open(&rt, Some(SandboxPolicy::default()));
+    let r = run(&rt, ExecSpec::new("true")).await;
+    assert!(
+        r.sandbox.is_none() && r.unsandboxed_by_request,
+        "all failed: unconfined"
+    );
+    let rt = TerminalRuntime::new(SandboxMode::Enforce).with_sandbox_chain(chain());
+    let _f = open(&rt, Some(SandboxPolicy::default()));
+    let err = rt
+        .exec(SID, ExecSpec::new("true"), &CancellationToken::new())
+        .await
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("landlock only"),
+        "precise reason: {err}"
+    );
+}
+
+#[tokio::test]
 async fn enforce_refuses_loopback_the_backend_cannot_honour() {
     // Fake keeps the trait default: Deny = capabilities().network, Loopback = unsupported.
     let rt = TerminalRuntime::new(SandboxMode::Enforce)

@@ -1,7 +1,7 @@
-# Golden fixtures (captured from the Node reference)
+# Golden fixtures (regression snapshots of the Node prototype)
 
-Spec: `docs/specs/eval-and-golden.md` section B. The Node CLI (`~/Vibe/nemo-cli`, read-only) is the oracle; these files
-are the spec the Rust port must reproduce. Layout: `tests/golden/<area>/<case_id>/{input.json,expected.json,meta.json}`.
+Spec: `docs/specs/eval-and-golden.md` section B. The Node CLI (`~/Vibe/nemo-cli`, read-only) is the capture source, not an authority: these files are
+regression snapshots of its behaviour, approved by the owner on 2026-10-29. A divergence is a decision to record (allow-list + reason), not automatically a Rust bug. Layout: `tests/golden/<area>/<case_id>/{input.json,expected.json,meta.json}`.
 
 ## Regenerate
 
@@ -65,7 +65,7 @@ Error results are `{ "error": { name, code, message } }`, successful config/pars
 ## How Rust tests load them
 
 Walk `tests/golden/<area>/*/`, read `input.json`, dispatch on `op` (or the area default), build the Rust result, serialize with the same
-normalisation, compare to `expected.json` as JSON values (not text). A case only counts once `meta.json.reviewed_by` is set. Fields in `meta.json`:
+normalisation, compare to `expected.json` as JSON values (not text). Every case is owner-reviewed (`reviewed_by` = `owner:DevOnChain101 2026-10-29 (regression snapshot, Node prototype not authoritative)`); `capture.js` preserves an existing `reviewed_by` per case on re-capture (a new case starts as `null` until reviewed). Fields in `meta.json`:
 `source`, `ref_version`, `ref_tree_sha256` (over sorted relative paths + contents of `src/` and `bin/`), `node`, `platform`, `captured_at`, `reviewed_by`, optional `note`.
 Cases with a `note` flag a known Node quirk or platform dependency.
 

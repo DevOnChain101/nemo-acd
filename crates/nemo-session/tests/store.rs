@@ -969,3 +969,35 @@ fn recover_kills_a_real_orphan_only_when_the_start_time_matches() {
     assert!(child.wait().is_ok());
     assert!(nemo_session::process_start_time(pid).is_none());
 }
+
+/// A concurrent fork/exec elsewhere in the process briefly inherits an open lock fd, so a lock
+/// released by `drop` can still look held for a moment. Reopening right after drop must succeed.
+#[test]
+fn reopen_after_drop_survives_concurrent_spawns() {
+    let e = env();
+    let d = e.dir("p");
+    let store = e.store();
+    drop(
+        store
+            .create_session(new_session(Some("s1"), &ws(&d)))
+            .unwrap(),
+    );
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let spawners: Vec<_> = (0..8)
+        .map(|_| {
+            let stop = stop.clone();
+            std::thread::spawn(move || {
+                while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+                    let _ = std::process::Command::new("true").status();
+                }
+            })
+        })
+        .collect();
+    for _ in 0..500 {
+        drop(store.resume_session("s1", true).unwrap());
+    }
+    stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    for s in spawners {
+        s.join().unwrap();
+    }
+}

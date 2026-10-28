@@ -377,6 +377,8 @@ fn spawn_reader(mut input: Box<dyn Read + Send>, tx: crate::link::Tx) {
         let mut buf = [0u8; 4096];
         loop {
             match input.read(&mut buf) {
+                // A signal interrupting the read is not the end of the input.
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
                 Ok(0) | Err(_) => {
                     let _ = tx.send(Msg::InputClosed);
                     return;

@@ -53,6 +53,16 @@ pub struct LandlockRule {
     pub write: bool,
 }
 
+/// Landlock cannot protect a path that a command may create later either, so the policy is still
+/// refused; say so instead of implying the path exists.
+fn not_yet(p: &Path) -> &'static str {
+    if p.exists() {
+        ""
+    } else {
+        " (not present now; a command could create it)"
+    }
+}
+
 /// Pure policy -> Landlock rule translation (portable, unit-testable anywhere).
 pub fn landlock_rules(policy: &SandboxPolicy) -> Result<Vec<LandlockRule>, SandboxError> {
     validate(policy)?;
@@ -60,7 +70,8 @@ pub fn landlock_rules(policy: &SandboxPolicy) -> Result<Vec<LandlockRule>, Sandb
     for d in &policy.deny_paths {
         if roots.clone().any(|r| d.starts_with(r) || r.starts_with(d)) {
             return Err(SandboxError::Unsupported(format!(
-                "Landlock cannot deny {d:?}: it overlaps an allowed root"
+                "Landlock cannot deny {d:?}: it overlaps an allowed root{}",
+                not_yet(d)
             )));
         }
     }
@@ -69,7 +80,8 @@ pub fn landlock_rules(policy: &SandboxPolicy) -> Result<Vec<LandlockRule>, Sandb
     for d in &policy.readonly_paths {
         if writable().any(|r| d.starts_with(r) || r.starts_with(d)) {
             return Err(SandboxError::Unsupported(format!(
-                "Landlock cannot make {d:?} read-only: it overlaps a writable root"
+                "Landlock cannot make {d:?} read-only: it overlaps a writable root{}",
+                not_yet(d)
             )));
         }
     }
@@ -209,17 +221,116 @@ impl LinuxLandlockBackend {
     }
 }
 
+/// Usable Linux backends, best first: bubblewrap (only if its probe passed), then Landlock.
 #[cfg(target_os = "linux")]
-pub(crate) fn detect_linux() -> Option<Box<dyn SandboxBackend>> {
+pub(crate) fn detect_linux() -> Vec<Box<dyn SandboxBackend>> {
+    let mut v: Vec<Box<dyn SandboxBackend>> = vec![];
     // Test hook: simulate a host where only Landlock works (e.g. Ubuntu 24.04 with userns blocked).
     #[cfg(all(feature = "test-backend", debug_assertions))]
-    if std::env::var_os("NEMO_TEST_FORCE_BACKEND").is_some_and(|v| v == "landlock-only") {
-        return LinuxLandlockBackend::detect().map(|b| Box::new(b) as Box<dyn SandboxBackend>);
+    let skip_bwrap =
+        std::env::var_os("NEMO_TEST_FORCE_BACKEND").is_some_and(|v| v == "landlock-only");
+    #[cfg(not(all(feature = "test-backend", debug_assertions)))]
+    let skip_bwrap = false;
+    if !skip_bwrap {
+        v.extend(BwrapBackend::detect().map(|b| Box::new(b) as Box<dyn SandboxBackend>));
     }
-    if let Some(b) = BwrapBackend::detect() {
-        return Some(Box::new(b));
+    v.extend(LinuxLandlockBackend::detect().map(|b| Box::new(b) as Box<dyn SandboxBackend>));
+    v
+}
+
+/// Why a Linux backend that exists on this host is not selected (empty when none is skipped).
+pub fn skipped_backends() -> Vec<String> {
+    #[cfg(target_os = "linux")]
+    if let Err(e) = bwrap_probe() {
+        return vec![e.clone()];
     }
-    LinuxLandlockBackend::detect().map(|b| Box::new(b) as Box<dyn SandboxBackend>)
+    vec![]
+}
+
+static BWRAP_PROBE: std::sync::OnceLock<Result<PathBuf, String>> = std::sync::OnceLock::new();
+
+/// Cached per process: a trusted `bwrap` that really runs `true` with the argument set used for
+/// commands, or the precise failure with a suggested remedy.
+pub fn bwrap_probe() -> &'static Result<PathBuf, String> {
+    BWRAP_PROBE.get_or_init(probe_bwrap)
+}
+
+fn probe_bwrap() -> Result<PathBuf, String> {
+    let tru = TRUE_CANDIDATES
+        .iter()
+        .map(Path::new)
+        .find(|p| p.is_file())
+        .ok_or("bubblewrap not usable: no /usr/bin/true or /bin/true for the probe")?;
+    let found: Vec<_> = BWRAP_CANDIDATES
+        .iter()
+        .map(PathBuf::from)
+        .filter(|p| trusted_file(p))
+        .collect();
+    // /bin -> /usr/bin on merged-usr systems: probe (and report) each real binary once.
+    let mut seen = vec![];
+    let found: Vec<_> = found
+        .into_iter()
+        .filter(|p| {
+            let real = std::fs::canonicalize(p).unwrap_or_else(|_| p.clone());
+            !seen.contains(&real) && {
+                seen.push(real);
+                true
+            }
+        })
+        .collect();
+    if found.is_empty() {
+        return Err("bubblewrap not found at a trusted absolute path (/usr/bin/bwrap, ...); install it (e.g. `apt install bubblewrap`)".into());
+    }
+    let cmd = SandboxedCommand {
+        program: tru.into(),
+        ..Default::default()
+    };
+    // Exactly the arguments commands get (user/pid/ipc/net namespaces, /proc, /dev, tmpfs).
+    let args = BwrapBackend::args(&SandboxPolicy::default(), &cmd);
+    let mut errs = vec![];
+    for path in found {
+        match std::process::Command::new(&path)
+            .env_clear()
+            .args(&args)
+            .output()
+        {
+            Ok(o) if o.status.success() => return Ok(path),
+            Ok(o) => errs.push(probe_failure(&path, &String::from_utf8_lossy(&o.stderr))),
+            Err(e) => errs.push(format!(
+                "bubblewrap not usable: cannot run {}: {e}",
+                path.display()
+            )),
+        }
+    }
+    Err(errs.join("; "))
+}
+
+/// Pure: the probe's stderr -> reason plus remedy.
+pub(crate) fn probe_failure(path: &Path, stderr: &str) -> String {
+    // First line, without Debian's trailing "See <url> or <url>" pointer.
+    let e = stderr
+        .lines()
+        .next()
+        .unwrap_or("")
+        .split(" See <")
+        .next()
+        .unwrap_or("")
+        .trim();
+    let remedy = if e.contains("mount proc") {
+        "/proc is masked, as inside Docker: start the container with `--security-opt systempaths=unconfined` (and a seccomp profile or `--cap-add SYS_ADMIN` that allows mount), or use --sandbox best-effort|off"
+    } else if e.contains("namespace")
+        || e.contains("uid map")
+        || e.contains("Operation not permitted")
+    {
+        "unprivileged user namespaces are blocked: Ubuntu 24.04: `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` or an AppArmor profile for bwrap; Debian: `sudo sysctl -w kernel.unprivileged_userns_clone=1`; Docker: the default seccomp profile blocks it; or use --sandbox best-effort|off"
+    } else {
+        "run the bwrap command by hand to see why, or use --sandbox best-effort|off"
+    };
+    format!(
+        "bubblewrap not usable: {} failed its probe: {}; remedy: {remedy}",
+        path.display(),
+        if e.is_empty() { "(no output)" } else { e }
+    )
 }
 
 impl SandboxBackend for LinuxLandlockBackend {
@@ -299,26 +410,12 @@ pub struct BwrapBackend {
 }
 
 impl BwrapBackend {
-    /// Some only if a trusted `bwrap` exists at one of `BWRAP_CANDIDATES` AND can create the
-    /// namespaces it needs (probed by running that exact binary with an empty environment).
+    /// Some only if a trusted `bwrap` passed the cached [`bwrap_probe`].
     pub fn detect() -> Option<Self> {
-        let tru = TRUE_CANDIDATES
-            .iter()
-            .map(Path::new)
-            .find(|p| p.is_file())?;
-        BWRAP_CANDIDATES
-            .iter()
-            .map(PathBuf::from)
-            .filter(|p| trusted_file(p))
-            .find(|path| {
-                std::process::Command::new(path)
-                    .env_clear()
-                    .args(["--ro-bind", "/", "/", "--unshare-net", "--unshare-pid"])
-                    .arg(tru)
-                    .output()
-                    .is_ok_and(|o| o.status.success())
-            })
-            .map(|path| Self { path })
+        bwrap_probe()
+            .as_ref()
+            .ok()
+            .map(|path| Self { path: path.clone() })
     }
 
     pub(crate) fn args(policy: &SandboxPolicy, cmd: &SandboxedCommand) -> Vec<std::ffi::OsString> {
@@ -464,6 +561,56 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn probe_failure_names_reason_and_remedy() {
+        let b = Path::new("/usr/bin/bwrap");
+        let docker = probe_failure(
+            b,
+            "bwrap: Can't mount proc on /newroot/proc: Operation not permitted\n",
+        );
+        assert!(docker.contains("Can't mount proc") && docker.contains("systempaths=unconfined"));
+        let ns = probe_failure(b, "bwrap: No permissions to create new namespace");
+        assert!(
+            ns.contains("apparmor_restrict_unprivileged_userns=0"),
+            "{ns}"
+        );
+        assert!(probe_failure(b, "").contains("(no output)"));
+    }
+
+    #[test]
+    fn probe_runs_the_command_argument_set() {
+        let c = SandboxedCommand {
+            program: "/bin/true".into(),
+            ..Default::default()
+        };
+        let j = BwrapBackend::args(&SandboxPolicy::default(), &c)
+            .iter()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+            .join(" ");
+        for f in [
+            "--unshare-pid",
+            "--unshare-net",
+            "--proc /proc",
+            "--dev /dev",
+            "--tmpfs /tmp",
+            "--ro-bind / /",
+        ] {
+            assert!(j.contains(f), "{f} in {j}");
+        }
+    }
+
+    #[test]
+    fn landlock_message_only_claims_existing_paths() {
+        let pol = SandboxPolicy {
+            writable_roots: vec![p("/nemo-nonexistent-ws")],
+            readonly_paths: vec![p("/nemo-nonexistent-ws/.git/hooks")],
+            ..Default::default()
+        };
+        let e = landlock_rules(&pol).unwrap_err().to_string();
+        assert!(e.contains("not present now"), "{e}");
     }
 
     #[test]

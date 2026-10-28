@@ -754,6 +754,12 @@ mod signals {
                 std::thread::sleep(Duration::from_millis(10));
             }
         }
+        /// The first frame is on screen: the guard (SIGHUP/SIGTERM handlers) and the SIGINT
+        /// watcher are installed before it is drawn, so signalling earlier is the test's race.
+        fn ready(&self) {
+            self.wait_for("MISSION CONTROL"); // the title is set when the screen is entered
+            self.wait_for("sandbox: unknown");
+        }
         fn signal(&self, name: &str) {
             let st = Command::new("kill")
                 .arg(format!("-{name}"))
@@ -767,8 +773,7 @@ mod signals {
     #[test]
     fn sigterm_restores_the_terminal_and_the_exit_status_stays_killed_by_signal() {
         let mut c = spawn_child("term");
-        c.wait_for("MISSION CONTROL"); // the title is set when the screen is entered
-        c.wait_for("sandbox: unknown");
+        c.ready();
         c.signal("TERM");
         let st = c.child.wait().unwrap();
         assert_eq!(
@@ -786,7 +791,7 @@ mod signals {
     #[test]
     fn sighup_restores_the_terminal() {
         let mut c = spawn_child("hup");
-        c.wait_for("sandbox: unknown");
+        c.ready();
         c.signal("HUP");
         let st = c.child.wait().unwrap();
         assert_eq!(st.signal(), Some(1));
@@ -796,7 +801,7 @@ mod signals {
     #[test]
     fn sigint_is_a_ctrl_c_first_arms_second_quits() {
         let mut c = spawn_child("int");
-        c.wait_for("sandbox: unknown");
+        c.ready();
         c.signal("INT");
         c.wait_for("press ctrl+c again to quit");
         c.signal("INT");

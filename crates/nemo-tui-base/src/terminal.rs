@@ -54,9 +54,6 @@ impl TerminalGuard {
     /// Enables raw mode (if asked) and arms the restore paths. `out` receives the restore
     /// sequence; pass the same terminal the [`crate::screen::Screen`] draws on.
     pub fn enter(out: impl Write + Send + 'static, opts: GuardOptions) -> io::Result<Self> {
-        if opts.raw_mode {
-            crossterm::terminal::enable_raw_mode()?;
-        }
         let inner = Arc::new(Inner {
             out: Mutex::new(Box::new(out)),
             raw: opts.raw_mode,
@@ -78,6 +75,9 @@ impl TerminalGuard {
             prev(info);
         }));
 
+        // Handlers first, raw mode second: a SIGHUP/SIGTERM that lands between the two must find
+        // a handler (restore is a no-op on a terminal that is not raw yet), never the default
+        // action on a terminal already switched to raw mode.
         #[cfg(unix)]
         let signals = {
             use signal_hook::consts::{SIGHUP, SIGTERM};
@@ -94,6 +94,14 @@ impl TerminalGuard {
             });
             handle
         };
+
+        if opts.raw_mode
+            && let Err(e) = crossterm::terminal::enable_raw_mode()
+        {
+            #[cfg(unix)]
+            signals.close();
+            return Err(e);
+        }
 
         Ok(Self {
             inner,

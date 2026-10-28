@@ -20,6 +20,7 @@ use nemo_tools::{
 };
 use nemo_verification::{
     Check, CheckAuth, CheckAuthorizer, CheckKind, DEFAULT_TIMEOUT_MS, Declarer, NEEDS_APPROVAL,
+    is_verification_command,
 };
 use serde_json::{Value, json};
 
@@ -91,6 +92,15 @@ impl CheckAuthorizer for GateAuth<'_> {
                 .authorize_check(self.task, self.agent, check, &self.denied),
         )
     }
+}
+
+/// A harness-inferred check that is a recognised verification command runs without an explicit
+/// allow in `default` and `acceptEdits` (verification.md §4.3). Only an `ask` is lifted: deny
+/// rules and protected paths still block, and the runner still sandboxes the command.
+fn trusted_inferred(c: &Check, cmd: &str, mode: Mode) -> bool {
+    c.declared_by == Declarer::Harness
+        && matches!(mode, Mode::Default | Mode::AcceptEdits)
+        && is_verification_command(cmd)
 }
 
 /// `Bash(cargo test:*)` for each rule a suggestion would add. Edit tools offer a mode, not a
@@ -822,8 +832,10 @@ impl Harness {
         let mode = *lock(&agent.mode);
         let mut verdict = lock(&agent.perms).check("Bash", &input, mode);
         let headless = verdict.reason.starts_with("non-interactive");
+        let was_ask = verdict.decision == Decision::Ask || headless;
         match verdict.decision {
             Decision::Allow => return CheckAuth::Allow,
+            _ if was_ask && trusted_inferred(c, cmd, mode) => return CheckAuth::Allow,
             Decision::Ask | Decision::Deny if lock(denied).contains(cmd) => {
                 return CheckAuth::Blocked("denied by the user".into());
             }
@@ -879,7 +891,9 @@ impl Harness {
         let mode = *lock(&agent.mode);
         let asks: Vec<&str> = checks
             .iter()
-            .filter_map(|c| c.command.as_deref())
+            .filter_map(|c| c.command.as_deref().map(|cmd| (c, cmd)))
+            .filter(|(c, cmd)| !trusted_inferred(c, cmd, mode))
+            .map(|(_, cmd)| cmd)
             .filter(|cmd| {
                 let v = lock(&agent.perms).check("Bash", &json!({ "command": cmd }), mode);
                 v.decision == Decision::Ask

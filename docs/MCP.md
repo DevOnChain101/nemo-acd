@@ -29,6 +29,51 @@ User scope lives in `<NEMO_HOME>/nemo.json` under `mcpServers`; project scope in
 
 Atlassian's remote server uses OAuth, which Nemo does not implement. Run it through `mcp-remote` as a stdio server (it opens the browser login itself and keeps its own tokens), as above, or supply a Bearer token from an environment variable: `"headers": {"Authorization": "Bearer ${ATLASSIAN_TOKEN}"}`.
 
+## Authentication recipes
+
+Nemo has one generic MCP client; authentication is configuration, not provider-specific code. No recipe below contains a real credential: put the secret in an environment variable and reference it as `${VAR}`. A user-scope entry may only read variables listed in `nemo.mcp.env_passthrough` (user `settings.json`), so list each one:
+
+```json
+{ "nemo": { "mcp": { "env_passthrough": ["JENKINS_BASIC", "GITLAB_PAT", "ATLASSIAN_BASIC", "MCP_TOKEN"] } } }
+```
+
+An unset or empty variable makes the server fail to start with a message naming it; it never starts unauthenticated. `nemo mcp test NAME` shows which headers/env apply (names only) and which principal the server reports.
+
+**OAuth is not implemented by Nemo (ADR-011).** For a server that only offers an OAuth login, use the provider's own package as a stdio server (for example `mcp-remote`); it opens the browser and keeps its own tokens.
+
+**Jenkins** (username + API token). Basic auth is `base64(user:token)`; compute it outside Nemo, so the token never appears in a config file:
+
+```
+export JENKINS_BASIC=$(printf '%s' "ci-bot:$JENKINS_API_TOKEN" | base64)
+```
+```json
+{ "mcpServers": { "jenkins": { "type": "http", "url": "https://jenkins.example.com/mcp-server/mcp",
+  "headers": { "Authorization": "Basic ${JENKINS_BASIC}" } } } }
+```
+
+**GitLab** (Personal Access Token), either header form:
+
+```json
+{ "mcpServers": { "gitlab": { "type": "http", "url": "https://gitlab.example.com/api/v4/mcp",
+  "headers": { "PRIVATE-TOKEN": "${GITLAB_PAT}" } } } }
+```
+```json
+{ "headers": { "Authorization": "Bearer ${GITLAB_PAT}" } }
+```
+
+**Atlassian.** Cloud API token: Basic with `email:token` (`export ATLASSIAN_BASIC=$(printf '%s' "you@example.com:$ATLASSIAN_API_TOKEN" | base64)`, header `"Authorization": "Basic ${ATLASSIAN_BASIC}"`). Data Center personal access token: `"Authorization": "Bearer ${ATLASSIAN_PAT}"`. Atlassian's OAuth remote server: `mcp-remote` (see above).
+
+**Generic Bearer:** `"headers": { "Authorization": "Bearer ${MCP_TOKEN}" }`. Any other scheme or header (`X-Api-Key`, `Cookie`) works the same way. Headers go only to the configured origin.
+
+**stdio servers with credentials in env:** the server's own `env` map is the opt-in path (names like `JIRA_API_TOKEN` are passed as written; the parent's other secrets never are):
+
+```json
+{ "mcpServers": { "jira": { "command": "npx", "args": ["-y", "some-jira-mcp"],
+  "env": { "JIRA_USERNAME": "you@example.com", "JIRA_API_TOKEN": "${JIRA_API_TOKEN}" } } } }
+```
+
+The Jenkins, GitLab, Bearer and custom-header shapes are covered by simulated-server tests (`crates/nemo-mcp/tests/identity.rs`); no real Jenkins, GitLab or Atlassian server was contacted.
+
 ## Safe updates (read-before-write guard)
 
 Update tools of servers like Confluence/Jira replace what they are sent. Nemo therefore refuses to send a write to an MCP tool until the same task has read that resource (page id, issue key, uri) through a read tool of the same server, and refuses again after a write until it is re-read. The model gets a normal tool error telling it to fetch, merge, retry. If the update would drop more than 30 % of the fetched text or a heading, or the tool is destructive, a person must approve it (headless runs refuse).

@@ -9,7 +9,7 @@ mod types;
 mod weaken;
 
 pub use gate::*;
-pub use plan::{detect_checks, plan_checks};
+pub use plan::{detect_checks, is_verification_command, plan_checks};
 pub use runner::{CheckAuth, CheckAuthorizer, NEEDS_APPROVAL, VerifyRunner};
 pub use testout::parse_counts;
 pub use types::*;

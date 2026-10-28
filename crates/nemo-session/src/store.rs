@@ -148,7 +148,7 @@ fn connect(home: &Path, read_only: bool) -> Result<Connection> {
     } else {
         Connection::open(&path)?
     };
-    conn.busy_timeout(Duration::from_millis(5000))?;
+    conn.busy_timeout(Duration::from_millis(2000))?;
     conn.pragma_update(None, "foreign_keys", true)?;
     if !read_only {
         let mode: String = conn.query_row("PRAGMA journal_mode", [], |r| r.get(0))?;
@@ -1024,10 +1024,18 @@ fn lock_session(home: &Path, id: &str) -> Result<File> {
     private_dir(&dir)?;
     let f = private_file(OpenOptions::new().create(true).truncate(false).write(true))
         .open(dir.join("lock"))?;
-    match f.try_lock() {
-        Ok(()) => Ok(f),
-        Err(fs::TryLockError::WouldBlock) => Err(Error::Locked(id.to_string())),
-        Err(fs::TryLockError::Error(e)) => Err(e.into()),
+    // A concurrent fork/exec in this process can hold a copy of a just-released lock fd until
+    // its exec, so a "held" answer is retried briefly before it is believed.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(2000);
+    loop {
+        match f.try_lock() {
+            Ok(()) => return Ok(f),
+            Err(fs::TryLockError::WouldBlock) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            Err(fs::TryLockError::WouldBlock) => return Err(Error::Locked(id.to_string())),
+            Err(fs::TryLockError::Error(e)) => return Err(e.into()),
+        }
     }
 }
 

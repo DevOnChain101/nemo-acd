@@ -86,6 +86,45 @@ pub fn detect_checks(dir: &Path) -> Vec<Check> {
     out
 }
 
+/// A recognised verification invocation: one plain command (no shell syntax) that only builds,
+/// lints or tests. The harness may run it unasked when the harness itself inferred it
+/// (docs/specs/verification.md §4.3). Shortcut: token match on the leading words, so `make` takes
+/// no variable overrides and flags that run other programs are refused; widen on demand.
+pub fn is_verification_command(cmd: &str) -> bool {
+    const PLAIN: &str = " _.-/=:,@+";
+    if cmd.is_empty()
+        || !cmd
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || PLAIN.contains(c))
+    {
+        return false;
+    }
+    let t: Vec<&str> = cmd.split_whitespace().collect();
+    if t.iter().any(|a| {
+        ["--fix", "--config", "-exec", "-toolexec", "-vettool"]
+            .iter()
+            .any(|bad| a == bad || a.starts_with(&format!("{bad}=")))
+    }) {
+        return false;
+    }
+    match t.as_slice() {
+        ["cargo", "fmt", rest @ ..] => rest.contains(&"--check"),
+        ["cargo", "clippy" | "test" | "check", ..] => true,
+        [
+            "npm" | "pnpm" | "yarn",
+            "run",
+            "test" | "lint" | "typecheck" | "build",
+            ..,
+        ] => true,
+        ["node", "--test", ..] | ["pytest", ..] => true,
+        ["python" | "python3", "-m", "pytest" | "unittest", ..] => true,
+        ["go", "test" | "vet", ..] => true,
+        ["make", "test" | "lint" | "check"] => true,
+        ["tsc", rest @ ..] => rest.contains(&"--noEmit"),
+        _ => false,
+    }
+}
+
 /// Whether `changed` (workspace-relative paths) can affect what the inferred check `cmd` exercises.
 /// A change set of only unrelated files (a `.txt`, a README) makes the check noise.
 fn relevant(cmd: &str, changed: &[String]) -> bool {
@@ -194,6 +233,71 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn recognises_only_plain_verification_commands() {
+        for ok in [
+            "cargo fmt --check",
+            "cargo clippy --all-targets -- -D warnings",
+            "cargo test -p x -- --nocapture",
+            "cargo check",
+            "npm run test",
+            "pnpm run lint",
+            "yarn run typecheck",
+            "npm run build",
+            "node --test",
+            "pytest -q tests/",
+            "python3 -m pytest",
+            "python -m unittest discover",
+            "go test ./...",
+            "go vet ./...",
+            "make test",
+            "tsc --noEmit",
+        ] {
+            assert!(is_verification_command(ok), "{ok}");
+        }
+        for bad in [
+            "",
+            "cargo fmt",
+            "cargo fix",
+            "cargo test && rm -rf x",
+            "cargo test; id",
+            "cargo test $(id)",
+            "cargo test > out",
+            "cargo clippy --fix",
+            "cargo test --config build.rustc-wrapper=sh",
+            "go test -exec sh ./...",
+            "npm run deploy",
+            "npm test",
+            "make test CC=sh",
+            "make install",
+            "tsc",
+            "python -m http.server",
+            "curl x",
+        ] {
+            assert!(!is_verification_command(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn every_detected_check_is_recognised() {
+        let d = tempfile::tempdir().unwrap();
+        fs::write(d.path().join("Cargo.toml"), "").unwrap();
+        fs::write(d.path().join("go.mod"), "").unwrap();
+        fs::write(d.path().join("Makefile"), "test:\n").unwrap();
+        fs::write(d.path().join("pytest.ini"), "").unwrap();
+        fs::write(
+            d.path().join("package.json"),
+            r#"{"scripts":{"typecheck":"x","lint":"x","build":"x","test":"x"}}"#,
+        )
+        .unwrap();
+        let all = detect_checks(d.path());
+        assert!(all.len() >= 9);
+        for c in all {
+            let cmd = c.command.unwrap();
+            assert!(is_verification_command(&cmd), "{cmd}");
+        }
     }
 
     #[test]

@@ -28,6 +28,13 @@ const leaks = [];
   for (const area of only) {
     const mod = require(`./areas/${area}`);
     const areaDir = path.join(out, area);
+    // Re-capture must not silently drop the owner's review: remember reviewed_by per case before the area is wiped.
+    const reviewed = {};
+    if (fs.existsSync(areaDir)) {
+      for (const id of fs.readdirSync(areaDir)) {
+        try { reviewed[id] = JSON.parse(fs.readFileSync(path.join(areaDir, id, 'meta.json'), 'utf8')).reviewed_by ?? null; } catch {}
+      }
+    }
     fs.rmSync(areaDir, { recursive: true, force: true });
     const ids = new Set();
     counts[area] = 0;
@@ -63,7 +70,7 @@ const leaks = [];
         node: process.version,
         platform: process.platform,
         captured_at: capturedAt,
-        reviewed_by: null,
+        reviewed_by: reviewed[c.id] ?? null,
         ...(c.note ? { note: c.note } : {}),
       }));
       counts[area]++;

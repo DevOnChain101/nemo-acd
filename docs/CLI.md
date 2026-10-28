@@ -23,6 +23,8 @@ The agent runs tests itself. A call that needs permission opens the approval dia
 | `auto` | a judge model call decides each open call (allow / deny / ask); ask, unclear answer, error or timeout = denied |
 | `bypassPermissions` | skips approval prompts; still stops: deny rules, ask rules (they still ask, so an unattended run denies them), critical `rm`, destructive MCP asks. Protected paths (`.git`, `.nemo`, `.ssh`, ...) are NOT stopped by plain writes, as in Claude Code; the sandbox still confines commands. Loud notice at start. Only from the CLI flag: never from project settings, `.mcp.json` or the environment |
 
+**Inferred verification checks.** In `default` and `acceptEdits` the checks the harness infers from the repo (`cargo test`, `npm run test`, `pytest`, `go test`, `make test`, ... see `docs/specs/verification.md` section 4) run without an `--allow`, so `nemo run --permission-mode acceptEdits` no longer ends `blocked` only because such a check asked. They stay sandboxed and deny rules still win; any other check command (user-declared or model-registered, or not a recognised test/lint/build invocation) still needs an allow.
+
 A denied write or command (Write, Edit, Bash, MCP write tools, ...) makes the task end `blocked` / `approval_unavailable` with `needed_permissions`, never `completed`. Typical CI use:
 
     nemo run --permission-mode acceptEdits --allow 'Bash(cargo test:*)' --prompt "fix the failing test"

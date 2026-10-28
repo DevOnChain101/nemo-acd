@@ -79,7 +79,7 @@ Per task: success rate over `runs`. Per agent+model: success rate, verified-comp
 tests/golden/<area>/<case_id>/{input.*, expected.*, meta.json}
 meta.json = {"source":"src/native/permissions.js","ref_commit":"<sha>","node":"v22.x","platform":"darwin|linux|win32","captured_at":"…","reviewed_by":null}
 ```
-Before writing, replace volatile values with placeholders: `<TS>`, `<UUID>`, `<TMP>` (the realpath of the sandbox root), `<HOME>`, `<NEMO_HOME>`. Every capture uses a fresh temp `NEMO_HOME` and fake home; the real `~/.nemo` is never read. A case counts only once `reviewed_by` is set. Rust golden tests load the same files, so the cases themselves are the spec.
+Before writing, replace volatile values with placeholders: `<TS>`, `<UUID>`, `<TMP>` (the realpath of the sandbox root), `<HOME>`, `<NEMO_HOME>`. Every capture uses a fresh temp `NEMO_HOME` and fake home; the real `~/.nemo` is never read. Cases are regression snapshots of the Node prototype, not an oracle: the owner approved them on 2026-10-29 (`reviewed_by` = "owner:DevOnChain101 2026-10-29 (regression snapshot, Node prototype not authoritative)"), and re-capture preserves an existing `reviewed_by` (new cases start `null` until reviewed). Rust golden tests load the same files; a deliberate divergence is recorded in the allow-list with a reason.
 
 ## Open
 - Harness language (Python stdlib vs a Rust bin): either works; the doc says "language-agnostic".

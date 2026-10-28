@@ -41,7 +41,7 @@ Settings files (permissions/hooks) are concatenated in the order user Claude (if
 | `NEMO_CUSTOM_HEADERS` | `Name: value` lines, merged into the provider's headers [config.js:137-145] |
 | `NEMO_MODEL` / `NEMO_SMALL_MODEL` | model overrides (explicit, never swapped) [config.js:293-299] |
 | `NEMO_DEFAULT_<ALIAS>_MODEL` | alias target [config.js:198-209] |
-| ~~`CLAUDE_CONFIG_DIR`, `CODEX_HOME`~~ | Node reads these for import/`readUserConfig` [claudecfg.js:795, importcodex.js:234]. **Rust does not read them** (rule: only `NEMO_*` env vars are read); import takes an explicit path flag or the default `~/.claude` / `~/.codex` locations |
+| ~~`CLAUDE_CONFIG_DIR`, `CODEX_HOME`~~ | Node reads these for import/`readUserConfig` [claudecfg.js:795, importcodex.js:234]. **Rust does not read them** (rule: only `NEMO_*` env vars are read); import takes an explicit path flag or the default `~/.claude` / `~/.codex` locations (`nemo import claude`, see docs/IMPORT.md) |
 `ANTHROPIC_*` and `OPENAI_*` are never read [config.js:11, auth.js:4]. Children (Bash, hooks, `!`) get the env minus `^NEMO_(?:[A-Z0-9]+_)*(?:API_KEY|AUTH_TOKEN|TOKEN)$` [auth.js:42-55]; hooks also get `NEMO_PROJECT_DIR` and `CLAUDE_PROJECT_DIR` = cwd [hooks.js:122].
 
 ## 5. Credential resolution [from-node auth.js:121-134]

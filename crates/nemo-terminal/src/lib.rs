@@ -575,14 +575,20 @@ struct Session {
     quota: Arc<Quota>,
 }
 
+/// Usable backends (best first) and the reasons other backends were skipped.
+type Backends = (Vec<Arc<dyn SandboxBackend>>, Vec<String>);
+
 pub struct TerminalRuntime {
     shell: ShellSpec,
     mode: SandboxMode,
     limits: Limits,
     sessions: Mutex<HashMap<String, Session>>,
     next_id: AtomicU64,
-    /// Detected on first sandboxed launch (detection may run a probe process).
-    backend: OnceLock<Arc<dyn SandboxBackend>>,
+    /// Usable backends, best first, plus why others were skipped; detected on first sandboxed
+    /// launch (detection may run a probe process).
+    backends: OnceLock<Backends>,
+    /// The unconfined-fallback notice is printed once.
+    degraded_noted: AtomicBool,
 }
 
 impl Default for TerminalRuntime {
@@ -604,7 +610,8 @@ impl TerminalRuntime {
             limits: Limits::default(),
             sessions: Mutex::default(),
             next_id: AtomicU64::new(1),
-            backend: OnceLock::new(),
+            backends: OnceLock::new(),
+            degraded_noted: AtomicBool::new(false),
         }
     }
 
@@ -632,7 +639,12 @@ impl TerminalRuntime {
 
     /// Use this backend instead of `nemo_sandbox::detect()` (tests, embedders).
     pub fn with_sandbox_backend(self, backend: Arc<dyn SandboxBackend>) -> Self {
-        let _ = self.backend.set(backend);
+        self.with_sandbox_chain(vec![backend])
+    }
+
+    /// Like [`Self::with_sandbox_backend`], with fallbacks: best-effort tries them in order.
+    pub fn with_sandbox_chain(self, chain: Vec<Arc<dyn SandboxBackend>>) -> Self {
+        let _ = self.backends.set((chain, vec![]));
         self
     }
 
@@ -711,42 +723,70 @@ impl TerminalRuntime {
                 return refuse("no sandbox policy for this session (SandboxMode::Enforce)".into());
             }
         };
-        let backend = self
-            .backend
-            .get_or_init(|| Arc::from(nemo_sandbox::detect()));
-        let caps = backend.capabilities();
-        if caps.filesystem == Guarantee::None && self.mode == SandboxMode::BestEffort {
+        let (chain, skipped) = self.backends.get_or_init(|| {
+            let chain = nemo_sandbox::detect_chain();
+            (
+                chain.into_iter().map(Arc::from).collect(),
+                nemo_sandbox::skipped_backends(),
+            )
+        });
+        let mut why = skipped.clone();
+        // Enforce only ever uses the best backend (and refuses with its reason); best-effort
+        // degrades to the next one when a backend cannot set up this policy.
+        let usable = match self.mode {
+            SandboxMode::Enforce => &chain[..chain.len().min(1)],
+            _ => &chain[..],
+        };
+        for backend in usable {
+            let caps = backend.capabilities();
+            if caps.filesystem == Guarantee::None {
+                continue;
+            }
+            // An unusable backend (None) never passes, whatever the policy asks.
+            let required = policy.required.max(Guarantee::Weak);
+            // Allow restricts nothing (Strong); Deny/Loopback must be honoured by the backend.
+            let net = backend.network_guarantee(&policy.network);
+            if caps.filesystem < required || net < required {
+                return refuse(format!(
+                    "{} gives filesystem {:?} / network {:?} for {:?}, policy requires {:?}",
+                    backend.name(),
+                    caps.filesystem,
+                    net,
+                    policy.network,
+                    required
+                ));
+            }
+            if let Some(t) = &policy.tmp_dir {
+                create_private_dir(t)?;
+            }
+            match backend.wrap(policy, cmd) {
+                Ok(w) => return Ok(Some((w, caps))),
+                Err(SandboxError::InvalidPolicy(m)) => {
+                    return Err(Error::InvalidSpec(format!("sandbox policy: {m}")));
+                }
+                Err(e @ (SandboxError::Unsupported(_) | SandboxError::Unavailable(_)))
+                    if self.mode == SandboxMode::BestEffort =>
+                {
+                    why.push(format!("{}: {e}", backend.name()));
+                }
+                Err(e) => return Err(Error::SandboxUnavailable(e.to_string())),
+            }
+        }
+        if self.mode == SandboxMode::BestEffort {
+            // Flagged on every result (`sandbox: None`, `unsandboxed_by_request`), loud once.
+            if !why.is_empty() && !self.degraded_noted.swap(true, Ordering::Relaxed) {
+                eprintln!(
+                    "nemo: WARNING: no OS sandbox could be set up, commands run UNCONFINED (unsandboxed_by_request): {}",
+                    why.join("; ")
+                );
+            }
             return Ok(None);
         }
-        // An unusable backend (None) never passes, whatever the policy asks.
-        let required = policy.required.max(Guarantee::Weak);
-        // Allow restricts nothing (Strong); Deny/Loopback must be honoured by the backend.
-        let net = backend.network_guarantee(&policy.network);
-        if caps.filesystem < required || net < required {
-            return refuse(format!(
-                "{} gives filesystem {:?} / network {:?} for {:?}, policy requires {:?}",
-                backend.name(),
-                caps.filesystem,
-                net,
-                policy.network,
-                required
-            ));
-        }
-        if let Some(t) = &policy.tmp_dir {
-            create_private_dir(t)?;
-        }
-        let wrapped = match backend.wrap(policy, cmd) {
-            Ok(w) => w,
-            // Landlock-only hosts etc.: best-effort runs unconfined (flagged unsandboxed_by_request).
-            Err(SandboxError::Unsupported(_)) if self.mode == SandboxMode::BestEffort => {
-                return Ok(None);
-            }
-            Err(SandboxError::InvalidPolicy(m)) => {
-                return Err(Error::InvalidSpec(format!("sandbox policy: {m}")));
-            }
-            Err(e) => return Err(Error::SandboxUnavailable(e.to_string())),
-        };
-        Ok(Some((wrapped, caps)))
+        refuse(if why.is_empty() {
+            "no OS sandbox is available on this machine".into()
+        } else {
+            why.join("; ")
+        })
     }
 
     fn find(&self, sid: &str, pid: &str) -> Result<Arc<Proc>> {

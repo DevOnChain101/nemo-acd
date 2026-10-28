@@ -6,6 +6,7 @@ mod common;
 use std::sync::Arc;
 
 use common::*;
+use nemo_core::PermissionMode;
 use nemo_events::{Event, TaskStatus, ToolStatus};
 use nemo_harness::testing::Turn;
 use nemo_harness::{Approval, ToolBox, user_command_note};
@@ -585,28 +586,74 @@ async fn a_test_file_that_fakes_an_env_var_ends_unverified_with_a_limitation() {
     );
 }
 
-/// B-3 / B-6: the inferred checks of one task are one dialog, the approval during `verifying`
-/// is a legal transition that never reaches the transcript, and read-only turns skip the gate.
-#[tokio::test]
-async fn inferred_checks_are_one_dialog_and_verifying_may_wait_for_approval() {
-    let pkg = r#"{"scripts":{"lint":"true","test":"true"}}"#;
-    let turns = vec![
+/// D12: a harness-inferred, recognised verification command (`make test` from a Makefile) runs
+/// without an explicit allow in `default` and `acceptEdits`, headless or not, so the task is not
+/// blocked only because a trusted inferred check asked. A deny rule still wins.
+fn makefile_turns() -> Vec<Turn> {
+    vec![
         Turn::tool(
             "w1",
             "Write",
-            json!({"file_path": "package.json", "content": pkg}),
+            json!({"file_path": "Makefile", "content": "test:\n\ttouch ran-it\n"}),
         ),
         Turn::text("done"),
         Turn::text("done again"),
+    ]
+}
+
+#[tokio::test]
+async fn trusted_inferred_check_runs_without_an_allow_in_default_and_accept_edits() {
+    for mode in [PermissionMode::Default, PermissionMode::AcceptEdits] {
+        for interactive in [false, true] {
+            let approver = ScriptedApprover::new(vec![]);
+            let opts = Opts {
+                mode,
+                ..gate_opts(interactive)
+            };
+            let mut rig = gated(opts, makefile_turns(), Some(approver.clone()));
+            let out = rig.run("add a makefile").await;
+            let ctx = format!("{mode:?} interactive={interactive}: {}", out.reason);
+            assert_ne!(out.status, TaskStatus::Blocked, "{ctx}");
+            assert!(out.needed_permissions.is_empty(), "{ctx}");
+            assert!(
+                rig.ws.cwd.join("ran-it").exists(),
+                "check did not run: {ctx}"
+            );
+            assert!(approver.asked.lock().unwrap().is_empty(), "{ctx}");
+        }
+    }
+}
+
+#[tokio::test]
+async fn trusted_inferred_check_is_still_subject_to_deny_rules() {
+    let opts = Opts {
+        deny: vec!["Bash(make:*)".into()],
+        ..gate_opts(false)
+    };
+    let mut rig = gated(opts, makefile_turns(), None);
+    let out = rig.run("add a makefile").await;
+    assert_ne!(out.status, TaskStatus::Completed, "{}", out.reason);
+    assert!(!rig.ws.cwd.join("ran-it").exists());
+}
+
+/// B-3 / B-6: the checks of one task are one dialog, the approval during `verifying`
+/// is a legal transition that never reaches the transcript, and read-only turns skip the gate.
+#[tokio::test]
+async fn inferred_checks_are_one_dialog_and_verifying_may_wait_for_approval() {
+    // Two user-declared checks: inferred ones are trusted now (D12) and would not ask at all.
+    let mut req = nemo_harness::TaskRequest::new("make a file");
+    req.criteria = vec![
+        Criterion::user("c1", "file exists", Some("test -f a.txt")),
+        Criterion::user("c2", "dir exists", Some("test -d .")),
     ];
     let approver = ScriptedApprover::new(vec![Approval::allow()]);
-    let mut rig = gated(gate_opts(true), turns, Some(approver.clone()));
-    rig.run("add a package").await;
+    let mut rig = gated(gate_opts(true), write_turns(), Some(approver.clone()));
+    rig.run_with(req, CancellationToken::new()).await;
     let asked = approver.asked.lock().unwrap().clone();
     assert_eq!(asked.len(), 1, "{asked:?}");
     let cmd = asked[0].input["command"].as_str().unwrap();
     assert!(
-        cmd.contains("npm run lint") && cmd.contains("npm run test"),
+        cmd.contains("test -f a.txt") && cmd.contains("test -d ."),
         "{cmd}"
     );
     let notices = rig.find(|e| match e {

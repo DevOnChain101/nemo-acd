@@ -30,7 +30,9 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 pub use helper::{HELPER_NAME, decode_policy, encode_policy, parse_helper_args};
-pub use linux::{BwrapBackend, LandlockRule, LinuxLandlockBackend, landlock_rules};
+pub use linux::{
+    BwrapBackend, LandlockRule, LinuxLandlockBackend, bwrap_probe, landlock_rules, skipped_backends,
+};
 #[cfg(target_os = "linux")]
 pub use linux::{landlock_abi, restrict_current_process};
 pub use seatbelt::{SeatbeltBackend, seatbelt_profile};
@@ -361,26 +363,31 @@ impl SandboxBackend for NullSandbox {
     }
 }
 
-/// Best available backend for this OS, probed at call time. **Fails open**: with nothing usable
-/// it returns [`NullSandbox`] (`capabilities().filesystem == Guarantee::None`). Callers must
-/// check the capabilities; `nemo-terminal` refuses such a backend unless told otherwise.
-pub fn detect() -> Box<dyn SandboxBackend> {
+/// Usable backends for this OS, probed at call time, best first (bubblewrap -> Landlock on
+/// Linux). Empty = nothing can confine. `nemo-terminal` degrades along this list in best-effort.
+pub fn detect_chain() -> Vec<Box<dyn SandboxBackend>> {
     #[cfg(all(feature = "test-backend", debug_assertions))]
     if std::env::var_os("NEMO_TEST_FORCE_BACKEND").is_some_and(|v| v == "none") {
-        return Box::new(NullSandbox);
+        return vec![];
     }
+    let mut v: Vec<Box<dyn SandboxBackend>> = vec![];
     #[cfg(target_os = "macos")]
-    if let Some(b) = SeatbeltBackend::detect() {
-        return Box::new(b);
-    }
+    v.extend(SeatbeltBackend::detect().map(|b| Box::new(b) as Box<dyn SandboxBackend>));
     #[cfg(target_os = "linux")]
-    if let Some(b) = linux::detect_linux() {
-        return b;
-    }
+    v.extend(linux::detect_linux());
     #[cfg(windows)]
-    return Box::new(WindowsJobBackend);
-    #[allow(unreachable_code)]
-    Box::new(NullSandbox)
+    v.push(Box::new(WindowsJobBackend));
+    v
+}
+
+/// Best available backend for this OS. **Fails open**: with nothing usable it returns
+/// [`NullSandbox`] (`capabilities().filesystem == Guarantee::None`). Callers must check the
+/// capabilities; `nemo-terminal` refuses such a backend unless told otherwise.
+pub fn detect() -> Box<dyn SandboxBackend> {
+    detect_chain()
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| Box::new(NullSandbox))
 }
 
 /// Shared trust-boundary checks; every backend calls this first.

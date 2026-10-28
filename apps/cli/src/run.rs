@@ -98,9 +98,15 @@ pub(crate) fn sandbox_preflight(
     policy: Option<&nemo_terminal::SandboxPolicy>,
 ) -> Result<(), String> {
     let hint = "run `nemo doctor` to see the sandbox backends, or pass --sandbox best-effort|off to run unconfined";
+    let skipped = nemo_sandbox::skipped_backends();
+    let skipped = if skipped.is_empty() {
+        String::new()
+    } else {
+        format!(" [{}]", skipped.join("; "))
+    };
     if backend.capabilities().filesystem < Guarantee::Weak {
         return Err(format!(
-            "no OS sandbox is available on this machine ({}); {hint}",
+            "no OS sandbox is available on this machine ({}){skipped}; {hint}",
             backend.name()
         ));
     }
@@ -122,7 +128,7 @@ pub(crate) fn sandbox_preflight(
         .map(|_| ())
         .map_err(|e| {
             format!(
-                "the {} sandbox rejects the standard policy: {e}; {hint}",
+                "the {} sandbox rejects the standard policy: {e}{skipped}; {hint}",
                 backend.name()
             )
         })

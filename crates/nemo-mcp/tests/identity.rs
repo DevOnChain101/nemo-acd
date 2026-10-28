@@ -407,6 +407,69 @@ async fn http_basic_authorization_works_and_is_sent_on_every_request() {
 }
 
 #[tokio::test]
+async fn http_jenkins_style_basic_from_env_is_not_anonymous() {
+    // Authorization: Basic base64("ci-bot:jenkins-api-token-456"), computed outside Nemo
+    let basic = "Basic Y2ktYm90OmplbmtpbnMtYXBpLXRva2VuLTQ1Ng==";
+    let (url, log, expire) = serve_http(
+        vec![("authorization", basic.into())],
+        vec![("authorization", basic.into(), "ci-bot")],
+    )
+    .await;
+    let m = McpManager::new(
+        vec![http_cfg(
+            &url,
+            &[("Authorization", "Basic ${JENKINS_BASIC}")],
+        )],
+        opts_with(
+            user_env(&[("JENKINS_BASIC", "Y2ktYm90OmplbmtpbnMtYXBpLXRva2VuLTQ1Ng==")]),
+            &["JENKINS_BASIC"],
+        ),
+    );
+    http_lifecycle(&m, &expire, "ci-bot").await;
+    assert_all_carry(&log, "authorization", basic);
+}
+
+#[tokio::test]
+async fn http_gitlab_style_private_token_and_bearer_are_not_anonymous() {
+    // PRIVATE-TOKEN: custom header, required by the server on every request
+    let (url, log, expire) = serve_http(
+        vec![("private-token", "glpat-test-1".into())],
+        vec![("private-token", "glpat-test-1".into(), "gl-user")],
+    )
+    .await;
+    let m = McpManager::new(
+        vec![http_cfg(&url, &[("PRIVATE-TOKEN", "${GITLAB_PAT}")])],
+        opts_with(user_env(&[("GITLAB_PAT", "glpat-test-1")]), &["GITLAB_PAT"]),
+    );
+    http_lifecycle(&m, &expire, "gl-user").await;
+    assert_all_carry(&log, "private-token", "glpat-test-1");
+
+    // the same PAT as Authorization: Bearer
+    let (url, log, expire) = serve_http(
+        vec![("authorization", "Bearer glpat-test-1".into())],
+        vec![("authorization", "Bearer glpat-test-1".into(), "gl-user")],
+    )
+    .await;
+    let m = McpManager::new(
+        vec![http_cfg(&url, &[("Authorization", "Bearer ${GITLAB_PAT}")])],
+        opts_with(user_env(&[("GITLAB_PAT", "glpat-test-1")]), &["GITLAB_PAT"]),
+    );
+    http_lifecycle(&m, &expire, "gl-user").await;
+    assert_all_carry(&log, "authorization", "Bearer glpat-test-1");
+
+    // negative control: header omitted -> anonymous
+    let (url, _, _) = serve_http(
+        vec![],
+        vec![("private-token", "glpat-test-1".into(), "gl-user")],
+    )
+    .await;
+    let m = McpManager::new(vec![http_cfg(&url, &[])], opts(user_env(&[])));
+    m.start().await;
+    assert_identity(&m, "anonymous").await;
+    m.close().await;
+}
+
+#[tokio::test]
 async fn http_custom_x_and_cookie_headers_are_sent_on_every_request() {
     let (url, log, expire) = serve_http(
         vec![("x-api-key", "k-1".into()), ("cookie", "sid=abc".into())],
