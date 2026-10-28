@@ -1,34 +1,27 @@
 # Nemo-ACD status
 
-Goal: R1–R9, hand over the full Nemo autonomous coding agent. NOT complete. HEAD is 4ce7465 (local commits); CI #12 is pending (earlier runs needed fixes); locally only macOS was exercised.
+Goal: R1–R9, hand over the full Nemo autonomous coding agent. Not complete: see "Open".
 
-## Verified (final run, macOS x86_64 only; tester report)
-- `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` (also nemo-cli with `--features test-provider`): clean.
-- `cargo test --workspace --no-fail-fast`: 814 passed (macOS, commit 4ce7465), identical outcome lists on two runs; `cargo test -p nemo-cli --features test-provider`: 53 passed; selftest of the eval harness: 6/6; five-crate loop (browser, workspace, mcp, tui, tui-base) 5x: 210 passed each, no intermittent failures.
+## Verified
+- CI run #22 on commit c6c6a29 (GitHub Actions, public repo `DevOnChain101/nemo-acd`): `ci-ok` green. test (macOS, Ubuntu, Windows), msrv 1.89, sandbox (linux), docs, cargo-deny, cargo-audit, shell-scripts and the three eval selftests passed. Only `browser (windows-latest)` is red (non-blocking, `continue-on-error`).
+- macOS (local, tester + developers): `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` (about 884 tests, 0 failed), `cargo test -p nemo-cli --features test-provider` (88), eval selftest 6/6, rustdoc `-D warnings`, `cargo +1.89 check`.
 - Counting method (to compare future runs): `grep -E '^test result' log | awk '{p+=$4; f+=$6; i+=$8}'`.
-- Golden: 717 cases, capture byte-identical on re-run; all `reviewed_by` are null.
-- Release binary: builds, `--version`, `doctor`, no `test-provider` in the binary; `nemo run` with no credentials exits 2 (fails closed). `scripts/test-check-release-tag.sh` 9/9; action pins pass; placeholder check fails by design until the owner sets the repo.
-- Security reviews: five passes (F/L/M series, #1-#19, pass-5 #1-#9); last pass had no critical/high findings; its fixes are in. Residual risks are listed in docs/SECURITY.md.
+- Real provider smoke (omniroute, OpenAI-compatible gateway): `cc/claude-haiku-5-5` and `cx/gpt-5.6-luna` stream, call tools and finish a task; a TUI end-to-end coding task passed (20 s, verification passed).
+- TUI driven through a pseudo-terminal (`tests/tty-qa`, report `docs/research/tty-qa-report.md`): 34 bugs found, 29 fixed, 4 partly, 1 open (B-29).
+- Security: five review passes plus a sixth on the permission/MCP/`!cmd`/streaming changes (fixes in); residual risks in docs/SECURITY.md.
+- Golden: 717 snapshot cases from the Node prototype are regression snapshots only (the prototype is not authoritative); documented divergences are listed next to each golden test.
 
-## Built (R1–R9 status)
-- R1 contracts: docs/specs/*, eval harness (8 scenarios, oracle/noop/node/rust adapters), golden capture, Cargo workspace.
-- R2 core: nemo-config, nemo-terminal (+sandbox integration, limits), nemo-hooks, nemo-tools (fs, exec, terminal_*, browser_*, verify_run, artifact_read, web, notebook, skill, pdf), nemo-permissions (hardened).
-- R3: nemo-providers (Anthropic + OpenAI-compatible, own thin clients), nemo-mcp (no legacy SSE).
-- R4: nemo-harness, nemo-verification, nemo-settings, nemo-context, apps/cli (`nemo run/auth/models/doctor/tui`).
-- R5: nemo-tui-base, nemo-tui-render (95/95 render goldens), nemo-tui (interactive; limits listed in its report).
-- R6: nemo-browser (own CDP client, pipe transport, URL policy on all targets).
-- R7: nemo-sandbox (Seatbelt tested on macOS; Landlock/bwrap compile-only; Windows = Job Object reporting only).
-- R8: nemo-session (SQLite store, recovery, Node compat), nemo-workspace (hardened git worktrees, checkpoint restore).
-- R9a: CI + release pipeline + npm/installers/docs written, never run on GitHub.
+## Built (R1–R9)
+- R1 contracts, specs (reviewed by the owner 2026-10-28), eval harness, golden snapshots.
+- R2 core: config, terminal, hooks, tools, permissions (all six modes incl. the auto-mode LLM judge; bypass needs confirmation).
+- R3 providers (Anthropic, OpenAI-compatible) and MCP (stdio, streamable HTTP, SSE; read-before-write guard; credential propagation checks; `nemo mcp test`).
+- R4 harness, verification gate (one approval per check set; edits with no check end `unverified`), headless `nemo run` with `--permission-mode`, `--allow/--deny`.
+- R5 TUI: Shift+Tab modes, copy/selection, message queue, diff views, `/mcp /agents /permissions /model /resume /effort`.
+- R6 browser (own CDP client). R7 sandbox (Seatbelt tested; Landlock/bwrap; Windows Job Object). R8 sessions (SQLite) and worktrees. R9a CI + release pipeline.
 
 ## Decisions on record
-ADR-010 Rust core; ADR-011 API keys only, user-managed via NEMO_* (standard vars per their standards; no other products' prefixes); no keychain; sandbox Enforce by default; network Deny by default (Loopback opt-in; macOS Loopback exposes host loopback services).
+ADR-010 Rust core; ADR-011 API keys only (NEMO_*); sandbox enforce by default (Windows: best-effort with a notice); network deny by default; the Node prototype is a frozen, non-authoritative reference (design doc plus official Claude Code/Codex practice decide behaviour, see docs/research/official-conformance.md).
 
-## Blocked / not done (needs the owner)
-- Real-model eval baseline vs Node (needs API keys via NEMO_*): cutover gate 1 unmet.
-- Linux/Windows: only per-crate compile checks for C-free crates; whole-workspace cross-check impossible on macOS (aws-lc-sys). Need CI on real runners; ConPTY, legacy conhost, Git Bash quoting, Landlock/bwrap enforcement, clipboard/notification tools unverified.
-- Repo remote, branch protection (`ci-ok`), action SHA pinning (docs/RELEASE.md), signing secrets, npm names, OWNER placeholders.
-- Specs: reviewed by the product owner 2026-10-28 (docs/specs; no second engineer reviewer). Golden cases still unreviewed (`reviewed_by` null).
-- Node repo ~/Vibe/nemo-cli: owner no longer uses it and forbids further edits (2026-10-28); open Node test failures C/F2 are moot; Node eval baseline is no longer a cutover requirement unless the owner says otherwise.
-- Security: third review in progress (see its report); known residual risks in docs/SECURITY.md.
-- Cutover: Node is retired (no parallel run); finish the docs/MIGRATION.md checklist.
+## Open
+- Owner: real-model eval baseline and the R9 cutover threshold; golden snapshot review; release setup (maintainer emails or `NEMO_ALLOW_ANY_VERIFIED_TAGGER`, `release` environment reviewers, tag ruleset, signing, npm names, OWNER placeholders); Dependabot PRs; remote-MCP OAuth decision (default: not supported); owner email in public commit history.
+- Engineering: `browser (windows)` job hangs (cause unconfirmed); Windows/Linux behaviour of ConPTY, Git Bash quoting, clipboard, Landlock/bwrap enforcement is verified only by CI, not on real machines; remaining conformance gaps in docs/research/conformance-gaps.md (P2); QA items B-14, B-18, B-25, B-29, B-34.
