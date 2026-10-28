@@ -1,5 +1,6 @@
 // Runs `nemo run` (the Rust binary) on the task. Binary: $NEMO_BIN, else target/{debug,release}/nemo.
 //   EVAL_FAKE_SCRIPT=<script.json>  scripted model (needs a build with --features test-provider; selftest only)
+//   EVAL_PERMISSION_MODE_OVERRIDE=<mode>  diagnostic only (e.g. bypassPermissions under the sandbox); the task's mode otherwise
 //   EVAL_MODEL="provider/model"      optional; real mode needs NEMO_* credentials in the environment
 import fs from 'node:fs';
 import os from 'node:os';
@@ -22,7 +23,7 @@ if (!bin || !fs.existsSync(bin)) die('nemo binary not found (cargo build -p nemo
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'eval-rust-')));
 // Loopback: tasks start a local server in their tests (still no outside network). The node
 // toolchain (npm lives next to node, often under $HOME) is granted read-only.
-const args = ['run', '--cwd', cwd, '--prompt', prompt, '--no-session-store', '--network', 'loopback', '--sandbox-read', path.dirname(path.dirname(fs.realpathSync(process.execPath))), '--permission-mode', process.env.EVAL_PERMISSION_MODE || 'acceptEdits'];
+const args = ['run', '--cwd', cwd, '--no-session-store', '--network', 'loopback', '--sandbox-read', path.dirname(path.dirname(fs.realpathSync(process.execPath))), '--permission-mode', process.env.EVAL_PERMISSION_MODE_OVERRIDE || process.env.EVAL_PERMISSION_MODE || 'acceptEdits'];
 const env = { ...process.env };
 const fake = process.env.EVAL_FAKE_SCRIPT;
 if (fake) { // never touch the real home in scripted mode
@@ -45,7 +46,19 @@ if (!sandbox) {
 process.stderr.write(`adapter "rust": --sandbox ${sandbox}\n`);
 args.push('--sandbox', sandbox);
 
+// `node --test test/*.test.js` -> `node --test`; `python3 -m unittest discover -s tests` -> `python3 -m unittest`;
+// `cargo test --offline` -> `cargo test`: the program, its mode flag (`--test`, `-m <module>`) or subcommand.
+function checkPrefix(check) {
+  const w = check.trim().split(/\s+/);
+  let n = 1;
+  if (w[1] && w[1].startsWith('-')) n = w[1] === '-m' ? 3 : 2;
+  else if (w[1] && ['npm', 'yarn', 'pnpm'].includes(w[0]) && w[1] === 'run') n = 3;
+  else if (w[1]) n = 2;
+  return w.slice(0, n).join(' ');
+}
+
 // The task's acceptance criteria are what a user would hand to `--criteria-file`.
+let taskPrompt = prompt;
 const manifest = path.join(here, '..', '..', 'tasks', process.env.EVAL_TASK_ID || '', 'task.json');
 if (process.env.EVAL_TASK_ID && fs.existsSync(manifest)) {
   const criteria = JSON.parse(fs.readFileSync(manifest, 'utf8')).acceptance_criteria || [];
@@ -53,10 +66,14 @@ if (process.env.EVAL_TASK_ID && fs.existsSync(manifest)) {
     const f = path.join(tmp, 'criteria.json');
     fs.writeFileSync(f, JSON.stringify(criteria));
     args.push('--criteria-file', f);
-    // The operator who hands over a check authorises that exact command (the gate asks like Bash).
-    for (const c of criteria) if (c && typeof c.check === 'string' && c.check.trim()) args.push('--allow', `Bash(${c.check.trim()})`);
+    // The operator who hands over a check authorises its command prefix (`Bash(cargo test:*)`), so the
+    // usual variants (`... 2>&1 | tail`, extra flags) need no approval, and tells the model the command.
+    const checks = criteria.filter((c) => c && typeof c.check === 'string' && c.check.trim()).map((c) => c.check.trim());
+    for (const pre of new Set(checks.map(checkPrefix))) args.push('--allow', `Bash(${pre}:*)`);
+    if (checks.length) taskPrompt += `\n\nVerify your work by running exactly: ${checks.map((c) => '`' + c + '`').join(' and ')}`;
   }
 }
+args.push('--prompt', taskPrompt);
 
 // stdout (events) and stderr pass straight through to the harness.
 const r = spawnSync(bin, args, { env, stdio: ['ignore', 'inherit', 'inherit'] });

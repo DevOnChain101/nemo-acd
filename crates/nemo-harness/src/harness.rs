@@ -322,6 +322,8 @@ pub(crate) struct TaskRun {
     pub status: Mutex<SessionStatus>,
     pub side_effects: AtomicBool,
     pub changed: Mutex<Vec<String>>,
+    /// Line diffs of the files this task edited (the gate looks for weakened tests).
+    pub edits: Mutex<Vec<nemo_verification::FileEdit>>,
     pub hit: Mutex<Option<&'static str>>,
     /// An AskUserQuestion/ExitPlanMode nobody could answer, and nothing changed since.
     pub pending_user_need: AtomicBool,
@@ -650,6 +652,7 @@ impl Harness {
                         .map(|p| p.to_string_lossy().into_owned()),
                 },
                 model: self.config.model.clone(),
+                provider: Some(self.provider.id().to_string()),
                 permission_mode: serde_json::to_value(session.permission_mode)
                     .ok()
                     .and_then(|v| v.as_str().map(String::from))
@@ -855,6 +858,7 @@ impl Harness {
             status: Mutex::new(start),
             side_effects: AtomicBool::new(false),
             changed: Mutex::default(),
+            edits: Mutex::default(),
             hit: Mutex::default(),
             pending_user_need: AtomicBool::new(false),
             model_checks: Mutex::default(),
@@ -1140,6 +1144,8 @@ impl Harness {
             model_checks: lock(&task.model_checks).clone(),
             side_effects: task.side_effects.load(Ordering::SeqCst),
             changed_files: lock(&task.changed).clone(),
+            edits: lock(&task.edits).clone(),
+            baseline_skipped: Default::default(),
         };
         match gate {
             Some(g) => {

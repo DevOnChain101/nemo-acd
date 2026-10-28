@@ -207,6 +207,7 @@ impl VerifyRunner {
             failure_fingerprint: None,
             criteria_ids: c.criteria_ids.clone(),
             artifacts: vec![],
+            tests: None,
         };
         // (no `if let` match guard: unstable on the 1.89 MSRV)
         let blocked = match (&c.command, auth) {
@@ -268,7 +269,10 @@ impl VerifyRunner {
         } else if x.timed_out || x.output_limit_exceeded {
             Failed
         } else if x.exit_code == Some(0) {
-            if ran_nothing(&x.output) {
+            r.tests = crate::testout::parse_counts(&x.output);
+            // `skipped` is judged by the gate (a baseline may excuse it); zero executed is not.
+            let none_ran = r.tests.as_ref().is_some_and(|t| t.passed + t.failed == 0);
+            if ran_nothing(&x.output) || none_ran {
                 r.blocked_reason = None;
                 r.summary = format!(
                     "exit 0 but no tests ran\n{}",

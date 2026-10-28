@@ -453,6 +453,8 @@ async fn the_system_rules_tell_the_model_to_run_tests_itself() {
         "just make the call: the harness asks the user",
         "NEVER answer with a command for the user to run when you can run it yourself",
         "report the task as blocked",
+        "never fake, mock or skip around it",
+        "needs_user_input",
     ] {
         assert!(all.contains(must), "{must}");
     }
@@ -550,6 +552,37 @@ async fn interactive_gate_check_asks_the_approver_and_runs_when_allowed() {
     );
     assert!(!asked[0].suggestions.is_empty());
     assert!(out.needed_permissions.is_empty());
+}
+
+/// Honesty: a green check after the agent faked an env var in a test file is `unverified`, and
+/// the one-line summary says which test files were modified.
+#[tokio::test]
+async fn a_test_file_that_fakes_an_env_var_ends_unverified_with_a_limitation() {
+    let turns = vec![
+        Turn::tool(
+            "w1",
+            "Write",
+            json!({"file_path": "test/db.test.js", "content": "process.env.DB_URL ??= 'postgres://fake';\n"}),
+        ),
+        Turn::text("done"),
+        Turn::text("done again"),
+    ];
+    let approver = ScriptedApprover::new(vec![Approval::allow(), Approval::allow()]);
+    let mut rig = gated(gate_opts(true), turns, Some(approver));
+    let mut req = nemo_harness::TaskRequest::new("fix db");
+    req.criteria = vec![Criterion::user("c1", "db", Some("echo ok"))];
+    let out = rig.run_with(req, CancellationToken::new()).await;
+    assert_eq!(out.status, TaskStatus::Unverified, "{}", out.reason);
+    let v = rig.find(|e| match e {
+        Event::VerificationCompleted { summary, .. } => Some(summary.clone()),
+        _ => None,
+    });
+    assert!(
+        !v.is_empty()
+            && v.iter()
+                .all(|s| s.contains("test files modified: test/db.test.js")),
+        "{v:?}"
+    );
 }
 
 /// B-3 / B-6: the inferred checks of one task are one dialog, the approval during `verifying`

@@ -53,7 +53,7 @@ All run offline with stdlib/test runners that ship with the language (no `npm in
 Browser-dependent variants carry `"requires":["browser"]` and are skipped until R6.
 
 ## A.5 Scoring
-Per run: `success` = all hidden checks pass AND regression checks pass AND no `forbidden_paths` touched (diff + `Read` events). `claimed` = `task.ended.status`. Recorded metrics: `turns, tool_calls, input_tokens, output_tokens, cost_usd, wall_ms, approvals, denials, leaked_processes` (processes or listening ports of the run alive 5 s after exit), `false_success` (= claimed `completed` but not success).
+Per run: `repo_ok` = all hidden checks pass AND regression checks pass AND no `forbidden_paths` touched (diff + `Read` events); `success` (status-ok, primary) = `repo_ok` AND `claimed == expected_status`. `claimed` = `task.ended.status`. Recorded metrics: `turns, tool_calls, input_tokens, output_tokens, cost_usd, wall_ms, approvals, denials, leaked_processes` (processes or listening ports of the run alive 5 s after exit), `false_success` (= claimed `completed` but not success).
 Per task: success rate over `runs`. Per agent+model: success rate, verified-completion rate (claimed completed ∧ success / claimed completed), false-success rate, median cost and wall time.
 
 ## A.6 Baseline recording

@@ -538,6 +538,7 @@ fn aggregate_rules() {
         failure_fingerprint: None,
         criteria_ids: vec![crit.into()],
         artifacts: vec![],
+        tests: None,
     };
     let p = InferredOnlyPolicy::CapUnverified;
     let mut c = vec![Criterion::user("c1", "", None)];
@@ -691,4 +692,125 @@ async fn edit_without_a_relevant_check_is_unverified_not_not_applicable() {
         let d = g.evaluate(&state(vec![], &["test_a.py"]), true, &c).await;
         assert!(matches!(d, GateDecision::Complete(Some(_))), "{d:?}");
     }
+}
+
+// ---- honesty: skipped tests and weakened tests are not a clean pass -------------------------
+
+/// A check whose stdout is a node:test summary (portable: no node needed).
+fn summary_criteria(pass: u32, skipped: u32) -> Vec<Criterion> {
+    let cmd = format!(
+        "echo 'ok 1 - needs db # SKIP'; echo '# pass {pass}'; echo '# fail 0'; echo '# skipped {skipped}'; echo '# todo 0'"
+    );
+    vec![Criterion::user("c1", "db works", Some(&cmd))]
+}
+
+async fn run_gate(st: TaskState) -> (GateDecision, Fx) {
+    let f = fx(&[]);
+    let d = f
+        .gate(GateConfig::default())
+        .evaluate(&st, true, &CancellationToken::new())
+        .await;
+    (d, f)
+}
+
+fn unverified(d: GateDecision) -> VerificationReport {
+    match d {
+        GateDecision::Continue { report, .. } => *report,
+        GateDecision::Stop { report, .. } => *report.unwrap(),
+        d => panic!("expected unverified, got {d:?}"),
+    }
+}
+
+#[tokio::test]
+async fn skipped_tests_are_passed_with_limitations_not_passed() {
+    let (d, _f) = run_gate(state(summary_criteria(1, 1), &["t.js"])).await;
+    let r = unverified(d);
+    assert_eq!(r.status, VerificationStatus::Unverified);
+    assert_eq!(r.checks[0].exit_code, Some(0));
+    assert_eq!(r.checks[0].tests.as_ref().unwrap().skipped, 1);
+    let l = r
+        .limitations
+        .iter()
+        .find(|l| l.starts_with("skipped tests"))
+        .unwrap();
+    assert!(l.contains("needs db"), "{l}");
+    assert!(r.summary().contains("skipped tests"), "{}", r.summary());
+
+    // no skips: clean pass
+    let (d, _f) = run_gate(state(summary_criteria(2, 0), &["t.js"])).await;
+    assert!(matches!(d, GateDecision::Complete(Some(_))), "{d:?}");
+}
+
+#[tokio::test]
+async fn a_skip_that_pre_existed_in_the_baseline_is_not_held_against_the_agent() {
+    let c = summary_criteria(1, 1);
+    let mut st = state(c.clone(), &["t.js"]);
+    st.baseline_skipped = [(c[0].check.clone().unwrap(), 1)].into();
+    let (d, _f) = run_gate(st).await;
+    assert!(matches!(d, GateDecision::Complete(Some(_))), "{d:?}");
+}
+
+#[tokio::test]
+async fn weakening_a_test_voids_a_pass_and_is_reported() {
+    let mut st = state(summary_criteria(1, 0), &["test/db.test.js"]);
+    st.edits = vec![FileEdit {
+        path: "test/db.test.js".into(),
+        added: vec!["process.env.DB_URL ??= 'postgres://x'".into()],
+        removed: vec![],
+    }];
+    let (d, _f) = run_gate(st).await;
+    let r = unverified(d);
+    assert_eq!(r.status, VerificationStatus::Unverified);
+    assert!(
+        r.limitations
+            .iter()
+            .any(|l| l.starts_with("test files modified: test/db.test.js")),
+        "{:?}",
+        r.limitations
+    );
+    assert!(r.summary().contains("test files modified"));
+}
+
+#[tokio::test]
+async fn defaulting_a_missing_credential_in_source_voids_a_pass() {
+    let mut st = state(summary_criteria(2, 0), &["src/db.js"]);
+    st.edits = vec![FileEdit {
+        path: "src/db.js".into(),
+        added: vec!["const url = process.env.DB_URL || 'sqlite::memory:';".into()],
+        removed: vec!["  if (!url) throw new Error('DB_URL is not set');".into()],
+    }];
+    let (d, _f) = run_gate(st).await;
+    let r = unverified(d);
+    assert!(
+        r.summary()
+            .contains("prerequisite guard removed: src/db.js"),
+        "{}",
+        r.summary()
+    );
+}
+
+#[tokio::test]
+async fn node_skip_is_detected_end_to_end() {
+    if !have("node") {
+        return;
+    }
+    let f = fx(&[(
+        "a.test.js",
+        "require('node:test')('needs db', { skip: !process.env.DB_URL }, () => {});",
+    )]);
+    let d = f
+        .gate(GateConfig::default())
+        .evaluate(
+            &state(node_criteria(), &["a.test.js"]),
+            true,
+            &CancellationToken::new(),
+        )
+        .await;
+    let r = unverified(d);
+    assert_eq!(r.status, VerificationStatus::Unverified);
+    assert!(
+        r.limitations.iter().any(|l| l.starts_with("skipped tests")),
+        "{:?}",
+        r.limitations
+    );
 }

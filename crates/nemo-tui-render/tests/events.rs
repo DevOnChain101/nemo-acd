@@ -37,6 +37,7 @@ fn event_stream_matches_transcript_model() {
                     git_worktree: None,
                 },
                 model: "claude-opus-5.5".into(),
+                provider: None,
                 permission_mode: "default".into(),
                 source: "cli".into(),
                 resumed_from_seq: None,

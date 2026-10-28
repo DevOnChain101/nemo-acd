@@ -952,10 +952,26 @@ impl Permissions {
         } else {
             bash::is_read_only_simple(w)
         };
-        ok && w[1..].iter().filter(|a| !a.starts_with('-')).all(|a| {
-            base.and_then(|b| self.resolve_operand(a, b))
-                .is_some_and(|(p, _)| self.in_scope(&p))
-        })
+        // echo only prints: its words are text, not paths
+        ok && (w[0] == "echo"
+            || w[1..].iter().filter(|a| !a.starts_with('-')).all(|a| {
+                base.and_then(|b| self.resolve_operand(a, b))
+                    .is_some_and(|(p, _)| self.in_scope(&p))
+            }))
+    }
+
+    /// Working directory after a simple command (`cd` moves it).
+    fn after_cd(&self, seg: &[String], base: Option<PathBuf>) -> Option<PathBuf> {
+        if seg[0] != "cd" {
+            return base;
+        }
+        match seg.len() {
+            2 => base
+                .as_deref()
+                .and_then(|b| self.resolve_operand(&seg[1], b))
+                .map(|(p, _)| p),
+            _ => Some(self.env.home.clone()),
+        }
     }
 
     /// Every segment passes `seg_safe` (tracking `cd`); the scoped `is_read_only_bash` /
@@ -969,15 +985,7 @@ impl Permissions {
             if !self.seg_safe(&seg, base.as_deref(), auto) {
                 return false;
             }
-            if seg[0] == "cd" {
-                base = match seg.len() {
-                    2 => base
-                        .as_deref()
-                        .and_then(|b| self.resolve_operand(&seg[1], b))
-                        .map(|(p, _)| p),
-                    _ => Some(self.env.home.clone()),
-                };
-            }
+            base = self.after_cd(&seg, base);
         }
         true
     }
@@ -1400,6 +1408,19 @@ impl Permissions {
             }
             if auto && self.bash_safe(bash_cmd, true) {
                 return v(Allow, "auto mode: safe command");
+            }
+            // Official behaviour: a compound command is allowed when every part is, and a read-only
+            // part (`| tail -15`, `echo ---`, `2>&1`) needs no rule of its own.
+            {
+                let mut base = Some(self.env.cwd.clone());
+                let rules = self.allow_rules(mode);
+                if bash::bash_all_match_or(&rules, bash_cmd, |seg| {
+                    let ok = self.seg_safe(seg, base.as_deref(), false);
+                    base = self.after_cd(seg, base.take());
+                    ok
+                }) {
+                    return v(Allow, "matched an allow rule; other parts are read-only");
+                }
             }
             if matches!(mode, Mode::AcceptEdits | Mode::Auto) && fs_info.ok {
                 return v(

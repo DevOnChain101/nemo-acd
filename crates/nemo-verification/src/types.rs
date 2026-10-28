@@ -102,8 +102,25 @@ pub struct Check {
     pub criteria_ids: Vec<String>,
 }
 
+/// Limitation prefixes the one-line summary (and so `verification.completed`) repeats.
+pub(crate) const SKIPPED_TESTS: &str = "skipped tests";
+pub(crate) const TEST_FILES_MODIFIED: &str = "test files modified";
+pub(crate) const PREREQ_GUARD_REMOVED: &str = "prerequisite guard removed";
+
 /// Default per-check timeout (verification.md §6).
 pub const DEFAULT_TIMEOUT_MS: u64 = 600_000;
+
+/// Test counts parsed from a runner's summary (`testout::parse_counts`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TestCounts {
+    pub passed: u64,
+    pub failed: u64,
+    /// Skipped, ignored and expected-failure tests.
+    pub skipped: u64,
+    pub todo: u64,
+    /// Up to 5 output lines naming skipped tests.
+    pub skipped_names: Vec<String>,
+}
 
 /// Outcome of running one [`Check`] (the spec's `Check` result fields).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -125,6 +142,9 @@ pub struct CheckResult {
     pub failure_fingerprint: Option<String>,
     pub criteria_ids: Vec<String>,
     pub artifacts: Vec<ArtifactRef>,
+    /// Parsed runner counts; `None` when the output is not a known runner's.
+    #[serde(default)]
+    pub tests: Option<TestCounts>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -153,7 +173,16 @@ impl VerificationReport {
             n(VerificationStatus::Blocked),
             n(VerificationStatus::Unverified),
             self.limitations.len()
-        )
+        ) + &self
+            .limitations
+            .iter()
+            .filter(|l| {
+                [SKIPPED_TESTS, TEST_FILES_MODIFIED, PREREQ_GUARD_REMOVED]
+                    .iter()
+                    .any(|p| l.starts_with(p))
+            })
+            .map(|l| format!("; {l}"))
+            .collect::<String>()
     }
 
     /// The `verification.completed` event payload.

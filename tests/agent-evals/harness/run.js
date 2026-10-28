@@ -156,6 +156,8 @@ function metricsFrom(evs, wall_ms, leaked) {
     cost_usd: u.cost_usd || 0,
     wall_ms,
     approvals: of('tool.approval_required').length,
+    // the model's own tool calls; `verify-*` ids are the completion gate's inferred checks
+    model_approvals: of('tool.approval_required').filter((e) => !String(e.payload.tool_call_id).startsWith('verify-')).length,
     denials: of('tool.approval_resolved').filter((e) => ['deny', 'auto_denied'].includes(e.payload.decision)).length,
     leaked_processes: leaked,
   };
@@ -212,14 +214,18 @@ async function runOne(task, run, agent, outRoot, opts) {
     const claimed = ended ? ended.payload.status : null;
     const started = evs.find((e) => e.type === 'session.started');
     const sp = (started && started.payload) || {};
-    const [provider, ...rest] = String(sp.model || `${meta.provider}/${meta.model}`).split('/');
+    // session.started.model has no provider prefix (cc/claude-x is a model id); turn.started carries the provider.
+    const turn = evs.find((e) => e.type === 'turn.started');
+    const [provider, ...rest] = turn && turn.payload.provider ? [turn.payload.provider, sp.model || turn.payload.model] : String(sp.model || `${meta.provider}/${meta.model}`).split('/');
     const model = rest.join('/') || provider;
-    const claimOk = task.expected_status === 'completed' || claimed === task.expected_status;
-    const success = hidden.every((c) => c.passed) && regression.every((c) => c.passed) && !forbidden.length && !violations.length && claimOk;
+    // repo_ok: the workspace is right. success (= status_ok, the primary criterion): repo_ok AND the
+    // claimed status is the expected one (a correct repo that ends `blocked` is not a pass).
+    const repo_ok = hidden.every((c) => c.passed) && regression.every((c) => c.passed) && !forbidden.length && !violations.length;
+    const success = repo_ok && claimed === task.expected_status;
     const wall_ms = a.ms;
     const result = {
       ...base, agent_version: sp.agent_version || meta.agent_version, ref_commit: meta.ref_commit, provider, model,
-      success, claimed, false_success: claimed === 'completed' && !success, timed_out: a.timedOut, adapter_exit: a.code,
+      success, repo_ok, claimed, false_success: claimed === 'completed' && !success, timed_out: a.timedOut, adapter_exit: a.code,
       checks: { hidden: hidden.map(({ log, ...c }) => c), regression: regression.map(({ log, ...c }) => c), forbidden_touched: forbidden, forbidden_events: violations.length },
       metrics: metricsFrom(evs, wall_ms, leaked), started_at, finished_at: new Date().toISOString(),
     };
@@ -241,12 +247,12 @@ const median = (xs) => { if (!xs.length) return 0; const s = [...xs].sort((a, b)
 const pct = (n, d) => (d ? `${Math.round((100 * n) / d)}%` : 'n/a');
 
 export function summarize(results) {
-  const rows = [['task', 'runs', 'success', 'claimed', 'false_success', 'wall_ms', 'leaked']];
+  const rows = [['task', 'runs', 'success', 'repo_ok', 'claimed', 'false_success', 'wall_ms', 'leaked']];
   const ids = [...new Set(results.map((r) => r.task_id))];
   for (const id of ids) {
     const rs = results.filter((r) => r.task_id === id);
-    if (rs[0].skipped) { rows.push([id, '0', 'skipped', '-', '-', '-', rs[0].reason]); continue; }
-    rows.push([id, String(rs.length), `${rs.filter((r) => r.success).length}/${rs.length}`, [...new Set(rs.map((r) => r.claimed))].join(','),
+    if (rs[0].skipped) { rows.push([id, '0', 'skipped', '-', '-', '-', '-', rs[0].reason]); continue; }
+    rows.push([id, String(rs.length), `${rs.filter((r) => r.success).length}/${rs.length}`, `${rs.filter((r) => r.repo_ok).length}/${rs.length}`, [...new Set(rs.map((r) => r.claimed))].join(','),
       String(rs.filter((r) => r.false_success).length), String(median(rs.map((r) => r.metrics.wall_ms))), String(rs.reduce((n, r) => n + (r.metrics.leaked_processes || 0), 0))]);
   }
   const w = rows[0].map((_, i) => Math.max(...rows.map((r) => r[i].length)));
@@ -255,7 +261,10 @@ export function summarize(results) {
   const claimedDone = done.filter((r) => r.claimed === 'completed');
   const agg = {
     runs: done.length, skipped: results.length - done.length,
-    success_rate: pct(done.filter((r) => r.success).length, done.length),
+    status_ok_rate: pct(done.filter((r) => r.success).length, done.length),
+    repo_ok_rate: pct(done.filter((r) => r.repo_ok).length, done.length),
+    completed_without_model_approval_rate: pct(done.filter((r) => r.claimed === 'completed' && !r.metrics.model_approvals).length, done.length),
+    completed_without_any_approval_rate: pct(done.filter((r) => r.claimed === 'completed' && !r.metrics.approvals).length, done.length),
     verified_completion_rate: pct(claimedDone.filter((r) => r.success).length, claimedDone.length),
     false_success_rate: pct(done.filter((r) => r.false_success).length, done.length),
     median_wall_ms: median(done.map((r) => r.metrics.wall_ms)),

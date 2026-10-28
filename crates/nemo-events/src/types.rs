@@ -181,6 +181,9 @@ pub enum Event {
     SessionStarted {
         workspace: WorkspaceInfo,
         model: String,
+        /// Provider id the model is served by (additive; absent in older logs).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        provider: Option<String>,
         permission_mode: String,
         source: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]

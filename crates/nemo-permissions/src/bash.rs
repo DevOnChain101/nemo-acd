@@ -385,7 +385,6 @@ fn flags_for(name: &str) -> Option<Fl> {
                 "zero-terminated",
             ],
         ),
-        "echo" => fl("neE", "", &[]),
         "wc" => fl(
             "clmwL",
             "",
@@ -757,6 +756,11 @@ pub fn is_read_only_simple(words: &[String]) -> bool {
     }
     let sub = words.get(1).map(String::as_str);
     let args = &words[1..];
+    // A builtin that only prints its arguments (`$` expansion is refused above, redirects by the
+    // parser). Every word is text, so `echo ---` is not a flag error.
+    if name == "echo" {
+        return true;
+    }
     if name == "cd" {
         return words.len() <= 2;
     }
@@ -1495,6 +1499,16 @@ fn bash_specs(rules: &[String]) -> Vec<String> {
 /// runs inline code (`bash -c`, `eval`, `python -c`, `node -e`) is allowed by an exact spec only,
 /// never by a `prefix:*` rule.
 pub fn bash_all_match(rules: &[String], command: &str) -> bool {
+    bash_all_match_or(rules, command, |_| false)
+}
+
+/// [`bash_all_match`] where a simple command that no rule covers still passes when `also` says it
+/// is safe (read-only filters after an allowed `node --test`). `also` sees segments in order.
+pub fn bash_all_match_or(
+    rules: &[String],
+    command: &str,
+    mut also: impl FnMut(&[String]) -> bool,
+) -> bool {
     let specs = bash_specs(rules);
     if specs.iter().any(|s| s == "*") {
         return true;
@@ -1503,12 +1517,16 @@ pub fn bash_all_match(rules: &[String], command: &str) -> bool {
         return false;
     };
     !segs.is_empty()
+        && !specs.is_empty()
         && segs.iter().all(|w| {
             let j = w.join(" ");
             let inline = runs_inline_code(w, true);
+            // `also` runs for every segment so it can track state such as `cd`
+            let safe = also(w);
             specs
                 .iter()
                 .any(|sp| !(inline && sp.ends_with(":*")) && spec_matches(sp, &j, true))
+                || safe
         })
 }
 

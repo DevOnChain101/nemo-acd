@@ -237,6 +237,7 @@ mod tests {
                     git_worktree: None,
                 },
                 model: s("m"),
+                provider: Some(s("p")),
                 permission_mode: s("default"),
                 source: s("startup"),
                 resumed_from_seq: Some(4),

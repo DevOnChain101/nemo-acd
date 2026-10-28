@@ -4,9 +4,13 @@
 mod gate;
 mod plan;
 mod runner;
+mod testout;
 mod types;
+mod weaken;
 
 pub use gate::*;
 pub use plan::{detect_checks, plan_checks};
 pub use runner::{CheckAuth, CheckAuthorizer, NEEDS_APPROVAL, VerifyRunner};
+pub use testout::parse_counts;
 pub use types::*;
+pub use weaken::{FileEdit, removed_prerequisite_guards, weakened_tests};

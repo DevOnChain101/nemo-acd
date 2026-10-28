@@ -1151,6 +1151,7 @@ impl Harness {
                 task.pending_user_need.store(false, Ordering::SeqCst);
                 task.pending_approval.store(false, Ordering::SeqCst);
                 self.record_changed(task, &input);
+                self.record_edit(task, &out.meta);
             }
             SideEffectClass::Execute => {
                 // Read-only / build / test / lint commands change nothing the gate should verify.
@@ -1257,6 +1258,27 @@ impl Harness {
             })
             .unwrap_or_else(|| p.to_string());
         self.add_changed(task, shown);
+    }
+
+    /// Keeps the added/removed lines of an Edit/Write diff (hidden or truncated diffs have none).
+    fn record_edit(&self, task: &TaskRun, meta: &Value) {
+        let Some(d) = meta.get("diff").filter(|d| d.is_object()) else {
+            return;
+        };
+        let mut e = nemo_verification::FileEdit {
+            path: d["path"].as_str().unwrap_or_default().into(),
+            ..Default::default()
+        };
+        let lines = d["hunks"].as_array().into_iter().flatten();
+        for l in lines.flat_map(|h| h["lines"].as_array().into_iter().flatten()) {
+            let text = l["text"].as_str().unwrap_or_default().to_string();
+            match l["tag"].as_str() {
+                Some("+") => e.added.push(text),
+                Some("-") => e.removed.push(text),
+                _ => {}
+            }
+        }
+        lock(&task.edits).push(e);
     }
 
     fn add_changed(&self, task: &TaskRun, file: String) {

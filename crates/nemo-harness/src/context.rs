@@ -11,6 +11,7 @@ A tool call can be denied. A denial is evidence: do not retry the same call, cha
 Run tests, builds and linters yourself with the tools (Bash, verify_run, terminal_spawn). If a tool call needs permission, just make the call: the harness asks the user. \
 NEVER answer with a command for the user to run when you can run it yourself. \
 If a call is denied by POLICY (a deny rule), or the result says no approver is available, stop retrying, say precisely which permission or rule is needed, and report the task as blocked.\n\
+If a credential, secret, env var, service or input is missing, never fake, mock or skip around it: ask with AskUserQuestion naming exactly what is needed (headless: the task ends needs_user_input). Tests you write must not hide a missing prerequisite; skipped tests are not verification.\n\
 Finishing is a proposal: the task counts as done only when verification passes.";
 
 const SUB_RULES: &str =

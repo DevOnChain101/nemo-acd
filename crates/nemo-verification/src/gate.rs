@@ -4,6 +4,7 @@
 use crate::plan::plan_checks;
 use crate::runner::{CheckAuthorizer, VerifyRunner};
 use crate::types::*;
+use crate::weaken::{FileEdit, removed_prerequisite_guards, weakened_tests};
 use nemo_events::TaskStatus;
 use std::collections::{BTreeSet, HashMap};
 use tokio_util::sync::CancellationToken;
@@ -44,6 +45,11 @@ pub struct TaskState {
     /// Any Write/Execute side effect happened in the task.
     pub side_effects: bool,
     pub changed_files: Vec<String>,
+    /// Line diffs of the files the agent edited (for [`weakened_tests`]).
+    pub edits: Vec<FileEdit>,
+    /// Check command -> skipped + todo tests it already had before the agent's edits. Empty when
+    /// no baseline run exists, which makes every skip count against the check.
+    pub baseline_skipped: HashMap<String, u64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -88,6 +94,23 @@ pub fn aggregate(
         .iter()
         .filter(|k| k.status != Passed && k.status != Failed)
     {
+        if let Some(t) = k.tests.as_ref().filter(|t| t.skipped + t.todo > 0) {
+            lim.push(format!(
+                "{SKIPPED_TESTS}: check {} ({}) ran {} passed, {} failed but {} skipped and {} todo{}",
+                k.id,
+                k.command.as_deref().unwrap_or("no command"),
+                t.passed,
+                t.failed,
+                t.skipped,
+                t.todo,
+                if t.skipped_names.is_empty() {
+                    String::new()
+                } else {
+                    format!(": {}", t.skipped_names.join(" | "))
+                }
+            ));
+            continue;
+        }
         lim.push(format!(
             "check {} ({}) was {}: {}",
             k.id,
@@ -125,6 +148,20 @@ pub fn aggregate(
     }
     lim.push("a pass covers only what the listed checks exercise, not all behavior".into());
     (status, lim)
+}
+
+/// A passed check that skipped tests (beyond its baseline) is not a clean pass.
+fn downgrade_skips(checks: &mut [CheckResult], baseline: &HashMap<String, u64>) {
+    for k in checks
+        .iter_mut()
+        .filter(|k| k.status == VerificationStatus::Passed)
+    {
+        let Some(t) = &k.tests else { continue };
+        let was = k.command.as_ref().and_then(|c| baseline.get(c)).copied();
+        if t.skipped + t.todo > was.unwrap_or(0) {
+            k.status = VerificationStatus::Unverified;
+        }
+    }
 }
 
 /// Per-task gate: create one per task, call `evaluate` each time the model ends its turn.
@@ -188,9 +225,24 @@ impl CompletionGate {
             &self.runner.workspace().cwd,
             &st.changed_files,
         );
-        let checks = self.runner.run_with(&plan, cancel, auth).await;
+        let mut checks = self.runner.run_with(&plan, cancel, auth).await;
+        downgrade_skips(&mut checks, &st.baseline_skipped);
         let mut criteria = st.criteria.clone();
-        let (status, mut limitations) = aggregate(&mut criteria, &checks, self.cfg.inferred_only);
+        let (mut status, mut limitations) =
+            aggregate(&mut criteria, &checks, self.cfg.inferred_only);
+        // Editing what the checks assert voids a pass: it is reported, never `passed`.
+        for l in [
+            weakened_tests(&st.edits),
+            removed_prerequisite_guards(&st.edits),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            limitations.push(l);
+            if status == VerificationStatus::Passed {
+                status = VerificationStatus::Unverified;
+            }
+        }
 
         if let Some(p) = &self.prev {
             for k in checks

@@ -2655,3 +2655,51 @@ fn ask_rules_still_prompt_under_bypass_and_other_calls_do_not() {
         A
     );
 }
+
+// --- headless UX: echo and read-only filters around an allowed command ---------------------------
+// Documented divergence from Node (no golden case covers it): official Claude Code allows
+// `echo` and read-only parts of a compound command in every mode (official-conformance item 13).
+
+#[test]
+fn echo_and_read_only_filters_follow_an_allowed_command() {
+    let f = fx();
+    let ok = |allow: &[&str], mode, cmd: &str| {
+        f.with(rules(allow, &[], &[]), mode)
+            .check_current("Bash", &json!({ "command": cmd }))
+            .decision
+            == A
+    };
+    for c in [
+        "echo ---",
+        "echo 'a: b' 2>&1",
+        "echo -n hi",
+        "ls; echo ---; pwd",
+    ] {
+        assert!(is_read_only_bash(c), "{c}");
+        assert_eq!(f.bash(Mode::Default, c), A, "{c}");
+    }
+    assert!(!is_read_only_bash("echo $HOME") && !is_read_only_bash("echo hi > out.txt"));
+    let node = &["Bash(node --test:*)"];
+    for c in [
+        "node --test test/ 2>&1 | tail -15",
+        "node --test test/ | head -5 | wc -l",
+        "node --test 2>&1 | grep -E 'pass|fail' | sort | uniq",
+        "echo --- && node --test test/ && echo ---",
+    ] {
+        for m in [Mode::Default, Mode::AcceptEdits, Mode::DontAsk] {
+            assert!(ok(node, m, c), "{m:?} {c}");
+        }
+    }
+    // every part must still be allowed
+    for c in [
+        "node --test | tee out.txt",
+        "node --test | sh",
+        "node --test; rm x",
+        "node --test | tail ../../etc/passwd",
+        "cargo test | tail",
+    ] {
+        assert!(!ok(node, Mode::AcceptEdits, c), "{c}");
+    }
+    // the read-only part alone grants nothing
+    assert!(!ok(&[], Mode::Default, "node --test | tail"));
+}

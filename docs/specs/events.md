@@ -29,7 +29,7 @@ Doc §5.12 types are kept verbatim; additions are marked. Payload field types: `
 
 | Type | Payload | Source |
 |---|---|---|
-| `session.started` | `workspace:{workspace_id:str, root:str, cwd:str, additional_dirs:[str], git_worktree:str?}, model:str, permission_mode:str, source:"startup"\|"resume"\|"clear", resumed_from_seq:u64?` | doc §5.12; `source` [from-node agent.js:1229 SessionStart] |
+| `session.started` | `workspace:{workspace_id:str, root:str, cwd:str, additional_dirs:[str], git_worktree:str?}, model:str, provider:str? (additive: id of the provider serving the model; absent in older logs), permission_mode:str, source:"startup"\|"resume"\|"clear", resumed_from_seq:u64?` | doc §5.12; `source` [from-node agent.js:1229 SessionStart] |
 | `session.status_changed` | `from:SessionStatus, to:SessionStatus, reason:str?` | [new] (state machine, workspace-context.md §3) |
 | `session.completed` / `session.failed` / `session.cancelled` | `reason:str, error:str?` — exactly one per session, last event of the stream | doc §5.12 |
 | `task.started` | `request:str, acceptance_criteria:[{id:str,text:str,check:str?}], budget:Budget` | [new] |
