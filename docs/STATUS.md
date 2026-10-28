@@ -1,10 +1,10 @@
 # Nemo-ACD status
 
-Goal: R1–R9, hand over the full Nemo autonomous coding agent. NOT complete. Nothing is committed (repo has no commits, no remote); CI has never run; only macOS (x86_64) was exercised.
+Goal: R1–R9, hand over the full Nemo autonomous coding agent. NOT complete. HEAD is 4ce7465 (local commits); CI #12 is pending (earlier runs needed fixes); locally only macOS was exercised.
 
 ## Verified (final run, macOS x86_64 only; tester report)
 - `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` (also nemo-cli with `--features test-provider`): clean.
-- `cargo test --workspace --no-fail-fast`: 670 passed, 0 failed, 0 ignored (63 test binaries + 21 doc-test sections), identical outcome lists on two runs; `cargo test -p nemo-cli --features test-provider`: 53 passed; selftest of the eval harness: 6/6; five-crate loop (browser, workspace, mcp, tui, tui-base) 5x: 210 passed each, no intermittent failures.
+- `cargo test --workspace --no-fail-fast`: 814 passed (macOS, commit 4ce7465), identical outcome lists on two runs; `cargo test -p nemo-cli --features test-provider`: 53 passed; selftest of the eval harness: 6/6; five-crate loop (browser, workspace, mcp, tui, tui-base) 5x: 210 passed each, no intermittent failures.
 - Counting method (to compare future runs): `grep -E '^test result' log | awk '{p+=$4; f+=$6; i+=$8}'`.
 - Golden: 717 cases, capture byte-identical on re-run; all `reviewed_by` are null.
 - Release binary: builds, `--version`, `doctor`, no `test-provider` in the binary; `nemo run` with no credentials exits 2 (fails closed). `scripts/test-check-release-tag.sh` 9/9; action pins pass; placeholder check fails by design until the owner sets the repo.
@@ -31,4 +31,4 @@ ADR-010 Rust core; ADR-011 API keys only, user-managed via NEMO_* (standard vars
 - Specs and golden cases still `draft` / unreviewed by a human.
 - Node repo ~/Vibe/nemo-cli: owner no longer uses it and forbids further edits (2026-10-28); open Node test failures C/F2 are moot; Node eval baseline is no longer a cutover requirement unless the owner says otherwise.
 - Security: third review in progress (see its report); known residual risks in docs/SECURITY.md.
-- Cutover: parallel run, then retire Node (docs/MIGRATION.md checklist).
+- Cutover: Node is retired (no parallel run); finish the docs/MIGRATION.md checklist.

@@ -70,6 +70,40 @@ impl SandboxBackend for Fake {
     }
 }
 
+struct NoWrap;
+
+impl SandboxBackend for NoWrap {
+    fn name(&self) -> &'static str {
+        "nowrap"
+    }
+    fn capabilities(&self) -> SandboxCapabilities {
+        Fake(Guarantee::Strong).capabilities()
+    }
+    fn wrap(
+        &self,
+        _: &SandboxPolicy,
+        _: &SandboxedCommand,
+    ) -> Result<SandboxedCommand, SandboxError> {
+        Err(SandboxError::Unsupported("landlock only".into()))
+    }
+}
+
+#[tokio::test]
+async fn unsupported_wrap_degrades_in_best_effort_but_enforce_refuses() {
+    let rt = TerminalRuntime::new(SandboxMode::BestEffort).with_sandbox_backend(Arc::new(NoWrap));
+    let f = open(&rt, Some(SandboxPolicy::default()));
+    let r = run(&rt, ExecSpec::new("touch ran")).await;
+    assert!(r.sandbox.is_none() && r.unsandboxed_by_request && f.root.join("ran").exists());
+    let rt = TerminalRuntime::new(SandboxMode::Enforce).with_sandbox_backend(Arc::new(NoWrap));
+    let f = open(&rt, Some(SandboxPolicy::default()));
+    let err = rt
+        .exec(SID, ExecSpec::new("touch ran"), &CancellationToken::new())
+        .await
+        .unwrap_err();
+    assert!(matches!(err, Error::SandboxUnavailable(_)), "{err}");
+    assert!(!f.root.join("ran").exists());
+}
+
 #[tokio::test]
 async fn enforce_refuses_loopback_the_backend_cannot_honour() {
     // Fake keeps the trait default: Deny = capabilities().network, Loopback = unsupported.

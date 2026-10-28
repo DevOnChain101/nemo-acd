@@ -727,10 +727,17 @@ impl TerminalRuntime {
         if let Some(t) = &policy.tmp_dir {
             create_private_dir(t)?;
         }
-        let wrapped = backend.wrap(policy, cmd).map_err(|e| match e {
-            SandboxError::InvalidPolicy(m) => Error::InvalidSpec(format!("sandbox policy: {m}")),
-            e => Error::SandboxUnavailable(e.to_string()),
-        })?;
+        let wrapped = match backend.wrap(policy, cmd) {
+            Ok(w) => w,
+            // Landlock-only hosts etc.: best-effort runs unconfined (flagged unsandboxed_by_request).
+            Err(SandboxError::Unsupported(_)) if self.mode == SandboxMode::BestEffort => {
+                return Ok(None);
+            }
+            Err(SandboxError::InvalidPolicy(m)) => {
+                return Err(Error::InvalidSpec(format!("sandbox policy: {m}")));
+            }
+            Err(e) => return Err(Error::SandboxUnavailable(e.to_string())),
+        };
         Ok(Some((wrapped, caps)))
     }
 
