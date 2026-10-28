@@ -1114,7 +1114,8 @@ impl BrowserRuntime {
         self.events.abort();
         if let Some(mut child) = self.child.lock().await.take() {
             let _ = child.start_kill(); // errors mean "already gone"
-            let _ = child.wait().await;
+            // Bounded: a Windows job-object wait must never hang a caller (CI sat 15 min).
+            let _ = tokio::time::timeout(Duration::from_secs(10), child.wait()).await;
         }
         let profile = lock(&self.profile).take();
         if let Some(p) = profile {

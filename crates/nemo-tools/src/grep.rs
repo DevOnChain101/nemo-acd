@@ -41,9 +41,14 @@ const TYPE_EXT: &[(&str, &[&str])] = &[
     ("sh", &[".sh", ".bash"]),
 ];
 
-/// Port of Node's minimal glob (`**`, `*`, `?`), case-insensitive, no braces.
+/// Port of Node's minimal glob (`**`, `*`, `?`), no braces. Case-insensitive only where the
+/// filesystem is (Windows, macOS). Matched against `/`-separated relative paths.
 fn glob_to_regex(glob: &str) -> Regex {
-    let mut re = String::from("(?is)^");
+    let mut re = String::from(if cfg!(any(windows, target_os = "macos")) {
+        "(?is)^"
+    } else {
+        "(?s)^"
+    });
     let mut it = glob.chars().peekable();
     while let Some(c) = it.next() {
         match c {
@@ -51,13 +56,24 @@ fn glob_to_regex(glob: &str) -> Regex {
                 it.next();
                 re.push_str(".*");
             }
-            '*' => re.push_str(r"[^/\\]*"),
-            '?' => re.push_str(r"[^/\\]"),
+            '*' => re.push_str("[^/]*"),
+            '?' => re.push_str("[^/]"),
             c => re.push_str(&regex::escape(&c.to_string())),
         }
     }
     re.push('$');
     Regex::new(&re).expect("escaped glob is a valid regex")
+}
+
+/// Whether `rel` (workspace-relative; `\` is a separator only when `win`) or its file name
+/// matches the glob regex. Paths are folded to `/` first so one glob works on every OS.
+fn glob_hits(re: &Regex, rel: &str, win: bool) -> bool {
+    let rel = if win {
+        rel.replace('\\', "/")
+    } else {
+        rel.to_string()
+    };
+    re.is_match(&rel) || re.is_match(rel.rsplit('/').next().unwrap_or(&rel))
 }
 
 fn collect_files(search: &Path, is_dir: bool, ctx: &ToolContext) -> Vec<PathBuf> {
@@ -113,9 +129,7 @@ fn search(
         let re = glob_to_regex(g);
         files.retain(|f| {
             let rel = f.strip_prefix(search_path).unwrap_or(f);
-            re.is_match(&rel.to_string_lossy())
-                || f.file_name()
-                    .is_some_and(|n| re.is_match(&n.to_string_lossy()))
+            glob_hits(&re, &rel.to_string_lossy(), cfg!(windows))
         });
     }
     if let Some(exts) = str_field(input, "type")
@@ -303,4 +317,23 @@ pub(crate) fn run(input: &Value, ctx: &ToolContext) -> ToolOutput {
         out += &format!("\n\n… output truncated to {MAX_OUTPUT_BYTES} bytes.");
     }
     ToolOutput::text(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{glob_hits, glob_to_regex};
+
+    #[test]
+    fn glob_matches_slash_normalised_relative_paths() {
+        let re = glob_to_regex("**/*.md");
+        // Windows spelling: backslashes are folded before matching
+        assert!(glob_hits(&re, r"sub\deep\c.md", true));
+        assert!(!glob_hits(&re, r"sub\c.txt", true));
+        let re = glob_to_regex("src/*.js");
+        assert!(glob_hits(&re, r"src\a.js", true));
+        assert!(!glob_hits(&re, r"src\deep\a.js", true));
+        // POSIX: a backslash is an ordinary file-name character
+        assert!(!glob_hits(&glob_to_regex("src/*.js"), r"src\a.js", false));
+        assert!(glob_hits(&glob_to_regex("*.js"), "a.js", false));
+    }
 }
