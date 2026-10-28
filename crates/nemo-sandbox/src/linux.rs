@@ -591,6 +591,7 @@ mod tests {
         assert_eq!(helper_next_to(&exe), Some(f));
     }
 
+    #[cfg(unix)] // the candidates are POSIX paths: not absolute on a Windows host
     #[test]
     fn external_binaries_are_absolute_candidates_only() {
         assert!(

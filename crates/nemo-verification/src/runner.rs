@@ -195,21 +195,24 @@ impl VerifyRunner {
             criteria_ids: c.criteria_ids.clone(),
             artifacts: vec![],
         };
-        match &c.command {
-            None => {
+        // (no `if let` match guard: unstable on the 1.89 MSRV)
+        let blocked = match (&c.command, auth) {
+            (Some(_), Some(a)) => match a.authorize(c, cancel).await {
+                CheckAuth::Blocked(why) => Some(why),
+                _ => None,
+            },
+            _ => None,
+        };
+        match (&c.command, blocked) {
+            (None, _) => {
                 r.summary = "no executable command: needs a browser, HTTP or manual check".into()
             }
-            Some(_)
-                if let Some(CheckAuth::Blocked(why)) = match auth {
-                    Some(a) => Some(a.authorize(c, cancel).await),
-                    None => None,
-                } =>
-            {
+            (Some(_), Some(why)) => {
                 r.status = VerificationStatus::Blocked;
                 r.summary = format!("not run: {why}");
                 r.blocked_reason = Some(why);
             }
-            Some(cmd) => {
+            (Some(cmd), None) => {
                 let mut spec = ExecSpec::new(cmd.clone());
                 spec.cwd = Some(c.cwd.clone());
                 spec.timeout = Duration::from_millis(c.timeout_ms);

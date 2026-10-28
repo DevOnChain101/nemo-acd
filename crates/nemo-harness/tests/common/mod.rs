@@ -185,7 +185,7 @@ impl Rig {
 
     pub fn build(o: Opts, turns: Vec<Turn>, f: impl FnOnce(Harness, &Rig0) -> Harness) -> Self {
         let dir = tempfile::tempdir().unwrap();
-        let root = std::fs::canonicalize(dir.path()).unwrap();
+        let root = nemo_core::canonicalize(dir.path()).unwrap();
         std::fs::create_dir_all(root.join("w")).unwrap();
         let ws = WorkspaceContext::open(
             "w",

@@ -408,12 +408,19 @@ fn key_def(key: &str) -> Option<(String, String, u32, Option<String>)> {
 
 /// A launch failure that says what happened to the browser: its exit status (or that it is still
 /// running) and the last 2 KiB of its stderr, so a CI log alone explains why it did not come up.
-fn launch_failure(
+async fn launch_failure(
     child: &mut dyn ChildWrapper,
     stderr_path: &Path,
     exe: &Path,
     what: &str,
 ) -> BrowserError {
+    // The pipe/socket closes a moment before the exit is reapable: give a dying browser time to be seen.
+    for _ in 0..100 {
+        if !matches!(child.try_wait(), Ok(None)) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
     let status = match child.try_wait() {
         Ok(Some(s)) => format!("exited ({s})"),
         Ok(None) => "still running".to_owned(),
@@ -522,7 +529,8 @@ impl BrowserRuntime {
                         &stderr_path,
                         &exe,
                         "browser exited before DevTools was ready",
-                    ));
+                    )
+                    .await);
                 }
                 if Instant::now() > deadline {
                     return Err(launch_failure(
@@ -530,19 +538,17 @@ impl BrowserRuntime {
                         &stderr_path,
                         &exe,
                         "browser did not publish its DevTools port in time",
-                    ));
+                    )
+                    .await);
                 }
                 tokio::time::sleep(Duration::from_millis(50)).await;
             };
             match Cdp::connect(&ws_url, opts.event_capacity).await {
                 Ok(c) => Arc::new(c),
                 Err(e) => {
-                    return Err(launch_failure(
-                        &mut *child,
-                        &stderr_path,
-                        &exe,
-                        &e.to_string(),
-                    ));
+                    return Err(
+                        launch_failure(&mut *child, &stderr_path, &exe, &e.to_string()).await,
+                    );
                 }
             }
         };
@@ -556,12 +562,7 @@ impl BrowserRuntime {
         {
             Ok(c) => c,
             Err(e) => {
-                return Err(launch_failure(
-                    &mut *child,
-                    &stderr_path,
-                    &exe,
-                    &e.to_string(),
-                ));
+                return Err(launch_failure(&mut *child, &stderr_path, &exe, &e.to_string()).await);
             }
         };
         let context_id = ctx["browserContextId"]
@@ -609,7 +610,7 @@ impl BrowserRuntime {
         };
         if let Err(e) = rt.new_tab(None).await {
             if let Some(c) = rt.child.lock().await.as_mut() {
-                return Err(launch_failure(&mut **c, &stderr_path, &exe, &e.to_string()));
+                return Err(launch_failure(&mut **c, &stderr_path, &exe, &e.to_string()).await);
             }
             return Err(e);
         }

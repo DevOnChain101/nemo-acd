@@ -26,10 +26,24 @@ struct Fx {
     outside: PathBuf,
 }
 
-/// cwd (with `sub/`), home and an outside dir; deliberately NOT canonicalised (macOS /var).
+/// cwd (with `sub/`), home and an outside dir; not canonicalised on POSIX (macOS /var).
 fn fx() -> Fx {
     let dirs: Vec<TempDir> = (0..3).map(|_| tempfile::tempdir().unwrap()).collect();
-    let [cwd, home, outside] = [0, 1, 2].map(|i| dirs[i].path().to_path_buf());
+    // Windows: the runner's TEMP has an 8.3 `RUNNER~1` component (protected by the L1 rule) and `\`
+    // would be eaten by the shell word parser in commands. Long names, `/` spelling, like golden.rs.
+    let spell = |p: &Path| {
+        if cfg!(windows) {
+            PathBuf::from(
+                dunce::canonicalize(p)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/"),
+            )
+        } else {
+            p.to_path_buf()
+        }
+    };
+    let [cwd, home, outside] = [0, 1, 2].map(|i| spell(dirs[i].path()));
     fs::create_dir(cwd.join("sub")).unwrap();
     Fx {
         _dirs: dirs,
@@ -1327,6 +1341,8 @@ fn deny_dot_ssh_is_case_sensitive_on_linux() {
     );
 }
 
+// A non-native policy over native paths only composes on POSIX (`\` is not a separator there).
+#[cfg(unix)]
 #[test]
 fn protected_scan_folds_per_policy() {
     let f = fx();
@@ -1445,20 +1461,25 @@ fn rule_syntax_path_specs_webfetch_mcp_and_wildcards() {
         ),
         D
     );
-    let g = |spec: &str, t: &str| {
-        paths::match_path_rule(spec, t, Path::new("/w"), Path::new("/h"), POSIX)
-    };
-    assert!(
-        g("/src/**", "/w/src/a/b.rs")
-            && !g("/src/*", "/w/src/a/b.rs")
-            && g("/src/*", "/w/src/b.rs")
-    );
-    assert!(g("src/**/x.rs", "/w/src/x.rs") && g("/s?c/a", "/w/src/a") && !g("/s?c/a", "/w/s/c/a"));
-    assert!(
-        g("a.b", "/w/a.b") && !g("a.b", "/w/aXb"),
-        "dots are literal"
-    );
-    assert!(g("~/x/**", "/h/x/y") && g("~\\x/**", "/h/x/y"));
+    #[cfg(unix)]
+    {
+        let g = |spec: &str, t: &str| {
+            paths::match_path_rule(spec, t, Path::new("/w"), Path::new("/h"), POSIX)
+        };
+        assert!(
+            g("/src/**", "/w/src/a/b.rs")
+                && !g("/src/*", "/w/src/a/b.rs")
+                && g("/src/*", "/w/src/b.rs")
+        );
+        assert!(
+            g("src/**/x.rs", "/w/src/x.rs") && g("/s?c/a", "/w/src/a") && !g("/s?c/a", "/w/s/c/a")
+        );
+        assert!(
+            g("a.b", "/w/a.b") && !g("a.b", "/w/aXb"),
+            "dots are literal"
+        );
+        assert!(g("~/x/**", "/h/x/y") && g("~\\x/**", "/h/x/y"));
+    }
 }
 
 #[test]
@@ -1483,6 +1504,8 @@ fn bx(p: &Permissions, c: &str) -> Decision {
     d(p, "Bash", json!({ "command": c }))
 }
 
+// POSIX spellings (`/etc`, `/w`) under a POSIX policy only make sense on a POSIX host.
+#[cfg(unix)]
 #[test]
 fn w1_double_slash_path_specs_are_absolute() {
     let f = fx();
@@ -1890,15 +1913,18 @@ fn l1_windows_policy_treats_ads_dots_short_names_and_devices_as_protected() {
     ] {
         assert_eq!(w(n), Q, "{n}");
     }
-    let posix = f.perms(Mode::AcceptEdits);
-    assert_eq!(
-        d(
-            &posix,
-            "Write",
-            json!({ "file_path": f.path("a.txt:stream") })
-        ),
-        A
-    );
+    #[cfg(unix)]
+    {
+        let posix = f.perms(Mode::AcceptEdits);
+        assert_eq!(
+            d(
+                &posix,
+                "Write",
+                json!({ "file_path": f.path("a.txt:stream") })
+            ),
+            A
+        );
+    }
 }
 
 #[test]

@@ -72,9 +72,15 @@ fn rig(turns: Vec<Turn>, k: Knobs) -> Rig {
         let mut cfg = HarnessConfig::new("fake-model");
         cfg.recovery_delay = Duration::from_millis(1);
         cfg.shell.user_commands_model_turn = !k.no_model_turn;
-        let harness = Harness::new(p2, ToolBox::new(Registry::builtin()), perms, sink, cfg)
-            .with_approver(link.approver())
-            .with_input(link.input());
+        let harness = Harness::new(
+            p2,
+            ToolBox::new(Registry::unsandboxed_for_tests()),
+            perms,
+            sink,
+            cfg,
+        )
+        .with_approver(link.approver())
+        .with_input(link.input());
         let mut o = Options::new(
             Arc::new(harness),
             session,

@@ -16,7 +16,7 @@ struct Env {
 
 fn env() -> Env {
     let tmp = tempfile::tempdir().unwrap();
-    let base = fs::canonicalize(tmp.path()).unwrap();
+    let base = nemo_core::canonicalize(tmp.path()).unwrap();
     Env {
         home: base.join("home"),
         base,

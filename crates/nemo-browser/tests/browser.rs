@@ -147,9 +147,11 @@ fn browser_env() -> Option<Env> {
 async fn launch(opts: BrowserOptions, env: &Env) -> BrowserRuntime {
     static ONE_AT_A_TIME: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
     let _g = ONE_AT_A_TIME.lock().await;
-    match BrowserRuntime::launch(opts, env).await {
-        Ok(rt) => rt,
-        Err(e) => panic!("browser launch failed:\n{e}\n(debug: {e:?})"),
+    // Fail fast instead of hanging a CI job (a Windows run once sat 40 min).
+    match tokio::time::timeout(Duration::from_secs(90), BrowserRuntime::launch(opts, env)).await {
+        Ok(Ok(rt)) => rt,
+        Ok(Err(e)) => panic!("browser launch failed:\n{e}\n(debug: {e:?})"),
+        Err(_) => panic!("browser launch did not finish in 90 s"),
     }
 }
 

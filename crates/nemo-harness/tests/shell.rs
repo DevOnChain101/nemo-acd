@@ -17,7 +17,7 @@ use tokio_util::sync::CancellationToken;
 
 fn bash_opts() -> Opts {
     Opts {
-        tools: ToolBox::new(Registry::builtin()),
+        tools: ToolBox::new(Registry::unsandboxed_for_tests()),
         ..Opts::default()
     }
 }

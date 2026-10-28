@@ -18,7 +18,7 @@ struct Fx {
 
 fn fx_path(files: &[(&str, &str)], path: Option<&str>) -> Fx {
     let dir = tempfile::tempdir().unwrap();
-    let base = fs::canonicalize(dir.path()).unwrap();
+    let base = nemo_core::canonicalize(dir.path()).unwrap();
     let w = base.join("w");
     fs::create_dir_all(&w).unwrap();
     for (n, c) in files {
@@ -40,6 +40,14 @@ fn fx_path(files: &[(&str, &str)], path: Option<&str>) -> Fx {
         "ComSpec",
         "HOMEDRIVE",
         "HOMEPATH",
+        // rustc locates the MSVC linker through these; without them it falls back to Git's `link`.
+        "ProgramFiles",
+        "ProgramFiles(x86)",
+        "ProgramData",
+        "windir",
+        "SystemDrive",
+        "LIB",
+        "INCLUDE",
     ];
     for k in ["HOME", "CARGO_HOME", "RUSTUP_HOME", "RUSTUP_TOOLCHAIN"]
         .into_iter()
@@ -431,7 +439,7 @@ async fn regression_is_reported_and_report_roundtrips() {
     let mut g = f.gate(GateConfig::default());
     let c = CancellationToken::new();
     let flag = f.ws.cwd.join("flag");
-    let cmd = format!("test -e {}", flag.display());
+    let cmd = "test -e flag".to_string(); // relative: a `\` path would be eaten by the shell on Windows
     // attempt 1: passes (flag exists) -> but add a second failing criterion to continue
     fs::write(&flag, "").unwrap();
     let two = vec![

@@ -136,6 +136,7 @@ jobs:
         with:
           chrome-version: stable
       - name: Browser tests
+        timeout-minutes: 15 # fail fast with the log so far instead of hanging to the job limit
         env:
           NEMO_BROWSER_PATH: ${{ steps.pre.outputs.path || steps.chrome.outputs.chrome-path }}
         run: |
