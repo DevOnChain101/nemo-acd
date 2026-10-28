@@ -14,7 +14,7 @@ Phase R1 deliverable (design doc §10 Phase 0, §14). Base: `../Nemo_Solution_Co
 
 Status values: draft → reviewed (product owner + one engineer) → frozen (changes need a `v` bump or an ADR).
 
-Review record: all seven specs were reviewed and approved by the product owner on 2026-10-28 (chat approval; no second engineer reviewer). They stay `reviewed`, not `frozen`. The product owner is the sole maintainer, so this spec review is final (there is no second reviewer to wait for). Golden cases are a separate review: every `reviewed_by` in the golden `meta.json` files is still null.
+Review record: all seven specs were reviewed and approved by the product owner on 2026-10-28 (chat approval; no second engineer reviewer). They stay `reviewed`, not `frozen`. The product owner is the sole maintainer, so this spec review is final (there is no second reviewer to wait for). Golden cases are a separate review: the owner approved all golden cases on 2026-10-29 as regression snapshots (the Node prototype is not authoritative); every golden `meta.json` carries that `reviewed_by`.
 
 ## Decisions taken in these drafts (challenge them here)
 1. Ported tools keep their Node/Claude names (`Read`, `Bash`, …). Doc §5.6 ids map onto them; new tools use `_` instead of `.` on the wire (dots are not valid in provider tool names). tools.md §1.

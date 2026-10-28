@@ -1,6 +1,6 @@
 # Nemo — Solution Concept & Technical Design
 
-> **Document status:** Proposed architecture · **Version:** 1.1 · **Date:** 2026-10-26  
+> **Document status:** Proposed architecture · **Version:** 1.3 · **Date:** 2026-10-29  
 > **Product:** Nemo — Model-Agnostic Autonomous Coding Agent  
 > **Audience:** Product engineering, agent-runtime engineers, platform engineers, security and QA.
 
@@ -10,6 +10,8 @@
 |---|---|---|
 | 1.0 | 2026-10-26 | Initial proposed architecture |
 | 1.1 | 2026-10-26 | Core engine mandated in Rust; existing Node.js CLI becomes the frozen reference implementation; roadmap, risks, ADRs and appendices updated |
+| 1.2 | 2026-10-29 | Inter-agent messaging: in-session sub-agents and cross-session peers (§5.13, FR-14, ADR-012, roadmap R10, acceptance tests, risk); spec `docs/specs/messaging.md` |
+| 1.3 | 2026-10-29 | Long-term memory, draft (§5.5.1, FR-15, ADR-013, Phase 7, roadmap R11, acceptance tests, risk, open decision 13); spec `docs/specs/memory.md` |
 
 ---
 
@@ -36,7 +38,7 @@ The proposed strategy is **CLI-first, headless-capable, runtime-centered**, with
 - Reimplementing Claude Code or Codex provider harnesses as external dependencies.
 - Full autonomous access to the host machine, arbitrary secrets or production systems.
 - A mandatory GPUI interface or embedded browser engine.
-- Complex multi-agent collaboration before single-agent reliability is established.
+- Complex multi-agent collaboration before single-agent reliability is established (agent messaging is allowed in the narrow scope of ADR-012).
 - Perfect formal proof of software correctness; Nemo reports what was actually checked.
 
 ---
@@ -98,6 +100,8 @@ Most coding chat workflows stop after producing a patch or command. The human mu
 | FR-11 | LSP/symbol diagnostics and intelligent code navigation | P1 |
 | FR-12 | Desktop GPUI as an optional thin client | P2 |
 | FR-13 | Remote execution and multi-agent task orchestration | P2 |
+| FR-14 | Inter-agent messaging: named/background sub-agents messaged and resumed in a session (`SendMessage`, `@agent`), and request/response between local sessions of the same user (§5.13) | P1 (in-session) / P2 (peers) |
+| FR-15 | Long-term memory: per-user, per-repository and per-agent-definition records learned across sessions (episodes, facts, preferences, lessons, skills) with provenance, searchable and retrieved within a budget; promotion to skills and `NEMO.md` only through owner-applied proposals (§5.5.1) | P1 |
 
 ### 3.2 Non-functional requirements
 
@@ -255,6 +259,34 @@ Provider selection changes generation; it does not change the meaning or authori
 
 **Initial memory implementation:** structured local session store + project instruction files + task summaries. A vector index is optional, not required for MVP.
 
+#### 5.5.1 Long-term memory (draft, ADR-013)
+
+Normative spec: `docs/specs/memory.md` (it includes the audit of today's memory). Today Nemo has only session memory (history, compaction summary, `TaskState`) and static instruction files (`$NEMO_HOME/NEMO.md`, per-directory `NEMO.md`/`AGENTS.md`/`CLAUDE.md`). It learns nothing across sessions. Long-term memory adds learning in the spirit of Hermes Agent, Claude Code auto memory and Codex memories.
+
+- **Store:** one SQLite file `$NEMO_HOME/memory/memory.db` (WAL), separate from `nemo.db`.
+  - Records are typed: `episode`, `fact`, `preference`, `lesson`, `skill`.
+  - Records are scoped: `user`; `workspace`, keyed by the repository root's `workspace_key` and shared by its worktrees; `agent`, per definition.
+  - Each record carries provenance (session/task/event ids), trust (`owner` > `verified` > `agent` > `untrusted`, computed by the harness from the cited evidence), status, confidence, use/success counts, versions linked by `supersedes`, file anchors for staleness, and decay.
+- **Retrieval:**
+  - BM25 over FTS5, combined with scope, recency, outcome statistics and trust.
+  - The result is a budgeted (≤ 2,000 tokens), delimited `<memory trust="data">` system block, placed after repository instructions and frozen per task.
+  - `MemorySearch` finds more on demand.
+  - Embeddings sit behind a cargo feature with an OpenAI-compatible embedder; they are off by default.
+- **Learning loop:**
+  - At task end the harness writes an episode and the verified build/test commands deterministically, with no model call.
+  - A bounded reflection call on a small model adds facts and lessons for qualifying tasks. It is queued and deferrable and never changes a task result.
+  - Consolidation merges, decays and archives records. It promotes repeated lessons into **skill proposals** and stable facts into **`NEMO.md` diff proposals**; only the owner applies a proposal.
+- **Interfaces:**
+  - Tools: `MemorySearch`, `MemoryWrite`, `MemoryUpdate`, `MemoryForget`, under permission rules.
+  - CLI: `nemo memory list|search|show|add|edit|delete|review|apply|export|import|stats|prune|reflect`.
+  - TUI: `/memory` and `#`.
+- **Safety:**
+  - Memory is data: it never grants permissions and never edits instruction files.
+  - Every field is redacted and scanned; on a hit the record is quarantined.
+  - Records derived from web, browser or MCP content are `untrusted` and never injected.
+  - `$NEMO_HOME/memory` is a protected, sandbox-denied path.
+  - Memory can be turned off per workspace or per run.
+
 ### 5.6 Tool System
 
 A unified `ToolRegistry` exposes names, descriptions, schemas, permissions, side-effect classes and runtime bindings.
@@ -377,6 +409,28 @@ Store `VerificationReport` with command, exit code, artifacts, tested criteria, 
 - Approval before destructive Git operations, production changes, external submissions and risky shell commands.
 - Prompt injection defenses: external content is data; it cannot redefine permissions or higher-priority task instructions.
 - Time, token, subprocess, storage and outbound-network budgets.
+
+### 5.13 Inter-agent messaging (in-session sub-agents and cross-session peers)
+
+Cross-cutting feature over components 01, 02, 03, 06 and 12; normative spec: `docs/specs/messaging.md`. Decision: ADR-012.
+
+- **Addressing:** `ws:<workspace>/sess:<session>/agent:<instance>`.
+  - The workspace is a stable `workspace_key` (hash of the folded canonical root) with a human label.
+  - The session is its `session_id` (8-char short id) and an optional unique name.
+  - The agent is an instance name unique within its session, with the definition as `kind`.
+  - Shorthand is accepted only when it resolves to exactly one agent; otherwise the error lists the candidates. Nemo never guesses.
+- **In-session:** sub-agents can be named, run in the background, become idle and be resumed by a message.
+  - A per-session in-process `AgentHub` keeps one FIFO inbox per agent.
+  - Messages are drained only at agent-loop safe points: after a tool round (post-compaction, before the next model request), at turn end before verification, or by waking an idle agent. Never between a tool call and its result, never during approval or compaction.
+  - Tools: `SendMessage`, `ListAgents`.
+  - TUI: a leading `@name` addresses an agent of the current session; `@agent:name` starts one from a definition; mid-text `@path` stays a file attachment; Tab cycles the conversation target.
+- **Cross-session peers:** request/response between live sessions of the same OS user on one machine, without a human per message.
+  - Transport: one local endpoint per session, a Unix domain socket (0700 dir, 0600, peer-uid check) or a Windows named pipe (local clients only). Framing is NDJSON, and a mutual HMAC handshake uses a per-user key.
+  - Discovery: a registry directory read on demand, with liveness from the session writer lock. Event-driven; no polling, no TCP.
+  - The receiver answers through a **read-only responder** forked from the addressed agent's last safe-point context. It uses the receiver's policy and tools limited to read; secret and protected-path content is withheld and outgoing text is redacted.
+  - Loops are bounded by a hop chain, rate limits, concurrency caps and a cost cap.
+  - Peers are off by default and configurable only in user settings, with allow/deny rules by workspace path or session.
+- **Trust:** every peer or agent message reaches the model fenced and marked `trust="peer-data"` with its fully qualified sender. It is never an approval, a permission grant or a mode change. Every send and receive is an event in each session involved.
 
 ---
 
@@ -566,9 +620,11 @@ The Session Manager can route a session to a remote worker running the same tool
 | ADR-006 | Verification evidence is a first-class object | Reduces unsupported success claims |
 | ADR-007 | Policy gate sits before tool execution | Model proposals do not grant privileges |
 | ADR-008 | Defer GPUI to thin client phase | UI should not block autonomous runtime development; GPUI is Rust and may share crates with the core |
-| ADR-009 | Defer complex multi-agent orchestration | Single-agent success and safety are foundational |
+| ADR-009 | Defer complex multi-agent orchestration (amended by ADR-012) | Single-agent success and safety are foundational |
 | ADR-010 | Core engine is implemented in Rust; Node CLI is a frozen reference until cutover | Native cross-OS binary without Node runtime, access to OS sandbox primitives, crates shareable with GPUI. Cost: rewrite effort, unverified crate maturity, a dual-maintenance window while both implementations exist |
 | ADR-011 | Model access uses API keys only; no subscription/OAuth login flows | Anthropic and OpenAI do not permit third-party coding agents to authenticate through consumer subscriptions; API keys are the supported path (the Node CLI already works this way). Users manage their own keys through `NEMO_*` environment variables (no other env prefix is ever read) or provider config substitution; Nemo does not store credentials in a keychain and does not write them to disk. Bearer-style keys for Anthropic-compatible gateways remain API keys. Cost: users need billed API access and handle key hygiene themselves; no subscription-priced usage |
+| ADR-012 | Inter-agent messaging without an orchestrator: in-session via an in-process per-session hub (named/background/resumable sub-agents, `SendMessage`, `@agent`); cross-session via a per-session local endpoint (Unix socket / Windows named pipe, NDJSON, mutual HMAC, same OS user only) answered by a read-only responder forked from the addressed agent's context; fully qualified `ws/sess/agent` addresses that never resolve by guessing. Amends ADR-009: messaging is allowed; planners and orchestrators stay deferred | Reuses tokio `net` and the session lock, with no TCP/HTTP server and no polling; the receiver's own policy decides what leaves it. Cost: per-OS endpoint code and a Windows ACL assumption to verify; same-user processes can impersonate a peer (sandbox R7 mitigates); queued in-session messages are lost on a crash; responder runs cost the receiver's tokens. Peers are off by default |
+| ADR-013 | Long-term memory is a separate local SQLite store (`$NEMO_HOME/memory/memory.db`) of typed, scoped records with provenance and evidence-derived trust. Retrieval is FTS5/BM25 into a budgeted, frozen `<memory>` data block, with an on-demand `MemorySearch`. A bounded reflection loop runs on a small model, after deterministic episodes are written. Memory is data, never instructions or permission grants; skills and instruction files change only through owner-applied proposals (draft, specs/memory.md) | Own lifecycle, migrations, export and deletion, apart from sessions; no new dependency (the bundled SQLite has FTS5/JSON1). Cost: one store shared by all repos (mitigated by scope filters, quarantine and backups); trust heuristics can misclassify; reflection spends tokens; the benefit is unproven until the R11 evaluation, and injection stays default-on only if that evaluation passes |
 
 ---
 
@@ -617,6 +673,18 @@ Indicative effort is about 9-11 months for one engineer (low confidence).
 
 **Exit criteria:** demonstrable performance improvements against a single-agent baseline, with controlled extra cost and reliable conflict handling.
 
+### Phase 6 — Inter-agent messaging (P1 in-session, P2 peers; roadmap R10)
+
+**Deliverables:** named, background and resumable sub-agents; `SendMessage`/`ListAgents`/`ListSessions`; `@agent` routing and conversation target in the TUI; the fully qualified address resolver; additive message/peer events; the local peer endpoint (Unix socket / named pipe) with the read-only responder; optional resume of offline sessions.
+
+**Exit criteria:** the messaging acceptance scenarios in §11.1 pass on macOS, Linux and Windows CI; peers pass a security review; no peer message ever resolves an approval or changes a permission mode.
+
+### Phase 7 — Long-term memory (P1; roadmap R11)
+
+**Deliverables:** M0 fixes of today's memory gaps (instruction and skill discovery from the project root, the read-deny predicate on instruction files, `TaskState` updates, a stable `workspace_key`, sandbox deny for the stores); the `nemo-memory` crate (schema, FTS5 retrieval, scanner, redaction, export/import); deterministic episodes; memory tools, `nemo memory` CLI and TUI `/memory`/`#`; the reflection loop with skill and `NEMO.md` proposals; consolidation and decay; optional embeddings behind a feature flag; the memory evaluation (specs/memory.md §12).
+
+**Exit criteria:** the memory acceptance scenarios in §11.1 pass on macOS, Linux and Windows CI; the memory crate passes a security review; on paired repeat tasks warm runs meet the targets in specs/memory.md §12 (otherwise injection defaults to off).
+
 ---
 
 ## 11. Acceptance Tests and Metrics
@@ -635,6 +703,16 @@ Indicative effort is about 9-11 months for one engineer (low confidence).
 | Model without vision | Degrades gracefully to DOM/text tools or reports limitation |
 | Failed final verification | Reports failed/unverified and bounded self-correction attempt |
 | Prompt injection in web content | External page text cannot override Nemo permission policy |
+| Message to a running sub-agent | Delivered after the current tool round (never between a tool call and its result); the sub-agent continues; its result returns to the sender as a message |
+| Same agent definition in two sessions | Fully qualified addresses keep them distinct; an ambiguous shorthand fails with the candidate list, never a guess |
+| Cross-session question | Session B asks session A; A answers from its context via a read-only responder without disturbing A's task; secrets and protected-path content are withheld or redacted; both sessions log the exchange |
+| Peer message asks for approval or bypass | No approval is resolved, no permission mode changes, no write or execute happens on the receiver |
+| Repeated task in the same repository (memory) | The warm run uses remembered build/test commands; it needs fewer turns and tool calls than a `--no-memory` run, with success and approvals not worse |
+| Poisoned memory | A planted record with injection text is quarantined or never injected; it cannot change permissions, mode or instruction files |
+| Secret in tool output | No memory record or export contains the secret (redacted or dropped) |
+| Memory opt-out | With memory off for the workspace or `--no-memory`, no record is read or written and no memory tool is offered |
+| Two sessions finishing tasks in one repository | Both episodes are stored with no lost write or duplicate; one reflection job runs per task |
+| Learned skill or `NEMO.md` change | Appears only as a proposal; no instruction or skill file changes until `nemo memory apply` |
 
 ### 11.2 Quality metrics
 
@@ -668,6 +746,8 @@ A small fixed benchmark of representative repositories and deterministic defects
 | Rust crate immaturity (MCP/provider SDKs unverified) | Blocked or costly integrations | Early spikes in Phase 1; thin adapters behind traits; fall back to own minimal implementation |
 | Node/Rust behavior drift during parallel run | Regressions, incompatible formats | Frozen Node reference, golden tests, shared eval suite, two-way format compatibility checks |
 | Long period without autonomous features | Lost momentum | Dogfood the headless Rust loop before the TUI |
+| Peer messaging leaks context or is used for injection | Data leakage across workspaces; agents steered by peers | Peers off by default, user-settings-only allow lists, read-only responder under the receiver's policy, secret withholding and outgoing redaction, fenced untrusted messages, hop/rate/cost limits, `$NEMO_HOME/run` protected and sandboxed |
+| Poisoned or stale long-term memory | Wrong or unsafe behavior carried across sessions and repositories | Trust from evidence, scanning and quarantine, untrusted records never injected, memory never grants permissions, file anchors and decay, owner review queue, poisoned-memory eval, `$NEMO_HOME/memory` protected and sandbox-denied (specs/memory.md §9, §12) |
 
 ---
 
@@ -688,6 +768,8 @@ These decisions should be validated against the existing Nemo implementation rat
 9. **Browser backend under Rust:** Playwright sidecar vs direct CDP (time-boxed spike).
 10. **Windows sandbox level:** what guarantees are achievable with Job Objects/AppContainer?
 11. **Daemon vs in-process:** shared crates make both feasible; decide by session-durability needs.
+12. **Peer messaging defaults:** open decisions D9–D16 in `docs/specs/messaging.md` §D (peers default off, responder model, reply confirmation, offline resume, responder cost, `hmac` dependency, worktree keying).
+13. **Long-term memory defaults:** open decisions D1–D8 in `docs/specs/memory.md` §15 (default on/off, approval of learned skills, repository vs worktree key, separate DB, reflection model and cap, raw history search, project opt-out, retention).
 
 ---
 
@@ -705,6 +787,13 @@ Completed input: **audit of existing CLI modules mapped to the 12 logical compon
 - **R7 — Policy + sandbox** (in parallel with R6).
 - **R8 — Durable sessions, worktrees, daemon.**
 - **R9 — Cutover** (gates in §10 Phase 3).
+- **R10 — Inter-agent messaging** (§5.13, ADR-012): R10a in-session sub-agent messaging and `@agent` (after R5); R10b cross-session peers (after the R7 protected-path/sandbox rules); R10c optional offline resume (after R8).
+- **R11 — Long-term memory** (§5.5.1, ADR-013, specs/memory.md §13):
+  - M0: audit fixes, now; `workspace_key` is shared with R10a.
+  - M1: SQLite store, CLI, FTS retrieval, tools; after R5, together with R7.
+  - M2: reflection loop, skill and `NEMO.md` proposals.
+  - M3: consolidation and decay, optional embeddings.
+  - M4: evaluation while dogfooding.
 
 ---
 
@@ -761,6 +850,9 @@ nemo-cli/
 - **Golden test:** A test comparing output against a recorded, reviewed expected result, used to prove faithful ports (config, permissions, parser, render).
 - **Cutover:** The point at which the Rust binary replaces the Node CLI, after the gates in §10 Phase 3 are met.
 - **Sidecar:** A separate helper process (for example a Playwright browser worker) controlled by the core over a structured RPC.
+- **Peer:** Another live Nemo session of the same OS user on the same machine, reachable through its local messaging endpoint (§5.13).
+- **Fully qualified agent address:** `ws:<workspace>/sess:<session>/agent:<instance>`, unique across all live sessions; shorthand is accepted only when unambiguous.
+- **Memory record:** A typed, scoped entry in the long-term memory store (§5.5.1) with provenance and evidence-derived trust; data for the model, never an instruction or a permission.
 
 ## Appendix C — Current-State Mapping (existing Node modules)
 
