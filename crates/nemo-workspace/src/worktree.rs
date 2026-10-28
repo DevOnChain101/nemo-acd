@@ -176,7 +176,7 @@ impl WorktreeManager {
                 info.git_dir.display()
             )))
         };
-        let canon = |p: &Path| fs::canonicalize(p).ok();
+        let canon = |p: &Path| nemo_core::canonicalize(p).ok();
         let want_dir = canon(&info.git_dir);
         let dot_git = info.worktree.join(".git");
         let pointer = match fs::symlink_metadata(&dot_git) {
@@ -206,7 +206,7 @@ impl WorktreeManager {
             .status
             .success()
             .then(|| String::from_utf8_lossy(&o.stdout).trim_end().to_string())
-            .and_then(|s| fs::canonicalize(s).ok());
+            .and_then(|s| nemo_core::canonicalize(s).ok());
         if found.is_none() || found != want_dir {
             return refuse(&format!("{}/.git", info.worktree.display()));
         }
@@ -225,7 +225,7 @@ impl WorktreeManager {
         include_uncommitted: bool,
     ) -> Result<Allocation> {
         check_id(session_id)?;
-        let source = fs::canonicalize(source)?;
+        let source = nemo_core::canonicalize(source)?;
         let ws_id = uuid::Uuid::new_v4().to_string();
         let probe = self.git.probe(&source, &["rev-parse", "--show-toplevel"])?;
         if !probe.status.success() {
@@ -244,7 +244,7 @@ impl WorktreeManager {
         let top = String::from_utf8_lossy(&probe.stdout)
             .trim_end()
             .to_string();
-        let repo_root = fs::canonicalize(top)?;
+        let repo_root = nemo_core::canonicalize(top)?;
         let g = &self.git;
         let main_head = g
             .out_str(&repo_root, &["rev-parse", "--verify", "HEAD^{commit}"])
@@ -259,7 +259,7 @@ impl WorktreeManager {
                 .join(".nemo-worktrees"),
         };
         fs::create_dir_all(&dir)?;
-        let wt = fs::canonicalize(&dir)?.join(session_id);
+        let wt = nemo_core::canonicalize(&dir)?.join(session_id);
         if wt.exists() {
             return Err(Error::Refused(format!("{} already exists", wt.display())));
         }
@@ -271,8 +271,9 @@ impl WorktreeManager {
                 "worktree", "add", "--quiet", "-b", &branch, &wt_s, &main_head,
             ],
         )?;
-        let wt = fs::canonicalize(&wt)?;
-        let git_dir = fs::canonicalize(g.out_str(&wt, &["rev-parse", "--absolute-git-dir"])?)?;
+        let wt = nemo_core::canonicalize(&wt)?;
+        let git_dir =
+            nemo_core::canonicalize(g.out_str(&wt, &["rev-parse", "--absolute-git-dir"])?)?;
 
         let mut baseline = main_head.clone();
         if include_uncommitted && !main_snapshot.is_empty() {

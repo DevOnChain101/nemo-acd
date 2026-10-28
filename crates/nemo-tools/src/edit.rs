@@ -131,6 +131,8 @@ pub(crate) fn run(input: &Value, ctx: &ToolContext) -> ToolOutput {
         .collect::<Vec<_>>()
         .join("\n");
 
-    ToolOutput::text(format!("Edited {}:\n{snippet}", abs.display()))
-        .with_meta(json!({"replacements": count}))
+    ToolOutput::text(format!("Edited {}:\n{snippet}", abs.display())).with_meta(json!({
+        "replacements": count,
+        "diff": crate::diff::for_file(file_path, "update", &hay, &replaced),
+    }))
 }

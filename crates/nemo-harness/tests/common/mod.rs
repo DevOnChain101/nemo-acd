@@ -126,6 +126,8 @@ pub struct Opts {
     pub parallel_tools: bool,
     /// The event output starts failing after this many writes.
     pub fail_sink_after: Option<usize>,
+    /// Model context window in tokens (`None` = unknown).
+    pub context_window: Option<u64>,
 }
 
 /// Writes into `buf` until `left` writes are used up, then fails every write.
@@ -160,6 +162,7 @@ impl Default for Opts {
             secrets: vec![SECRET.into()],
             parallel_tools: true,
             fail_sink_after: None,
+            context_window: None,
         }
     }
 }
@@ -220,6 +223,7 @@ impl Rig {
             let mut c =
                 nemo_providers::ProviderCapabilities::defaults(nemo_config::Protocol::Anthropic);
             c.parallel_tools = o.parallel_tools;
+            c.context_window = o.context_window;
             c
         };
         let provider = Arc::new(FakeProvider::new(turns).with_caps(caps));

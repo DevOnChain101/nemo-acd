@@ -920,6 +920,11 @@ pub fn entries_from_event(env: &nemo_events::Envelope) -> Vec<Value> {
                 json!({"type":"system","timestamp":ts,"cwd":workspace.cwd,"message":{"model":model}}),
             ]
         }
+        // a harness note to the model (`display_text: ""`) is not something the person said
+        Event::UserMessage {
+            display_text: Some(d),
+            ..
+        } if d.is_empty() => vec![],
         Event::UserMessage {
             text, display_text, ..
         } => vec![json!({
@@ -948,10 +953,11 @@ pub fn entries_from_event(env: &nemo_events::Envelope) -> Vec<Value> {
             tool_call_id,
             is_error,
             preview,
+            output,
             ..
         } => vec![json!({
             "type":"user","timestamp":ts,
-            "message":{"role":"user","content":[{"type":"tool_result","tool_use_id":tool_call_id,"content":preview,"is_error":is_error}]}
+            "message":{"role":"user","content":[{"type":"tool_result","tool_use_id":tool_call_id,"content":output.as_deref().unwrap_or(preview),"is_error":is_error}]}
         })],
         Event::HookRan {
             event,

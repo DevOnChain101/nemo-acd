@@ -7,6 +7,8 @@ use nemo_events::ArtifactRef;
 use nemo_terminal::{ExecSpec, TerminalRuntime};
 use regex::Regex;
 use sha2::{Digest, Sha256};
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 use tokio_util::sync::CancellationToken;
@@ -97,6 +99,29 @@ fn clip(s: &str, max: usize) -> String {
     format!("...{}", &s[i..])
 }
 
+/// Answer of a [`CheckAuthorizer`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CheckAuth {
+    Allow,
+    /// Do not run the check; the reason becomes its `blocked_reason`. By convention
+    /// `needs_approval:<rule>` = nobody could approve (the rule would allow it) and
+    /// `denied by rule ...` = policy forbids it.
+    Blocked(String),
+}
+
+/// Policy for the commands the gate runs itself. The harness implements it by judging each
+/// check like a `Bash` call, so verification cannot run what the agent itself could not.
+pub trait CheckAuthorizer: Send + Sync {
+    fn authorize<'a>(
+        &'a self,
+        check: &'a Check,
+        cancel: &'a CancellationToken,
+    ) -> Pin<Box<dyn Future<Output = CheckAuth> + Send + 'a>>;
+}
+
+/// Prefix of a [`CheckAuth::Blocked`] reason that needs an approval nobody could give.
+pub const NEEDS_APPROVAL: &str = "needs_approval:";
+
 pub struct VerifyRunner {
     rt: Arc<TerminalRuntime>,
     session_id: String,
@@ -120,17 +145,36 @@ impl VerifyRunner {
     /// Runs checks in order; stops starting new ones once `cancel` fires (the cancelled check
     /// is reported `blocked`, the rest are not reported).
     pub async fn run(&self, checks: &[Check], cancel: &CancellationToken) -> Vec<CheckResult> {
+        self.run_with(checks, cancel, None).await
+    }
+
+    /// [`run`](Self::run) where every command first goes through `auth`.
+    pub async fn run_with(
+        &self,
+        checks: &[Check],
+        cancel: &CancellationToken,
+        auth: Option<&dyn CheckAuthorizer>,
+    ) -> Vec<CheckResult> {
         let mut out = vec![];
         for c in checks {
             if cancel.is_cancelled() {
                 break;
             }
-            out.push(self.run_one(c, cancel).await);
+            out.push(self.run_one_with(c, cancel, auth).await);
         }
         out
     }
 
     pub async fn run_one(&self, c: &Check, cancel: &CancellationToken) -> CheckResult {
+        self.run_one_with(c, cancel, None).await
+    }
+
+    pub async fn run_one_with(
+        &self,
+        c: &Check,
+        cancel: &CancellationToken,
+        auth: Option<&dyn CheckAuthorizer>,
+    ) -> CheckResult {
         let started_at = now();
         let t0 = Instant::now();
         let mut r = CheckResult {
@@ -154,6 +198,16 @@ impl VerifyRunner {
         match &c.command {
             None => {
                 r.summary = "no executable command: needs a browser, HTTP or manual check".into()
+            }
+            Some(_)
+                if let Some(CheckAuth::Blocked(why)) = match auth {
+                    Some(a) => Some(a.authorize(c, cancel).await),
+                    None => None,
+                } =>
+            {
+                r.status = VerificationStatus::Blocked;
+                r.summary = format!("not run: {why}");
+                r.blocked_reason = Some(why);
             }
             Some(cmd) => {
                 let mut spec = ExecSpec::new(cmd.clone());

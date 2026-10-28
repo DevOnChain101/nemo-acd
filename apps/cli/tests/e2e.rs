@@ -33,6 +33,24 @@ fn skip_without_sandbox() -> bool {
     skip
 }
 
+/// The host's PATH (tools live outside /usr/bin on runners: node, python, cargo) and, on
+/// Windows, the variables without which no child process starts.
+fn host_env(c: &mut Command) {
+    for k in [
+        "PATH",
+        "SystemRoot",
+        "PATHEXT",
+        "ComSpec",
+        "USERPROFILE",
+        "TEMP",
+        "TMP",
+    ] {
+        if let Some(v) = std::env::var_os(k) {
+            c.env(k, v);
+        }
+    }
+}
+
 struct Rig {
     dir: tempfile::TempDir,
 }
@@ -64,13 +82,15 @@ impl Rig {
             .arg("--provider")
             .arg(format!("fake:{}", s.display()));
         c.args(["--prompt", "do it"]).args(args);
-        // Tests not about the sandbox must not depend on the host having one.
+        // Tests not about the sandbox must not depend on the host having one. `off`, not
+        // `best-effort`: on a Landlock-only host best-effort still confines and then refuses the
+        // standard policy, so no command would run.
         if !args.contains(&"--sandbox") && !host_confines() {
-            c.args(["--sandbox", "best-effort"]);
+            c.args(["--sandbox", "off"]);
         }
-        c.env_clear()
-            .env("PATH", std::env::var_os("PATH").unwrap_or_default())
-            .env("HOME", self.dir.path())
+        c.env_clear();
+        host_env(&mut c);
+        c.env("HOME", self.dir.path())
             .env("NEMO_HOME", self.home())
             .stdin(Stdio::null());
         // Lets CI simulate a Landlock-only host (see nemo-sandbox feature `test-backend`).

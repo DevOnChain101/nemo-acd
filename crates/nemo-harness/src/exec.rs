@@ -17,16 +17,83 @@ use nemo_providers::{Block, Content, Message, Role};
 use nemo_tools::{
     Block as ToolBlock, Content as ToolContent, NeedsUser, SideEffectClass, ToolRuntime, ToolSpec,
 };
-use nemo_verification::{Check, CheckKind, DEFAULT_TIMEOUT_MS, Declarer};
+use nemo_verification::{
+    Check, CheckAuth, CheckAuthorizer, CheckKind, DEFAULT_TIMEOUT_MS, Declarer, NEEDS_APPROVAL,
+};
 use serde_json::{Value, json};
 
 use crate::agent::{Call, Problem};
 use crate::agents::stricter;
 use crate::context::wrap_tool_output;
 use crate::harness::{AgentCtx, AgentEnd, AgentState, Harness, TaskRun};
+use crate::live::{Live, result_artifact};
+use crate::sink::Scope;
 use crate::toolbox::validate;
 use crate::traits::{Approval, ApprovalDecision, ApprovalRequest, DENY_MESSAGE, UserReply};
-use crate::util::{cap_text, lock, preview, sanitize_for_display, uuid};
+use crate::util::{cap_bytes, cap_text, lock, preview, sanitize_for_display, uuid};
+
+/// `tool.completed.output` is the model-facing text up to this many bytes.
+const OUTPUT_INLINE: usize = 64 * 1024;
+
+/// What a tool says about its own full log, for `tool.completed`.
+#[derive(Default)]
+pub(crate) struct OutExtra {
+    pub origin: Option<&'static str>,
+    pub log: Option<std::path::PathBuf>,
+    pub total_bytes: Option<u64>,
+    pub tool_cut: bool,
+    /// `meta.diff` of a file-changing tool, for `tool.completed.diff`.
+    pub diff: Option<Value>,
+}
+
+/// Event size bound for `meta.diff` (the tool already caps its line text at 64 KiB; the rest is
+/// JSON framing). A bigger one keeps its counts and loses its hunks.
+const DIFF_EVENT_MAX: usize = 256 * 1024;
+
+fn file_diff(meta: &Value) -> Option<Value> {
+    let mut d = meta.get("diff").filter(|d| d.is_object())?.clone();
+    if d.to_string().len() > DIFF_EVENT_MAX {
+        d["hunks"] = json!([]);
+        d["truncated"] = json!(true);
+    }
+    Some(d)
+}
+
+/// The gate's view of the permission engine: each check command is judged like a `Bash` call.
+pub(crate) struct GateAuth<'a> {
+    pub harness: &'a Harness,
+    pub task: &'a TaskRun,
+    pub agent: &'a AgentCtx,
+}
+
+impl CheckAuthorizer for GateAuth<'_> {
+    fn authorize<'a>(
+        &'a self,
+        check: &'a Check,
+        _: &'a tokio_util::sync::CancellationToken,
+    ) -> crate::traits::BoxFut<'a, CheckAuth> {
+        Box::pin(self.harness.authorize_check(self.task, self.agent, check))
+    }
+}
+
+/// `Bash(cargo test:*)` for each rule a suggestion would add. Edit tools offer a mode, not a
+/// rule: the tool name stands for the allow rule then.
+pub(crate) fn rule_strings(tool: &str, s: &[Suggestion]) -> Vec<String> {
+    let mut v: Vec<String> = vec![];
+    for s in s {
+        match s {
+            Suggestion::AddRules { rules, .. } => {
+                v.extend(rules.iter().map(|r| match r.rule_content.as_deref() {
+                    Some(c) if !c.is_empty() => format!("{}({c})", r.tool_name),
+                    _ => r.tool_name.clone(),
+                }));
+            }
+            Suggestion::SetMode(_) => v.push(tool.to_string()),
+        }
+    }
+    v.dedup();
+    v
+}
 
 pub(crate) struct BatchOutcome {
     pub blocks: Vec<Block>,
@@ -110,6 +177,57 @@ impl Harness {
         not_run: bool,
         truncated: bool,
     ) -> Res {
+        self.complete_ex(
+            task,
+            agent,
+            turn,
+            id,
+            name,
+            t0,
+            res,
+            not_run,
+            truncated,
+            OutExtra::default(),
+        )
+    }
+
+    /// `output`, `output_truncated`, `output_bytes` and `result_ref` of `tool.completed`: the
+    /// model-facing text whole up to 64 KiB, else its head and tail plus the whole as an artifact.
+    pub(crate) fn result_fields(
+        &self,
+        task: &TaskRun,
+        id: &str,
+        text: &str,
+        ex: &OutExtra,
+    ) -> (Option<String>, bool, u64, Option<nemo_events::ArtifactRef>) {
+        let total = ex.total_bytes.unwrap_or(0).max(text.len() as u64);
+        if text.is_empty() && total == 0 {
+            return (None, false, 0, None);
+        }
+        let (inline, cut) = cap_bytes(text, OUTPUT_INLINE);
+        let truncated = cut || ex.tool_cut || total > text.len() as u64;
+        let aref = truncated
+            .then(|| result_artifact(&task.workspace.artifact_root, id, text, ex.log.as_deref()))
+            .flatten();
+        (Some(inline), truncated, total, aref)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn complete_ex(
+        &self,
+        task: &TaskRun,
+        agent: &AgentCtx,
+        turn: &str,
+        id: &str,
+        name: &str,
+        t0: Option<Instant>,
+        res: Res,
+        not_run: bool,
+        truncated: bool,
+        ex: OutExtra,
+    ) -> Res {
+        let (output, output_truncated, output_bytes, result_ref) =
+            self.result_fields(task, id, &res.text, &ex);
         self.emit(
             task,
             agent,
@@ -124,7 +242,12 @@ impl Harness {
                 preview: preview(&res.text),
                 bytes: res.text.len() as u64,
                 truncated,
-                result_ref: None,
+                result_ref,
+                origin: ex.origin.map(Into::into),
+                output,
+                output_truncated,
+                output_bytes,
+                diff: ex.diff,
             },
         );
         res
@@ -176,6 +299,7 @@ impl Harness {
                         .as_ref()
                         .map_or_else(|| json!({}), |i| self.tools.redact_input(&call.name, i)),
                     input_truncated: call.problem.is_some(),
+                    origin: None,
                 },
             );
             if task.cancel.is_cancelled() {
@@ -375,6 +499,11 @@ impl Harness {
         let mut settled = false;
         for round in 0..4 {
             let before = input.clone();
+            match self.mcp_check(task, &call.name, &input) {
+                crate::mcp_guard::Check::Pass => {}
+                crate::mcp_guard::Check::Reject(m) => return err(m),
+                crate::mcp_guard::Check::Ask(r) => forced = forced.or(Some(r)),
+            }
             if let Err(d) = self
                 .authorize(
                     task,
@@ -492,14 +621,21 @@ impl Harness {
             }
             match verdict.decision {
                 Decision::Allow => return Ok(()),
+                Decision::Deny if verdict.reason.starts_with("non-interactive") => {
+                    return Err(Denial {
+                        unavailable: true,
+                        from_hook: false,
+                        text: self.approval_unavailable(task, agent, call, input, &verdict.reason),
+                    });
+                }
                 Decision::Deny => {
                     return Err(Denial {
-                        unavailable: verdict.reason.starts_with("non-interactive"),
+                        unavailable: false,
                         from_hook: false,
                         text: verdict.message.map_or_else(
                             || {
                                 format!(
-                                    "Permission denied: {}. The tool was NOT run. Do not retry the same call; choose another approach or report what is blocked.",
+                                    "Permission denied: {}. The tool was NOT run. This is a policy decision (a rule or mode), not a missing approval: do not retry the same call and do not ask the user to run it manually; choose another approach, or stop, name the permission or rule that blocks it and report the task as blocked.",
                                     verdict.reason
                                 )
                             },
@@ -513,18 +649,20 @@ impl Harness {
                 return Err(Denial {
                     unavailable: true,
                     from_hook: false,
-                    text: format!(
-                        "Permission denied: non-interactive run, no one to approve ({}). The tool was NOT run. Choose an approach that needs no approval or report what is blocked.",
-                        verdict.reason
-                    ),
+                    text: self.approval_unavailable(task, agent, call, input, &verdict.reason),
                 });
             }
             let a = self.approve(task, agent, turn, call, input, &verdict).await;
             if a.decision != ApprovalDecision::Allow {
+                let auto = a.decision == ApprovalDecision::AutoDenied;
                 return Err(Denial {
-                    unavailable: a.decision == ApprovalDecision::AutoDenied,
+                    unavailable: auto,
                     from_hook: false,
-                    text: a.message.unwrap_or_else(|| DENY_MESSAGE.to_string()),
+                    text: if auto {
+                        self.approval_unavailable(task, agent, call, input, &verdict.reason)
+                    } else {
+                        a.message.unwrap_or_else(|| DENY_MESSAGE.to_string())
+                    },
                 });
             }
             self.apply_accepted(agent, &call.name, input, &a);
@@ -555,6 +693,90 @@ impl Harness {
             unavailable: false,
             from_hook: false,
         })
+    }
+
+    /// Result text for a call that needs an approval nobody can give. Remembers the rule that
+    /// would allow it (`task.ended.needed_permissions`) and that the task may be blocked on it.
+    fn approval_unavailable(
+        &self,
+        task: &TaskRun,
+        agent: &AgentCtx,
+        call: &Call,
+        input: &Value,
+        reason: &str,
+    ) -> String {
+        let rules = rule_strings(
+            &call.name,
+            &lock(&agent.perms).suggestions(&call.name, input),
+        );
+        // Commands (tests, builds) are what the task cannot go on without; another tool's
+        // denial stays evidence the model may work around.
+        if matches!(call.name.as_str(), "Bash" | "verify_run" | "terminal_spawn") {
+            task.pending_approval.store(true, Ordering::SeqCst);
+        }
+        lock(&task.needed).extend(rules.iter().cloned());
+        let needed = if rules.is_empty() {
+            format!("approval of this {} call", call.name)
+        } else {
+            rules.join(", ")
+        };
+        format!(
+            "{} requires approval; no approver available in this run; do not ask the user to run it manually; report status blocked and name the permission needed: {needed} ({}). The tool was NOT run.",
+            call.name,
+            sanitize_for_display(reason)
+        )
+    }
+
+    /// A gate check is a command the harness runs for the task: it needs the same permission a
+    /// `Bash` call with that command would. Allow = run; ask = the approver (interactive) or
+    /// `needs_approval:<rule>` (nobody to ask); deny = blocked by policy.
+    pub(crate) async fn authorize_check(
+        &self,
+        task: &TaskRun,
+        agent: &AgentCtx,
+        c: &Check,
+    ) -> CheckAuth {
+        let Some(cmd) = c.command.as_deref() else {
+            return CheckAuth::Allow;
+        };
+        let input = json!({ "command": cmd });
+        let mode = *lock(&agent.mode);
+        let mut verdict = lock(&agent.perms).check("Bash", &input, mode);
+        let headless = verdict.reason.starts_with("non-interactive");
+        match verdict.decision {
+            Decision::Allow => return CheckAuth::Allow,
+            Decision::Deny if !headless => {
+                return CheckAuth::Blocked(format!("denied by policy: {}", verdict.reason));
+            }
+            _ => {}
+        }
+        let call = Call {
+            id: format!("verify-{}", c.id),
+            name: "Bash".into(),
+            input: Some(input.clone()),
+            problem: None,
+        };
+        let interactive = lock(&agent.perms).env.interactive;
+        if interactive && !headless {
+            verdict.reason = format!("verification check {}: {}", c.id, verdict.reason);
+            let a = self.approve(task, agent, "", &call, &input, &verdict).await;
+            match a.decision {
+                ApprovalDecision::Allow => {
+                    self.apply_accepted(agent, "Bash", &input, &a);
+                    return CheckAuth::Allow;
+                }
+                ApprovalDecision::AutoDenied => {}
+                _ => return CheckAuth::Blocked("denied by the user".into()),
+            }
+        }
+        let rules = rule_strings("Bash", &lock(&agent.perms).suggestions("Bash", &input));
+        task.gate_blocked.store(true, Ordering::SeqCst);
+        lock(&task.needed).extend(rules.iter().cloned());
+        let rule = rules
+            .first()
+            .cloned()
+            .unwrap_or_else(|| format!("Bash({cmd})"));
+        CheckAuth::Blocked(format!("{NEEDS_APPROVAL}{rule}"))
     }
 
     /// Applies "allow always" options, but only ones that were offered for this call.
@@ -604,10 +826,11 @@ impl Harness {
         if !suggestions.is_empty() {
             options.insert(1, "allow_always".into());
         }
+        let turn = (!turn.is_empty()).then_some(turn);
         self.emit(
             task,
             agent,
-            Some(turn),
+            turn,
             Event::ToolApprovalRequired {
                 approval_id: approval_id.clone(),
                 tool_call_id: call.id.clone(),
@@ -645,7 +868,7 @@ impl Harness {
         self.emit(
             task,
             agent,
-            Some(turn),
+            turn,
             Event::ToolApprovalResolved {
                 approval_id,
                 decision: a.decision.as_str().into(),
@@ -716,6 +939,20 @@ impl Harness {
         );
         let t0 = Instant::now();
         let deadline = task.deadline;
+        let live = Live::new(
+            self.sink.clone(),
+            Scope {
+                task_id: Some(task.task_id.clone()),
+                turn_id: Some(turn.to_string()),
+                agent_id: agent.agent_id.clone(),
+            },
+            id,
+            None,
+        );
+        let run = nemo_tools::LIVE_OUTPUT.scope(
+            live.output_sink(),
+            self.tools.execute(name, input.clone(), &ctx),
+        );
         let out = tokio::select! {
             biased;
             () = task.cancel.cancelled() => Err(ToolStatus::Interrupted),
@@ -725,8 +962,9 @@ impl Harness {
                     None => std::future::pending().await,
                 }
             } => Err(ToolStatus::Timeout),
-            o = self.tools.execute(name, input.clone(), &ctx) => Ok(o),
+            o = run => Ok(o),
         };
+        live.finish();
         let out = match out {
             Ok(o) => o,
             Err(status) => {
@@ -757,11 +995,13 @@ impl Harness {
             SideEffectClass::Write if !out.is_error => {
                 task.side_effects.store(true, Ordering::SeqCst);
                 task.pending_user_need.store(false, Ordering::SeqCst);
+                task.pending_approval.store(false, Ordering::SeqCst);
                 self.record_changed(task, &input);
             }
             SideEffectClass::Execute => {
                 task.side_effects.store(true, Ordering::SeqCst);
                 task.pending_user_need.store(false, Ordering::SeqCst);
+                task.pending_approval.store(false, Ordering::SeqCst);
                 // A shell may have changed anything, even when it fails.
                 for f in self.tracker.changed(&task.workspace, &task.task_id).await {
                     self.add_changed(task, f);
@@ -792,6 +1032,7 @@ impl Harness {
         }
 
         let (mut content, text, cut) = self.render(name, &out.content);
+        self.mcp_observe(task, name, &input, &text, out.is_error);
         if let Some(post) = self
             .run_hook(
                 task,
@@ -822,7 +1063,18 @@ impl Harness {
             status,
             unavailable: false,
         };
-        self.complete(task, agent, turn, id, name, Some(t0), res, false, cut)
+        let ex = OutExtra {
+            origin: None,
+            log: out
+                .meta
+                .get("artifact_path")
+                .and_then(Value::as_str)
+                .map(Into::into),
+            total_bytes: out.meta.get("total_bytes").and_then(Value::as_u64),
+            tool_cut: out.meta.get("truncated").and_then(Value::as_bool) == Some(true),
+            diff: file_diff(&out.meta),
+        };
+        self.complete_ex(task, agent, turn, id, name, Some(t0), res, false, cut, ex)
     }
 
     fn record_changed(&self, task: &TaskRun, input: &Value) {
@@ -1178,14 +1430,10 @@ impl Harness {
             };
             self.emit(task, &child, Some(turn), Event::SubagentStarted(info(None)));
 
-            let mut st = AgentState {
-                messages: vec![Message {
-                    role: Role::User,
-                    content: Content::Text(prompt),
-                }],
-                recent: Default::default(),
-                compacted: false,
-            };
+            let mut st = AgentState::new(vec![Message {
+                role: Role::User,
+                content: Content::Text(prompt),
+            }]);
             let end = self.run_agent(task, &child, &mut st).await;
             let (text, is_error, reason, status) = match end {
                 AgentEnd::Finished(t) if t.trim().is_empty() => (

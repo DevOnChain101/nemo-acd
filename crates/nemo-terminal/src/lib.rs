@@ -180,6 +180,72 @@ pub struct ExecSpec {
     pub stderr: StderrMode,
     /// Overrides the session's default sandbox policy.
     pub sandbox: Option<SandboxPolicy>,
+    /// Run unconfined whatever the mode and policy say (flagged `unsandboxed_by_request`). Only
+    /// for a command the person typed, behind an explicit setting; never for model input.
+    pub unconfined: bool,
+    /// Live output while the command runs (see [`OutputSink`]).
+    pub on_output: Option<OutputSink>,
+}
+
+/// Receives the new output of a running `exec`, UTF-8 safe, coalesced to at least 4 KiB or 50 ms,
+/// and the rest when the command ends. The full output stays in the log.
+#[derive(Clone)]
+pub struct OutputSink(pub Arc<dyn Fn(&str) + Send + Sync>);
+
+impl std::fmt::Debug for OutputSink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("OutputSink")
+    }
+}
+
+const OUT_CHUNK: usize = 4096;
+const OUT_EVERY: Duration = Duration::from_millis(50);
+
+/// Tails a log file for `OutputSink`.
+struct Tail {
+    file: Option<File>,
+    pending: Vec<u8>,
+    last: Instant,
+    sink: OutputSink,
+}
+
+impl Tail {
+    fn new(path: &Path, sink: OutputSink) -> Self {
+        Self {
+            file: File::open(path).ok(),
+            pending: vec![],
+            last: Instant::now(),
+            sink,
+        }
+    }
+
+    /// Reads what was appended; hands it on when big or old enough (`all`: whatever is there).
+    fn pump(&mut self, all: bool) {
+        if let Some(f) = &mut self.file {
+            let _ = f.read_to_end(&mut self.pending);
+        }
+        if self.pending.is_empty()
+            || !(all || self.pending.len() >= OUT_CHUNK || self.last.elapsed() >= OUT_EVERY)
+        {
+            return;
+        }
+        // keep an incomplete trailing character for the next round
+        let keep = if all {
+            0
+        } else {
+            match std::str::from_utf8(&self.pending) {
+                Err(e) if e.error_len().is_none() => self.pending.len() - e.valid_up_to(),
+                _ => 0,
+            }
+        };
+        let rest = self.pending.split_off(self.pending.len() - keep);
+        let text = String::from_utf8_lossy(&self.pending).into_owned();
+        self.pending = rest;
+        self.last = Instant::now();
+        if !text.is_empty() {
+            (self.sink.0)(&text);
+        }
+    }
 }
 
 impl ExecSpec {
@@ -195,6 +261,8 @@ impl ExecSpec {
             stdin: None,
             stderr: StderrMode::Merged,
             sandbox: None,
+            unconfined: false,
+            on_output: None,
         }
     }
 }
@@ -342,6 +410,7 @@ struct Io {
     stderr_log: bool,
     max_runtime: Option<Duration>,
     sandbox: Option<SandboxPolicy>,
+    unconfined: bool,
 }
 
 struct Proc {
@@ -724,7 +793,12 @@ impl TerminalRuntime {
             clear_env: true,
         };
         let policy = io.sandbox.take().or(session_policy);
-        let (cmd, sandbox) = match self.sandboxed(policy.as_ref(), &base)? {
+        let confined = if io.unconfined {
+            None
+        } else {
+            self.sandboxed(policy.as_ref(), &base)?
+        };
+        let (cmd, sandbox) = match confined {
             Some((w, caps)) => (w, Some(caps)),
             None => (base, None),
         };
@@ -827,11 +901,16 @@ impl TerminalRuntime {
                 stderr_log: spec.stderr == StderrMode::Separate,
                 max_runtime: None,
                 sandbox: spec.sandbox.take(),
+                unconfined: spec.unconfined,
             },
         )?;
         let deadline = Instant::now() + spec.timeout;
         let (mut timed_out, mut cancelled) = (false, false);
+        let mut tail = spec.on_output.take().map(|s| Tail::new(&p.log, s));
         while p.poll().is_none() {
+            if let Some(t) = &mut tail {
+                t.pump(false);
+            }
             if Instant::now() >= deadline {
                 timed_out = true;
             }
@@ -847,6 +926,9 @@ impl TerminalRuntime {
         }
         p.kill_tree(); // grandchildren that outlived the leader
         p.enforce(); // a fast writer may have exited between polls
+        if let Some(t) = &mut tail {
+            t.pump(true);
+        }
         let exit = p.poll();
         let (output, truncated, total_bytes) =
             read_truncated(&p.log, spec.max_output_bytes, spec.max_output_lines)?;

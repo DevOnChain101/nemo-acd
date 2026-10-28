@@ -41,7 +41,7 @@ pub struct StdFs;
 
 impl CompletionFs for StdFs {
     fn realpath(&self, p: &Path) -> Option<PathBuf> {
-        std::fs::canonicalize(p).ok()
+        dunce::canonicalize(p).ok()
     }
 
     fn read_dir(&self, abs: &Path) -> Option<Vec<DirEntry>> {
@@ -480,7 +480,7 @@ mod tests {
 
     /// Canonical path (macOS /var is a link to /private/var).
     fn real(d: &tempfile::TempDir) -> PathBuf {
-        fs::canonicalize(d.path()).unwrap()
+        dunce::canonicalize(d.path()).unwrap()
     }
 
     fn items(q: &str, o: &Options) -> Vec<String> {

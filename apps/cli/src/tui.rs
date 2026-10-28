@@ -37,13 +37,13 @@ fn start_dir(a: &TuiArgs) -> Result<PathBuf, String> {
         .cwd
         .as_ref()
         .ok_or("pass --cwd DIR: nemo never assumes the process working directory")?;
-    std::fs::canonicalize(d).map_err(|e| format!("--cwd {}: {e}", d.display()))
+    nemo_core::canonicalize(d).map_err(|e| format!("--cwd {}: {e}", d.display()))
 }
 
 /// Canonical project root of `cwd`.
 fn root_of(cwd: &Path) -> PathBuf {
     let r = nemo_settings::find_project_root(cwd);
-    std::fs::canonicalize(&r).unwrap_or(r)
+    nemo_core::canonicalize(&r).unwrap_or(r)
 }
 
 /// `--trust-project` / `--approve-mcp` were granted for ONE project root. After OpenFolder or
@@ -189,6 +189,7 @@ pub fn launch(a: TuiArgs, env: Env) -> Result<u8, String> {
                     cost_usd: None,
                 },
                 changed_files: vec![],
+                needed_permissions: vec![],
                 messages: vec![],
             });
         harness.end_session(&outcome);
@@ -202,7 +203,7 @@ pub fn launch(a: TuiArgs, env: Env) -> Result<u8, String> {
         drop(harness);
         match exit?.reason {
             ExitReason::OpenFolder(p) => {
-                cwd = std::fs::canonicalize(&p).map_err(|e| format!("{}: {e}", p.display()))?;
+                cwd = nemo_core::canonicalize(&p).map_err(|e| format!("{}: {e}", p.display()))?;
             }
             ExitReason::Resume(id) => resume = Some(load_resume(&ph.nemo, &id)?),
             ExitReason::Quit | ExitReason::InputClosed => return Ok(0),
@@ -247,7 +248,7 @@ mod tests {
     #[test]
     fn trust_does_not_follow_a_relaunch_to_another_project() {
         let d = tempfile::tempdir().unwrap();
-        let root = std::fs::canonicalize(d.path()).unwrap();
+        let root = nemo_core::canonicalize(d.path()).unwrap();
         let (a, b) = (root.join("a"), root.join("b"));
         let (ma, mb) = (root.join("marker-a"), root.join("marker-b"));
         for (r, m) in [(&a, &ma), (&b, &mb)] {

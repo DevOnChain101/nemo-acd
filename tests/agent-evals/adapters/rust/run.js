@@ -53,6 +53,8 @@ if (process.env.EVAL_TASK_ID && fs.existsSync(manifest)) {
     const f = path.join(tmp, 'criteria.json');
     fs.writeFileSync(f, JSON.stringify(criteria));
     args.push('--criteria-file', f);
+    // The operator who hands over a check authorises that exact command (the gate asks like Bash).
+    for (const c of criteria) if (c && typeof c.check === 'string' && c.check.trim()) args.push('--allow', `Bash(${c.check.trim()})`);
   }
 }
 

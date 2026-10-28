@@ -52,7 +52,13 @@ fn set_mtime(p: &Path, secs: u64) {
 impl Sandbox {
     fn new() -> Self {
         let dir = tempfile::tempdir().unwrap();
-        let tmp = fs::canonicalize(dir.path()).unwrap();
+        // No `\\?\` prefix, and "/" spelling on Windows so the POSIX-spelled fixtures compose.
+        let tmp = nemo_core::canonicalize(dir.path()).unwrap();
+        let tmp = if cfg!(windows) {
+            PathBuf::from(tmp.to_string_lossy().replace('\\', "/"))
+        } else {
+            tmp
+        };
         for d in ["home", "nemo_home", "ws", "outside"] {
             fs::create_dir_all(tmp.join(d)).unwrap();
         }
@@ -72,6 +78,13 @@ impl Sandbox {
     }
     /// Longest root first, as the README prescribes.
     fn normalize_str(&self, s: &str) -> String {
+        // tools may re-spell our paths with backslashes on Windows
+        let folded = s.replace('\\', "/");
+        let s = if cfg!(windows) && folded.contains(&self.tmp) {
+            &folded
+        } else {
+            s
+        };
         s.replace(&self.nemo_home, "<NEMO_HOME>")
             .replace(&self.home, "<HOME>")
             .replace(&self.tmp, "<TMP>")
@@ -255,7 +268,12 @@ fn run_tools_case(
                 out.is_error, out.soft, exp["isError"], exp["soft"]
             ));
         }
-        let meta = (!out.meta.is_null()).then(|| out.meta.clone());
+        // `meta.diff` is an additive field of the Rust port (the UI's line-numbered diff, see
+        // docs/specs/tools.md); the captured Node meta never had it. It is tested in tests/diff_meta.rs.
+        let mut meta = (!out.meta.is_null()).then(|| out.meta.clone());
+        if let Some(m) = meta.as_mut().and_then(Value::as_object_mut) {
+            m.remove("diff");
+        }
         if exp.get("meta").cloned() != meta {
             bad.push(format!(
                 "step {n} ({tool}) meta: got {meta:?}, want {:?}",
@@ -323,6 +341,25 @@ fn run_schema_case(reg: &Registry, dir: &Path) -> Vec<String> {
     }
 }
 
+/// A string in the case names a POSIX absolute path (`/etc/x`), which cannot exist on Windows.
+fn posix_only(v: &Value) -> bool {
+    let bad = |s: &str| {
+        let b = s.as_bytes();
+        (0..b.len()).any(|i| {
+            b[i] == b'/'
+                && (i == 0 || b" \t(=\"'`,:".contains(&b[i - 1]))
+                && b.get(i + 1)
+                    .is_some_and(|c| c.is_ascii_alphanumeric() || b"_.~*".contains(c))
+        })
+    };
+    match v {
+        Value::String(s) => bad(s),
+        Value::Array(a) => a.iter().any(posix_only),
+        Value::Object(o) => o.iter().any(|(k, x)| bad(k) || posix_only(x)),
+        _ => false,
+    }
+}
+
 #[test]
 fn golden_cases() {
     let reg = Registry::unsandboxed_for_tests();
@@ -331,10 +368,18 @@ fn golden_cases() {
         .unwrap();
     let div = divergences();
     let mut failures = vec![];
+    let mut skipped = 0;
     for area in ["schemas", "tools"] {
         let (mut pass, mut total, mut diverged) = (0, 0, 0);
         for (id, dir) in cases(area) {
             total += 1;
+            if cfg!(windows) && posix_only(&read_json(&dir.join("input.json"))) {
+                skipped += 1;
+                println!(
+                    "SKIP {area}/{id}: input names POSIX absolute paths, impossible on Windows"
+                );
+                continue;
+            }
             let bad = if area == "schemas" {
                 run_schema_case(&reg, &dir)
             } else {
@@ -361,6 +406,8 @@ fn golden_cases() {
             "== {area}: {pass}/{total} pass ({diverged} with documented divergence overrides)"
         );
     }
+    // Documented: read-image-returns-base64-block. More means the skip rule hides cases.
+    assert!(skipped <= 1, "{skipped} golden cases skipped");
     assert!(
         failures.is_empty(),
         "{} golden case(s) failed:\n{}",

@@ -6,7 +6,7 @@ use nemo_tools::{Content, Registry};
 use serde_json::{Value, json};
 
 fn ctx(dir: &std::path::Path) -> ToolContext {
-    let root = std::fs::canonicalize(dir).unwrap();
+    let root = nemo_core::canonicalize(dir).unwrap();
     let ws = WorkspaceContext::open("w", &root, &root, &[], root.join("art"), "pg").unwrap();
     ToolContext {
         session_id: "s".into(),
@@ -102,8 +102,8 @@ async fn grep_context_with_numbers_off_uses_dash() {
     let out = Registry::unsandboxed_for_tests()
         .execute("Grep", json!({"pattern": "b", "output_mode": "content", "-n": false, "-A": 1, "path": "a.txt"}), &ctx(d.path()))
         .await;
-    let root = std::fs::canonicalize(d.path()).unwrap();
-    let want = format!("{0}/a.txt:b\n{0}/a.txt-c\n--", root.display());
+    let f = nemo_core::canonicalize(d.path()).unwrap().join("a.txt");
+    let want = format!("{0}:b\n{0}-c\n--", f.display());
     assert_eq!(text(&out.content), want, "{:?}", Value::Null);
 }
 

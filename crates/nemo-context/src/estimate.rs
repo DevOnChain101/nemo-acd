@@ -1,8 +1,9 @@
 use nemo_providers::{Block, Content, Message};
 use serde_json::Value;
 
-/// Pluggable token estimator. The default is the Node approximation (chars / 4).
-pub trait TokenEstimator {
+/// Pluggable token estimator. The default is the Node approximation (chars / 4). `Send + Sync`
+/// so compaction futures that hold `&dyn TokenEstimator` can cross `.await` on any runtime.
+pub trait TokenEstimator: Send + Sync {
     fn estimate(&self, text: &str) -> u64;
 }
 

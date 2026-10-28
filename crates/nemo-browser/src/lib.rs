@@ -1117,7 +1117,22 @@ impl BrowserRuntime {
         }
         let profile = lock(&self.profile).take();
         if let Some(p) = profile {
-            p.close()?;
+            // Windows keeps files locked until every process of the job has exited: retry with a
+            // bounded backoff, then leave the directory (it is under the OS temp dir) instead of failing.
+            let path = p.keep();
+            for attempt in 0..20 {
+                match std::fs::remove_dir_all(&path) {
+                    Ok(()) => return Ok(()),
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+                    Err(e) if attempt == 19 => {
+                        eprintln!(
+                            "nemo-browser: could not remove profile {}: {e}",
+                            path.display()
+                        );
+                    }
+                    Err(_) => tokio::time::sleep(Duration::from_millis(100)).await,
+                }
+            }
         }
         Ok(())
     }

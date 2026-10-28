@@ -3,7 +3,10 @@
 use std::collections::{BTreeMap, HashSet};
 
 use futures_util::StreamExt;
+use nemo_config::Protocol;
+use nemo_context::{CharsPerToken, fixed_tokens, messages_tokens};
 use nemo_events::{Event, ToolStatus};
+use nemo_hooks::HookEvent;
 use nemo_providers::{
     Block, Content, Delta, ErrorKind, Message, MessageBuilder, ProviderError, Request, Role,
     StartBlock, StopReason, StreamEvent, ToolDef,
@@ -12,6 +15,23 @@ use serde_json::{Value, json};
 
 use crate::harness::{AgentCtx, AgentEnd, AgentState, Harness, TaskRun};
 use crate::util::{check_workspace, event_usage, lock, uuid};
+
+/// Window assumed when the model's metadata has none (Node default).
+const DEFAULT_WINDOW: u64 = 200_000;
+/// A proactive compaction must free at least this share, else auto-compact pauses.
+const MIN_GAIN_PERCENT: u64 = 15;
+const GAIN_PAUSE_REQUESTS: u64 = 5;
+
+/// Input size of a request as the provider counts it. Anthropic reports cached input apart from
+/// `input_tokens`; OpenAI includes it.
+fn provider_used(p: Protocol, u: &nemo_providers::Usage) -> Option<u64> {
+    let input = u.input_tokens.filter(|n| *n > 0)?;
+    Some(if p == Protocol::Anthropic {
+        input + u.cache_read_input_tokens.unwrap_or(0) + u.cache_creation_input_tokens.unwrap_or(0)
+    } else {
+        input
+    })
+}
 
 pub(crate) enum StreamFail {
     Cancelled,
@@ -217,6 +237,180 @@ impl Harness {
             .collect()
     }
 
+    /// Builds the next request from `st.messages` and refreshes `st.fixed_raw`.
+    pub(crate) fn make_request(
+        &self,
+        task: &TaskRun,
+        agent: &AgentCtx,
+        st: &mut AgentState,
+    ) -> Result<Request, String> {
+        let built = self.context.build(&st.messages, agent.prompt.as_deref())?;
+        let max_output = task
+            .caps
+            .max_output
+            .map_or(self.config.max_output_tokens, |m| {
+                self.config
+                    .max_output_tokens
+                    .min(m.min(u64::from(u32::MAX)) as u32)
+            });
+        let req = Request {
+            model: self.config.model.clone(),
+            max_tokens: max_output,
+            system: Some(built.system),
+            messages: built.messages,
+            tools: self.tool_defs(agent),
+            temperature: None,
+            thinking: None,
+            reasoning_effort: None,
+        };
+        st.fixed_raw = fixed_tokens(&req);
+        Ok(req)
+    }
+
+    fn messages_raw(&self, st: &AgentState) -> u64 {
+        messages_tokens(&CharsPerToken::default(), &st.messages)
+    }
+
+    fn window(task: &TaskRun) -> u64 {
+        task.caps.context_window.unwrap_or(DEFAULT_WINDOW).max(1)
+    }
+
+    fn auto_due(&self, task: &TaskRun, st: &AgentState, used: u64) -> bool {
+        let c = &self.config.auto_compact;
+        c.enabled
+            && self.context.can_compact()
+            && st.requests > st.auto_pause_until
+            && used as f64 >= c.threshold * Self::window(task) as f64
+    }
+
+    fn emit_usage(&self, task: &TaskRun, agent: &AgentCtx, used: u64, source: &str, stale: bool) {
+        let window = Self::window(task);
+        self.emit(
+            task,
+            agent,
+            None,
+            Event::ContextUsage {
+                used_tokens: used,
+                window_tokens: window,
+                percent: used as f64 * 100.0 / window as f64,
+                source: source.into(),
+                stale,
+            },
+        );
+    }
+
+    /// `context.usage` after a response: the provider's input size when it reported one (and the
+    /// estimator is recalibrated against it), else the calibrated estimate of the request just
+    /// sent, marked stale because the reply is not counted in it.
+    fn report_usage(
+        &self,
+        task: &TaskRun,
+        agent: &AgentCtx,
+        st: &mut AgentState,
+        raw: u64,
+        u: &nemo_providers::Usage,
+    ) {
+        match provider_used(self.provider.protocol(), u) {
+            Some(used) => {
+                st.meter.observe(raw, used);
+                self.emit_usage(task, agent, used, "provider", false);
+            }
+            None => self.emit_usage(task, agent, st.meter.estimate(raw), "estimate", true),
+        }
+    }
+
+    /// Compacts `st.messages` and emits `context.compacting`, then `context.compacted` and
+    /// `context.usage` (post-compaction estimate), or `context.compaction_failed`. A PreCompact
+    /// hook runs first; its output is added to the summary instructions. Hooks cannot cancel a
+    /// compaction (PreCompact fails open in nemo-hooks), so `blocked` is ignored. Returns the
+    /// estimated tokens `(before, after)`. History is untouched on error.
+    pub(crate) async fn compact_history(
+        &self,
+        task: &TaskRun,
+        agent: &AgentCtx,
+        st: &mut AgentState,
+        reason: &str,
+        instructions: &str,
+    ) -> Result<(u64, u64), String> {
+        let started = std::time::Instant::now();
+        let window = Self::window(task);
+        let before = st.meter.estimate(st.fixed_raw + self.messages_raw(st));
+        let hook = self
+            .run_hook(
+                task,
+                agent,
+                None,
+                HookEvent::PreCompact,
+                json!({
+                    "trigger": if reason == "manual" { "manual" } else { "auto" },
+                    "session_id": task.session_id,
+                    "custom_instructions": instructions,
+                }),
+                None,
+            )
+            .await;
+        let mut instr = instructions.to_string();
+        for extra in hook.iter().flat_map(|h| &h.additional_context) {
+            instr.push('\n');
+            instr.push_str(extra);
+        }
+        self.emit(
+            task,
+            agent,
+            None,
+            Event::ContextCompacting {
+                reason: reason.into(),
+                used_tokens: before,
+                window_tokens: window,
+            },
+        );
+        let result = tokio::select! {
+            biased;
+            () = task.cancel.cancelled() => Err("cancelled".to_string()),
+            r = self.context.compact(&st.messages, instr.trim()) => r,
+        };
+        let c = match result {
+            Ok(c) => c,
+            Err(e) => {
+                self.emit(
+                    task,
+                    agent,
+                    None,
+                    Event::ContextCompactionFailed {
+                        reason: reason.into(),
+                        error: e.chars().take(500).collect(),
+                    },
+                );
+                return Err(e);
+            }
+        };
+        let messages_before = st.messages.len() as u64;
+        st.messages = c.messages;
+        st.meter.forget_anchor();
+        let after = st.meter.estimate(st.fixed_raw + self.messages_raw(st));
+        // Emitted before the next `build`: the transcript mirror learns of the rewrite from it.
+        self.emit(
+            task,
+            agent,
+            None,
+            Event::ContextCompacted {
+                trigger: if reason == "manual" { "manual" } else { "auto" }.into(),
+                summary_ref: c.summary_ref,
+                tokens_before: Some(before),
+                reason: reason.into(),
+                before_tokens: before,
+                after_tokens: after,
+                window_tokens: window,
+                messages_before,
+                messages_after: st.messages.len() as u64,
+                summary_chars: c.summary_chars,
+                duration_ms: started.elapsed().as_millis() as u64,
+            },
+        );
+        self.emit_usage(task, agent, after, "estimate", false);
+        Ok((before, after))
+    }
+
     pub(crate) async fn run_agent(
         &self,
         task: &TaskRun,
@@ -238,28 +432,59 @@ impl Harness {
             if let Some(kind) = self.budget_hit(task, agent) {
                 return AgentEnd::Budget(kind);
             }
-            let built = match self.context.build(&st.messages, agent.prompt.as_deref()) {
-                Ok(b) => b,
+            st.requests += 1;
+            let mut req = match self.make_request(task, agent, st) {
+                Ok(r) => r,
                 Err(e) => return AgentEnd::Internal(format!("context_error: {e}")),
             };
-            let max_output = task
-                .caps
-                .max_output
-                .map_or(self.config.max_output_tokens, |m| {
-                    self.config
-                        .max_output_tokens
-                        .min(m.min(u64::from(u32::MAX)) as u32)
-                });
-            let req = Request {
-                model: self.config.model.clone(),
-                max_tokens: max_output,
-                system: Some(built.system),
-                messages: built.messages,
-                tools: self.tool_defs(agent),
-                temperature: None,
-                thinking: None,
-                reasoning_effort: None,
+            // Safe point: the previous batch's results are in history, so pairing is complete.
+            let manual = if agent.agent_id.is_none() {
+                lock(&self.compact_wanted).take()
+            } else {
+                None
             };
+            let used = st.meter.estimate(st.fixed_raw + self.messages_raw(st));
+            let reason = if manual.is_some() {
+                Some("manual")
+            } else if self.auto_due(task, st, used) {
+                Some("auto")
+            } else {
+                None
+            };
+            if let Some(reason) = reason {
+                let instructions = manual.flatten().unwrap_or_default();
+                match self
+                    .compact_history(task, agent, st, reason, &instructions)
+                    .await
+                {
+                    Ok((before, after)) => {
+                        if reason == "auto" {
+                            st.auto_failures = 0;
+                            if after * 100 > before * (100 - MIN_GAIN_PERCENT) {
+                                st.auto_pause_until = st.requests + GAIN_PAUSE_REQUESTS;
+                                self.notice(
+                                    task,
+                                    "warn",
+                                    format!(
+                                        "auto-compact freed under {MIN_GAIN_PERCENT}% ({before} -> {after} tokens); paused for {GAIN_PAUSE_REQUESTS} requests"
+                                    ),
+                                );
+                            }
+                        }
+                        req = match self.make_request(task, agent, st) {
+                            Ok(r) => r,
+                            Err(e) => return AgentEnd::Internal(format!("context_error: {e}")),
+                        };
+                    }
+                    Err(_) if task.cancel.is_cancelled() => return AgentEnd::Cancelled,
+                    Err(_) if reason == "auto" => {
+                        st.auto_failures += 1;
+                        st.auto_pause_until = st.requests + (1u64 << st.auto_failures.min(4));
+                    }
+                    Err(_) => {}
+                }
+            }
+            let raw = st.fixed_raw + self.messages_raw(st);
             let turn = uuid();
             iteration += 1;
             let t0 = std::time::Instant::now();
@@ -294,21 +519,8 @@ impl Harness {
                     );
                     if e.context_overflow() && !st.compacted {
                         st.compacted = true;
-                        match self.context.compact(&st.messages).await {
-                            Ok(c) => {
-                                self.emit(
-                                    task,
-                                    agent,
-                                    None,
-                                    Event::ContextCompacted {
-                                        trigger: "auto".into(),
-                                        summary_ref: c.summary_ref,
-                                        tokens_before: c.tokens_before,
-                                    },
-                                );
-                                st.messages = c.messages;
-                                continue;
-                            }
+                        match self.compact_history(task, agent, st, "overflow", "").await {
+                            Ok(_) => continue,
                             Err(why) => {
                                 return AgentEnd::ModelError {
                                     blocked: false,
@@ -357,6 +569,7 @@ impl Harness {
 
             let Streamed { mut msg, unstopped } = streamed;
             let usage = self.account(task, &msg.usage);
+            self.report_usage(task, agent, st, raw, &msg.usage);
             let has_tools = msg
                 .content
                 .iter()

@@ -30,7 +30,13 @@ struct Sandbox {
 impl Sandbox {
     fn new() -> Self {
         let dir = tempfile::tempdir().unwrap();
-        let tmp = fs::canonicalize(dir.path()).unwrap();
+        // dunce: no `\\?\` verbatim prefix; "/" spelling on Windows so the POSIX-spelled fixtures compose
+        let tmp = dunce::canonicalize(dir.path()).unwrap();
+        let tmp = if cfg!(windows) {
+            PathBuf::from(tmp.to_string_lossy().replace('\\', "/"))
+        } else {
+            tmp
+        };
         for d in ["home", "nemo_home", "ws", "outside"] {
             fs::create_dir_all(tmp.join(d)).unwrap();
         }
@@ -48,6 +54,9 @@ impl Sandbox {
     fn normalize(&self, s: &str) -> String {
         let t = self.tmp.to_string_lossy().into_owned();
         let mut s = s.to_string();
+        if cfg!(windows) && s.replace('\\', "/").contains(&t) {
+            s = s.replace('\\', "/"); // the engine may re-spell our paths with backslashes
+        }
         for (root, ph) in [
             (format!("{t}/nemo_home"), "<NEMO_HOME>"),
             (format!("{t}/home"), "<HOME>"),
@@ -191,6 +200,26 @@ fn parse_suggestions(v: &Value) -> Vec<Suggestion> {
         .collect()
 }
 
+/// True when a string in the case names a POSIX absolute path outside the `<TMP>` roots
+/// (`/etc/x`, `Read(/usr/**)`, `rm -rf /usr`): those cannot exist on Windows.
+fn posix_only(v: &Value) -> bool {
+    fn bad(s: &str) -> bool {
+        let b = s.as_bytes();
+        (0..b.len()).any(|i| {
+            b[i] == b'/'
+                && (i == 0 || b" \t(=\"'`,:".contains(&b[i - 1]))
+                && b.get(i + 1)
+                    .is_some_and(|c| c.is_ascii_alphanumeric() || b"_.~*".contains(c))
+        })
+    }
+    match v {
+        Value::String(s) => bad(s),
+        Value::Array(a) => a.iter().any(posix_only),
+        Value::Object(o) => o.iter().any(|(k, x)| bad(k) || posix_only(x)),
+        _ => false,
+    }
+}
+
 /// `None` = case skipped on this platform.
 fn run_case(i: &Value) -> Option<Value> {
     let sb = Sandbox::new();
@@ -227,6 +256,10 @@ fn run_case_in(sb: &Sandbox, i: &Value) -> Option<Value> {
                 .map(|r| json!({ "rule": r, "broad": is_broad_allow(r.as_str().unwrap(), all) }))
                 .collect(),
         );
+    }
+    if cfg!(windows) && posix_only(i) {
+        eprintln!("SKIP (windows): input names POSIX absolute paths (/etc, /usr, ...)");
+        return None;
     }
     let mut i = sb.expand(i);
     // like the capture: cwd/home default to the sandbox's
@@ -373,6 +406,11 @@ fn golden_permissions_match_node() {
         skipped,
         diverged.len(),
         failed.len()
+    );
+    // 2 symlink cases + 4 POSIX-path cases; a larger number means the skip rule is hiding cases.
+    assert!(
+        !cfg!(windows) || skipped <= 6,
+        "{skipped} cases skipped on Windows"
     );
     assert!(
         failed.is_empty(),

@@ -28,7 +28,23 @@ fn fx_path(files: &[(&str, &str)], path: Option<&str>) -> Fx {
     let mut env = BTreeMap::new();
     let host_path = std::env::var("PATH").unwrap();
     env.insert("PATH".to_string(), path.map_or(host_path, Into::into));
-    for k in ["HOME", "CARGO_HOME", "RUSTUP_HOME", "RUSTUP_TOOLCHAIN"] {
+    // Windows needs its own set for cargo/node/python to start under an otherwise empty env.
+    let win = [
+        "SystemRoot",
+        "USERPROFILE",
+        "APPDATA",
+        "LOCALAPPDATA",
+        "TEMP",
+        "TMP",
+        "PATHEXT",
+        "ComSpec",
+        "HOMEDRIVE",
+        "HOMEPATH",
+    ];
+    for k in ["HOME", "CARGO_HOME", "RUSTUP_HOME", "RUSTUP_TOOLCHAIN"]
+        .into_iter()
+        .chain(win.into_iter().filter(|_| cfg!(windows)))
+    {
         if let Ok(v) = std::env::var(k) {
             env.insert(k.into(), v);
         }
@@ -501,4 +517,96 @@ fn aggregate_rules() {
         .0,
         Passed
     );
+}
+
+struct Policy(Vec<(&'static str, CheckAuth)>);
+
+impl CheckAuthorizer for Policy {
+    fn authorize<'a>(
+        &'a self,
+        c: &'a Check,
+        _: &'a CancellationToken,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = CheckAuth> + Send + 'a>> {
+        let cmd = c.command.as_deref().unwrap_or("");
+        let a = self
+            .0
+            .iter()
+            .find(|(p, _)| cmd.starts_with(p))
+            .map_or(CheckAuth::Allow, |(_, a)| a.clone());
+        Box::pin(async move { a })
+    }
+}
+
+#[tokio::test]
+async fn authorizer_blocks_a_check_without_running_or_failing_it() {
+    let f = fx(&[]);
+    let r = f.runner();
+    let checks = [
+        check(&f, "ok", "echo fine", 10_000),
+        check(&f, "ask", "touch ran-anyway", 10_000),
+        check(&f, "deny", "echo no", 10_000),
+    ];
+    let policy = Policy(vec![
+        (
+            "touch",
+            CheckAuth::Blocked(format!("{NEEDS_APPROVAL}Bash(touch:*)")),
+        ),
+        (
+            "echo no",
+            CheckAuth::Blocked("denied by rule Bash(echo no)".into()),
+        ),
+    ]);
+    let out = r
+        .run_with(&checks, &CancellationToken::new(), Some(&policy))
+        .await;
+    let st: Vec<_> = out.iter().map(|k| k.status).collect();
+    assert_eq!(
+        st,
+        [
+            VerificationStatus::Passed,
+            VerificationStatus::Blocked,
+            VerificationStatus::Blocked
+        ]
+    );
+    assert_eq!(
+        out[1].blocked_reason.as_deref(),
+        Some("needs_approval:Bash(touch:*)")
+    );
+    assert!(out[1].exit_code.is_none() && !f.ws.cwd.join("ran-anyway").exists());
+    assert!(
+        out[2]
+            .blocked_reason
+            .as_deref()
+            .unwrap()
+            .starts_with("denied by rule")
+    );
+}
+
+#[tokio::test]
+async fn gate_with_a_blocked_user_check_is_blocked_not_failed() {
+    let f = fx(&[]);
+    let mut g = f.gate(GateConfig::default());
+    let policy = Policy(vec![(
+        "echo",
+        CheckAuth::Blocked(format!("{NEEDS_APPROVAL}Bash(echo:*)")),
+    )]);
+    let crit = vec![Criterion::user("c1", "says hi", Some("echo hi"))];
+    let d = g
+        .evaluate_with(
+            &state(crit, &[]),
+            true,
+            &CancellationToken::new(),
+            Some(&policy),
+        )
+        .await;
+    let GateDecision::Stop {
+        status,
+        report: Some(r),
+        ..
+    } = d
+    else {
+        panic!("{d:?}")
+    };
+    assert_eq!(status, TaskStatus::Blocked);
+    assert_eq!(r.checks[0].status, VerificationStatus::Blocked);
 }

@@ -8,5 +8,5 @@ mod types;
 
 pub use gate::*;
 pub use plan::{detect_checks, plan_checks};
-pub use runner::VerifyRunner;
+pub use runner::{CheckAuth, CheckAuthorizer, NEEDS_APPROVAL, VerifyRunner};
 pub use types::*;

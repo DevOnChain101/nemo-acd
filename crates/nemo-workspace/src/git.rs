@@ -25,7 +25,7 @@ impl Git {
         let exe = find_git(env).ok_or(Error::GitMissing)?;
         let empty = state_dir.join("git-empty-hooks");
         std::fs::create_dir_all(&empty)?;
-        let empty = std::fs::canonicalize(empty)?;
+        let empty = nemo_core::canonicalize(empty)?;
         // Allowlisted env only (no ambient env, no GIT_* from the caller, no secrets).
         let mut env: BTreeMap<String, String> = env
             .child_env()

@@ -113,6 +113,11 @@ pub const CHILD_ENV_ALLOWLIST: &[&str] = &[
     "Path",
     "HOME",
     "USERPROFILE",
+    // Windows profile dirs: npm/npx and Node's os.homedir() (e.g. `mcp-remote`'s ~/.mcp-auth) need them
+    "APPDATA",
+    "LOCALAPPDATA",
+    "HOMEDRIVE",
+    "HOMEPATH",
     "SHELL",
     "TMPDIR",
     "TMP",

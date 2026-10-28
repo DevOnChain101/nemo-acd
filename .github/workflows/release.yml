@@ -123,10 +123,10 @@ jobs:
           echo "CC_x86_64_unknown_linux_musl=musl-gcc" >>"$GITHUB_ENV"
       - name: Build
         run: |
-          pkgs="-p nemo-cli"
+          pkgs=(-p nemo-cli)
           # Landlock backend looks for nemo-sandbox-exec next to nemo (crates/nemo-sandbox/src/linux.rs).
-          case "$TARGET" in *linux*) pkgs="$pkgs -p nemo-sandbox";; esac
-          cargo build --release --locked --target "$TARGET" $pkgs
+          case "$TARGET" in *linux*) pkgs+=(-p nemo-sandbox);; esac
+          cargo build --release --locked --target "$TARGET" "${pkgs[@]}"
       - name: Locate artifacts
         run: |
           d="target/$TARGET/release"
@@ -194,7 +194,7 @@ jobs:
           cp "$BIN" "dist/$name/"
           if [ -n "${HELPER:-}" ]; then cp "$HELPER" "dist/$name/"; fi
           cp LICENSE README.md "dist/$name/"
-          cd dist
+          cd dist || exit 1
           if [ "$EXT" = zip ]; then 7z a -tzip "$name.zip" "$name" >/dev/null; else tar -czf "$name.tar.gz" "$name"; fi
           ls -l
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -230,10 +230,10 @@ jobs:
           tool: cargo-cyclonedx
       - name: Generate CycloneDX SBOM for nemo-cli
         run: |
-          cd apps/cli
+          cd apps/cli || exit 1
           cargo cyclonedx --format json
-          ls -l *.cdx.json
-          mkdir -p ../../sbom && cp *.cdx.json "../../sbom/nemo-$VERSION.cdx.json"
+          ls -l ./*.cdx.json
+          mkdir -p ../../sbom && cp ./*.cdx.json "../../sbom/nemo-$VERSION.cdx.json"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: sbom
@@ -296,7 +296,7 @@ jobs:
         working-directory: assets
         run: |
           ls -l
-          sha256sum nemo-*.tar.gz nemo-*.zip *.tgz *.cdx.json install.sh install.ps1 > SHA256SUMS
+          sha256sum -- nemo-*.tar.gz nemo-*.zip *.tgz *.cdx.json install.sh install.ps1 > SHA256SUMS
           cat SHA256SUMS
           sha256sum --check SHA256SUMS
       - name: Require the non-experimental targets

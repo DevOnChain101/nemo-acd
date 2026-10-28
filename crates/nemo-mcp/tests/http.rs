@@ -122,11 +122,14 @@ async fn streamable_http_with_headers() {
 }
 
 #[tokio::test]
-async fn non_bearer_authorization_is_rejected_clearly() {
+async fn non_bearer_authorization_is_attempted_not_rejected() {
+    // Basic used to fail with "only Bearer is supported"; now it is sent (identity.rs proves it
+    // on every request), so a dead port fails as a plain connection error
     let mut cfg = McpServerConfig::http("web", "http://127.0.0.1:1/mcp");
     cfg.headers
         .insert("Authorization".into(), "Basic abc".into());
     let m = McpManager::new(vec![cfg], opts(Env::default()));
     m.start().await;
-    assert!(m.status()[0].error.as_deref().unwrap().contains("Bearer"));
+    let e = m.status()[0].error.clone().unwrap();
+    assert!(!e.contains("only") && !e.contains("abc"), "{e}");
 }

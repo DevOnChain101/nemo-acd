@@ -692,6 +692,7 @@ fn streamed(a: &mut App) {
             name: "Read".into(),
             input: json!({"file_path": "/tmp/a.txt"}),
             input_truncated: false,
+            origin: None,
         },
         Ev::ToolCompleted {
             tool_call_id: "c1".into(),
@@ -704,6 +705,11 @@ fn streamed(a: &mut App) {
             bytes: 9,
             truncated: false,
             result_ref: None,
+            origin: None,
+            output: Some("file text".into()),
+            output_truncated: false,
+            output_bytes: 9,
+            diff: None,
         },
     ];
     for (i, e) in evs.into_iter().enumerate() {
@@ -735,6 +741,7 @@ fn events_become_conversation_rows_and_failed_tasks_are_not_success() {
                 },
                 changed_files: vec![],
                 artifacts_root: String::new(),
+                needed_permissions: vec![],
             },
         ),
         T0 + 1000,
@@ -852,7 +859,7 @@ fn selection_drag_copies_chat_text() {
 #[test]
 fn ctrl_click_opens_urls_and_existing_paths_only() {
     let d = tempfile::tempdir().unwrap();
-    let root = std::fs::canonicalize(d.path()).unwrap();
+    let root = nemo_core::canonicalize(d.path()).unwrap();
     let mut a = App::new(cfg(&root.to_string_lossy()), &[], T0);
     streamed(&mut a);
     a.on_event(
@@ -1085,4 +1092,296 @@ fn untrusted_labels_are_sanitized_at_ingest() {
     for l in a.render(COLS, ROWS, T0) {
         assert!(!l.contains("\x1b]") && !l.contains("\x1b[2J"), "{l:?}");
     }
+}
+
+#[test]
+fn alt_backspace_alt_d_and_ctrl_w_edit_the_prompt_without_touching_the_task() {
+    let mut a = app();
+    keys(&mut a, "git commit-msg --amend");
+    keys(&mut a, "\x1b\x7f"); // option+backspace (ESC DEL)
+    assert_eq!(a.editor.text(), "git commit-msg --");
+    keys(&mut a, "\x1b[127;3u"); // kitty CSI-u
+    assert_eq!(a.editor.text(), "git commit-msg ");
+    keys(&mut a, "\x17"); // ctrl+w: whitespace-delimited
+    assert_eq!(a.editor.text(), "git ");
+    a.editor.cur = 0;
+    keys(&mut a, "\x1bd"); // alt+d
+    assert_eq!(a.editor.text(), " ");
+    keys(&mut a, "x y");
+    a.editor.cur = 1;
+    keys(&mut a, "\x1b[3;3~"); // alt+delete: forward, skips the space, takes "y"
+    assert_eq!(a.editor.text(), "x ");
+    // while a task runs the same keys must not be read as Esc (which would cancel it)
+    keys(&mut a, "\r");
+    assert!(a.running());
+    let token = a.task.as_ref().unwrap().cancel.clone();
+    keys(&mut a, "more words");
+    keys(&mut a, "\x1b\x7f\x1bd");
+    assert!(!token.is_cancelled());
+    assert!(!a.chat.agent.interrupting);
+}
+
+#[test]
+fn ctrl_o_toggles_expanded_even_while_running_or_in_a_dialog_and_the_hint_follows() {
+    let mut a = app();
+    assert!(screen(&mut a).contains("ctrl+o: expand"));
+    keys(&mut a, "\x0f");
+    assert!(a.expanded);
+    assert!(screen(&mut a).contains("ctrl+o: collapse"));
+    keys(&mut a, "go\r"); // a running task
+    keys(&mut a, "\x0f");
+    assert!(!a.expanded);
+    let (q, mut rx) = ask("Bash", json!({"command": "ls"}), vec![]);
+    a.on_approval(q, T0);
+    keys(&mut a, "\x0f"); // over a dialog: toggles, answers nothing
+    assert!(a.expanded);
+    assert!(rx.try_recv().is_err());
+    assert_eq!(a.dialogs.len(), 1);
+}
+
+/// 1-based terminal cell of `needle` on the last rendered screen.
+fn cell(a: &mut App, needle: &str) -> (u32, u32) {
+    for (y, l) in a.render(COLS, ROWS, T0).iter().enumerate() {
+        let l = strip_ansi(l);
+        if let Some(i) = l.find(needle) {
+            return (l[..i].chars().count() as u32 + 1, y as u32 + 1);
+        }
+    }
+    panic!("{needle:?} not on screen");
+}
+
+fn right_click(a: &mut App, x: u32, y: u32) -> Vec<Cmd> {
+    a.on_key(
+        Key::Mouse {
+            x,
+            y,
+            button: 2,
+            action: MouseAction::Down,
+            mods: Mods::default(),
+        },
+        T0,
+    )
+}
+
+#[test]
+fn right_click_in_the_prompt_asks_for_a_paste_and_pasting_never_submits() {
+    let mut a = app();
+    let (x, y) = cell(&mut a, "Try \"explain");
+    assert!(matches!(
+        &right_click(&mut a, x, y)[..],
+        [Cmd::PasteClipboard]
+    ));
+    // the host answers with the clipboard text: multi-line, inserted at the cursor, no submit
+    keys(&mut a, "ab");
+    a.editor.left();
+    a.paste_clipboard("one\r\ntwo\x1b[31m\u{202e}\nthree", T0 + 1);
+    assert_eq!(a.editor.text(), "aone\ntwo[31m\nthreeb");
+    assert!(!a.running(), "pasted newlines must not submit");
+    assert!(a.editor.multiline());
+    // the paste-activity signal fired: a dialog opening now stays unarmed for a moment
+    assert!(a.paste_quiet_until > T0);
+    a.paste_clipboard("", T0 + 2);
+    assert!(screen_at(&mut a, T0 + 2).contains("clipboard is empty"));
+    // 5 MiB of clipboard: capped by the prompt limit, nothing inserted, prompt intact
+    let before = a.editor.text();
+    a.paste_clipboard(&"x".repeat(5 << 20), T0 + 3);
+    assert_eq!(a.editor.text(), before);
+    assert!(screen_at(&mut a, T0 + 3).contains("paste is too large"));
+}
+
+#[test]
+fn right_click_outside_the_prompt_or_over_a_dialog_or_picker_does_nothing() {
+    let mut a = app();
+    let (px, py) = cell(&mut a, "Try \"explain");
+    let rect = a.frame.as_ref().unwrap().rects.chat_rect.unwrap();
+    assert!(right_click(&mut a, 1, 1).is_empty(), "header");
+    assert!(
+        right_click(&mut a, rect.x as u32 + 3, rect.y as u32 + 1).is_empty(),
+        "message area"
+    );
+    keys(&mut a, "\x10"); // ctrl+p: command picker owns the keyboard
+    assert!(right_click(&mut a, px, py).is_empty());
+    keys(&mut a, "\x1b");
+
+    let mut a = app();
+    let (px, py) = cell(&mut a, "Try \"explain");
+    let (q, mut rx) = ask("Bash", json!({"command": "ls"}), vec![]);
+    a.on_approval(q, T0 - 10 * ARM_MS); // armed
+    a.render(COLS, ROWS, T0);
+    for (x, y) in [(px, py), (px, py + 3), (5, ROWS - 3)] {
+        assert!(right_click(&mut a, x, y).is_empty());
+    }
+    assert!(rx.try_recv().is_err(), "a right click answers nothing");
+    assert_eq!(a.dialogs.len(), 1);
+    // even a clipboard answer that arrives late is not typed into the dialog's prompt
+    assert_eq!(a.editor.text(), "");
+}
+
+#[test]
+fn compact_command_asks_the_host_and_blocks_new_tasks_while_it_runs() {
+    let mut a = app();
+    assert!(matches!(
+        &keys(&mut a, "/compact\r")[..],
+        [Cmd::Compact { instructions: None }]
+    ));
+    let cmds = keys(&mut a, "/compact keep the API notes\r");
+    assert!(
+        matches!(&cmds[..], [Cmd::Compact { instructions: Some(i) }] if i == "keep the API notes")
+    );
+    a.compact_started();
+    assert!(keys(&mut a, "hello\r").is_empty());
+    assert!(screen(&mut a).contains("compacting the conversation"));
+    a.compact_done();
+    assert!(matches!(&keys(&mut a, "\r")[..], [Cmd::StartTask { .. }]));
+}
+
+#[test]
+fn context_events_drive_the_status_line() {
+    let mut a = app();
+    let status = |a: &mut App| screen(a).lines().last().unwrap_or_default().to_string();
+    assert!(!status(&mut a).contains("ctx "));
+    a.on_event(
+        &env(
+            1,
+            Ev::ContextUsage {
+                used_tokens: 124_000,
+                window_tokens: 200_000,
+                percent: 62.0,
+                source: "provider".into(),
+                stale: false,
+            },
+        ),
+        T0,
+    );
+    assert!(
+        status(&mut a).contains("ctx 62% 124k/200k"),
+        "{}",
+        status(&mut a)
+    );
+    a.on_event(
+        &env(
+            2,
+            Ev::ContextCompacting {
+                reason: "auto".into(),
+                used_tokens: 168_000,
+                window_tokens: 200_000,
+            },
+        ),
+        T0,
+    );
+    assert!(status(&mut a).contains("⟳ compacting…"));
+    a.on_event(
+        &env(
+            3,
+            Ev::ContextUsage {
+                used_tokens: 41_000,
+                window_tokens: 200_000,
+                percent: 20.5,
+                source: "estimate".into(),
+                stale: false,
+            },
+        ),
+        T0,
+    );
+    assert!(status(&mut a).contains("ctx 21% 41k/200k"));
+}
+
+// ---- `!` shell prompt -------------------------------------------------------------------
+
+#[test]
+fn typed_bang_enters_the_shell_prompt_and_enter_runs_the_command() {
+    let mut a = app();
+    keys(&mut a, "!");
+    assert!(a.bash());
+    assert!(screen(&mut a).contains("! bash mode"));
+    // `?` is a character here, not /help; suggestions stay off
+    keys(&mut a, "echo hi?");
+    assert_eq!(a.editor.text(), "!echo hi?");
+    assert!(!screen(&mut a).contains("commands and keys"));
+    keys(&mut a, "\x7f"); // drop the `?`
+    let cmds = keys(&mut a, "\r");
+    assert!(
+        matches!(&cmds[..], [Cmd::UserCommand { command, record_only: false, .. }] if command == "echo hi"),
+        "{cmds:?}"
+    );
+    assert!(a.task_running(), "Esc and ctrl+c cancel it like a task");
+    assert_eq!(
+        a.editor.history.last().map(String::as_str),
+        Some("!echo hi")
+    );
+    // busy: a second one is refused with a toast
+    keys(&mut a, "!");
+    assert!(keys(&mut a, "ls\r").is_empty());
+    assert!(screen(&mut a).contains("a task is running"));
+}
+
+#[test]
+fn double_bang_only_records() {
+    let mut a = app();
+    keys(&mut a, "!");
+    let cmds = keys(&mut a, "!echo hi\r");
+    assert!(
+        matches!(&cmds[..], [Cmd::UserCommand { command, record_only: true, .. }] if command == "echo hi"),
+        "{cmds:?}"
+    );
+}
+
+#[test]
+fn only_a_typed_bang_makes_a_shell_command() {
+    let mut a = app();
+    // a paste, or a burst of characters, that starts with `!` is plain text
+    keys(&mut a, "\x1b[200~!rm -rf x\x1b[201~");
+    assert!(!a.bash(), "{:?}", a.editor.text());
+    assert!(matches!(&keys(&mut a, "\r")[..], [Cmd::StartTask { .. }]));
+    let mut a = app();
+    a.on_key(Key::Text("!ls".into()), T0);
+    assert!(!a.bash());
+    // `!` in the middle of text is just a character
+    let mut a = app();
+    keys(&mut a, "hello!");
+    assert!(!a.bash());
+}
+
+#[test]
+fn escape_and_backspace_leave_the_shell_prompt_and_esc_cancels_a_running_command() {
+    let mut a = app();
+    keys(&mut a, "!");
+    keys(&mut a, "ls");
+    keys(&mut a, "\x1b");
+    assert!(!a.bash() && a.editor.text().is_empty());
+    keys(&mut a, "!");
+    keys(&mut a, "\x7f");
+    assert!(!a.bash());
+    // a running command: Esc cancels it first and the prompt keeps its text
+    keys(&mut a, "!");
+    keys(&mut a, "sleep 9\r");
+    keys(&mut a, "!");
+    assert!(a.bash());
+    keys(&mut a, "\x1b");
+    assert!(
+        a.task.as_ref().unwrap().cancelling,
+        "esc cancelled the command"
+    );
+    assert!(a.bash(), "the draft stays");
+    a.command_done(None);
+    assert!(!a.task_running());
+}
+
+#[test]
+fn slash_in_the_shell_prompt_is_a_path_not_a_command() {
+    let mut a = app();
+    keys(&mut a, "!");
+    let cmds = keys(&mut a, "/bin/echo x\r");
+    assert!(
+        matches!(&cmds[..], [Cmd::UserCommand { command, .. }] if command == "/bin/echo x"),
+        "{cmds:?}"
+    );
+}
+
+#[test]
+fn ctrl_u_after_a_paste_clears_the_prompt() {
+    let mut a = app();
+    keys(&mut a, "\x1b[200~!echo pasted\x1b[201~");
+    keys(&mut a, "\x15");
+    assert_eq!(a.editor.text(), "", "cursor {}", a.editor.cur);
 }

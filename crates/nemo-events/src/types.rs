@@ -164,6 +164,14 @@ pub struct Todo {
     pub active_form: String,
 }
 
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
+fn is_zero(n: &u64) -> bool {
+    *n == 0
+}
+
 /// Event taxonomy, adjacently tagged: `{"type": "...", "payload": {...}}`.
 /// Fields documented as enums are `String` unless they are `ToolStatus`/`TaskStatus`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -206,6 +214,10 @@ pub enum Event {
         usage: Usage,
         changed_files: Vec<String>,
         artifacts_root: String,
+        /// Permission rules (`Bash(cargo test:*)`) the task needed but could not get because
+        /// nobody could approve; the host may offer them (`--allow`).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        needed_permissions: Vec<String>,
     },
     #[serde(rename = "user.message")]
     UserMessage {
@@ -259,10 +271,54 @@ pub enum Event {
     },
     #[serde(rename = "context.compacted")]
     ContextCompacted {
+        /// Legacy: `"auto"` (also for overflow) or `"manual"`. Prefer `reason`.
         trigger: String,
         summary_ref: ArtifactRef,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         tokens_before: Option<u64>,
+        /// `"auto"` | `"overflow"` | `"manual"` (open; empty in logs written before it existed).
+        #[serde(default)]
+        reason: String,
+        #[serde(default)]
+        before_tokens: u64,
+        /// Estimate of the compacted request (not provider-reported).
+        #[serde(default)]
+        after_tokens: u64,
+        #[serde(default)]
+        window_tokens: u64,
+        #[serde(default)]
+        messages_before: u64,
+        #[serde(default)]
+        messages_after: u64,
+        #[serde(default)]
+        summary_chars: u64,
+        #[serde(default)]
+        duration_ms: u64,
+    },
+    /// Context size after each model response and right after each compaction.
+    #[serde(rename = "context.usage")]
+    ContextUsage {
+        used_tokens: u64,
+        window_tokens: u64,
+        /// 0..=100 (may exceed 100 when the estimate is over the window).
+        percent: f64,
+        /// `"provider"` (reported by the model API) | `"estimate"`.
+        source: String,
+        /// True when the number predates the latest history change (no usage in the response).
+        stale: bool,
+    },
+    #[serde(rename = "context.compacting")]
+    ContextCompacting {
+        /// `"auto"` | `"overflow"` | `"manual"`.
+        reason: String,
+        used_tokens: u64,
+        window_tokens: u64,
+    },
+    #[serde(rename = "context.compaction_failed")]
+    ContextCompactionFailed {
+        reason: String,
+        /// Redacted by the sink like every payload string.
+        error: String,
     },
     #[serde(rename = "tool.requested")]
     ToolRequested {
@@ -270,6 +326,9 @@ pub enum Event {
         name: String,
         input: Value,
         input_truncated: bool,
+        /// `"user"` for a command the person typed (`!cmd`); absent for the model's calls.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        origin: Option<String>,
     },
     #[serde(rename = "tool.approval_required")]
     ToolApprovalRequired {
@@ -311,6 +370,35 @@ pub enum Event {
         truncated: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         result_ref: Option<ArtifactRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        origin: Option<String>,
+        /// The model-facing result text, whole up to 64 KiB (redacted like every payload).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        output: Option<String>,
+        /// `output` is a cut of a longer result; `result_ref` names the whole.
+        #[serde(default, skip_serializing_if = "is_false")]
+        output_truncated: bool,
+        /// Size of the whole result in bytes (0 = not reported).
+        #[serde(default, skip_serializing_if = "is_zero")]
+        output_bytes: u64,
+        /// Structured line diff of a file change (Edit / Write / NotebookEdit), from the tool's
+        /// `meta.diff`: `{path, kind, added, removed, hunks[{old_start, old_lines, new_start,
+        /// new_lines, lines[{tag, old_no?, new_no?, text}]}], truncated, hidden?}`. At most about
+        /// 64 KiB of line text; redacted like every payload. Absent for other tools and old logs.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        diff: Option<serde_json::Value>,
+    },
+    /// Live output of a running command (Bash), coalesced; the whole log is an artifact.
+    #[serde(rename = "tool.output")]
+    ToolOutput {
+        tool_call_id: String,
+        /// `"stdout"` | `"stderr"` | `"merged"`.
+        stream: String,
+        text: String,
+        /// 1, 2, ... per tool call.
+        seq: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        origin: Option<String>,
     },
     #[serde(rename = "hook.ran")]
     HookRan {

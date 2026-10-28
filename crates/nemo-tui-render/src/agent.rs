@@ -19,6 +19,9 @@ use std::collections::BTreeSet;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
+mod diffview;
+mod thinking;
+
 // ---------------------------------------------------------------- colours
 
 const C_TEXT: Col = col(T_BODY);
@@ -175,9 +178,10 @@ struct Cache {
 
 /// One conversation item. Rows are cached per item: a cached entry is reused while the width, the
 /// expanded flag and a fingerprint of the main text fields are unchanged. **Whoever mutates
-/// `input`, `images`, `children`, `data`, `rows`, `lines` or any non-text field must bump `rev`.**
+/// `input`, `images`, `children`, `data`, `diff`, `rows`, `lines` or any non-text field must bump `rev`.**
 /// Items drawn with `frame`/`now` (spinners, running tools, busy notes, unfinished thinking) are
-/// never cached.
+/// never cached. The clamp of tasks / bash / code blocks (see [`CLAMP_LINES`]) is a pure function
+/// of those fields and the expanded flag, so it needs no state of its own in the key.
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Item {
@@ -205,6 +209,8 @@ pub struct Item {
     pub rows: Vec<Vec<String>>,
     pub title: String,
     pub data: Value,
+    /// Structured diff of a file change (`tool.completed.diff`); see `diffview`.
+    pub diff: Value,
     pub file: String,
     pub ok: bool,
     pub turns: u64,
@@ -642,8 +648,8 @@ fn markdown(text: &str, expanded: bool) -> Vec<MdLine> {
     let emit_code = |code: &mut Option<Code>, out: &mut Vec<MdLine>| {
         let Some(c) = code.take() else { return };
         let hl = highlight(&c.lines.join("\n").replace('\t', "  "), &c.lang);
-        let keep = if expanded { hl.len() } else { hl.len().min(5) };
-        for line in hl.iter().take(keep) {
+        let (shown, footer) = clamp(hl, expanded, false);
+        for line in &shown {
             let mut runs = vec![r(
                 format!("│ {} ", if expanded { '−' } else { '+' }),
                 C_SUBTLE,
@@ -655,12 +661,9 @@ fn markdown(text: &str, expanded: bool) -> Vec<MdLine> {
                 table: None,
             });
         }
-        if hl.len() > keep {
+        if let Some(f) = footer {
             out.push(MdLine {
-                runs: vec![r(
-                    format!("│ + … +{} lines (ctrl+o to expand)", hl.len() - keep),
-                    C_SUBTLE,
-                )],
+                runs: vec![r(format!("│ {f}"), C_SUBTLE)],
                 indent: 2,
                 table: None,
             });
@@ -1115,6 +1118,57 @@ fn diff_rows(
     rows
 }
 
+/// Display-limit policy: ONLY tasks, bash output and code are clamped, to this many lines (a
+/// footer says how many are hidden; ctrl+o shows everything). Everything else is shown in full.
+pub const CLAMP_LINES: usize = 6;
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Cat {
+    Tasks,
+    Bash,
+    Code,
+    Other,
+}
+
+/// Tool name without the `@agent:` prefix sub-agent tools carry.
+fn base_name(name: &str) -> &str {
+    name.strip_prefix('@')
+        .and_then(|r| r.split_once(':'))
+        .map_or(name, |(_, n)| n)
+}
+
+fn category(name: &str) -> Cat {
+    match base_name(name) {
+        "TodoWrite" | "TaskCreate" | "TaskUpdate" | "TaskList" | "TaskGet" => Cat::Tasks,
+        "Bash" | "BashOutput" | "PowerShell" => Cat::Bash,
+        n if n.starts_with("terminal_") => Cat::Bash,
+        "Read" | "Write" | "Edit" | "MultiEdit" | "NotebookEdit" => Cat::Code,
+        _ => Cat::Other,
+    }
+}
+
+/// The lines of a clamped block that are shown, plus its footer. `tail` keeps the last lines
+/// (running bash), otherwise the first. Blocks of at most [`CLAMP_LINES`] have no footer.
+fn clamp<T>(mut v: Vec<T>, expanded: bool, tail: bool) -> (Vec<T>, Option<String>) {
+    let n = v.len();
+    if n <= CLAMP_LINES {
+        return (v, None);
+    }
+    if expanded {
+        return (v, Some("(ctrl+o to collapse)".into()));
+    }
+    let hidden = n - CLAMP_LINES;
+    if tail {
+        v.drain(..hidden);
+    } else {
+        v.truncate(CLAMP_LINES);
+    }
+    (
+        v,
+        Some(format!("… +{hidden} more lines (ctrl+o to expand)")),
+    )
+}
+
 fn clip_to(s: &str, w: usize) -> String {
     let mut out = String::new();
     let mut used = 0;
@@ -1137,13 +1191,20 @@ fn input_edits(inp: &Value) -> Vec<&Value> {
     }
 }
 
-fn tool_result_lines(it: &Item, expanded: bool, frame: usize) -> Vec<String> {
+/// The summary lines under a tool call and the footer of a clamped block (see [`clamp`]).
+/// Only tasks / bash / code tools are clamped; every other result is shown whole.
+fn tool_result_lines(it: &Item, expanded: bool, frame: usize) -> (Vec<String>, Option<String>) {
     let inp = &it.input;
+    let cat = category(&it.name);
+    let name = base_name(&it.name);
+    let plain = |v: Vec<String>| (v, None);
     if it.checking {
-        return vec![waiting("checking…", frame)];
+        return plain(vec![waiting("checking…", frame)]);
     }
     if it.not_run {
-        return vec!["Not run · auto mode's check had no usable answer".into()];
+        return plain(vec![
+            "Not run · auto mode's check had no usable answer".into(),
+        ]);
     }
     if it.status == "running" {
         if !it.children.is_empty() {
@@ -1162,12 +1223,19 @@ fn tool_result_lines(it: &Item, expanded: bool, frame: usize) -> Vec<String> {
                     it.child_count - it.children.len()
                 ));
             }
-            return v;
+            return plain(v);
         }
-        return vec![waiting("running…", frame)];
+        // streaming bash output: the LAST lines
+        let out = it.output.replace('\r', "");
+        let out = out.trim_end_matches('\n');
+        if cat == Cat::Bash && !out.is_empty() {
+            let v = out.split('\n').map(|l| l.replace('\t', "  ")).collect();
+            return clamp(v, expanded, true);
+        }
+        return plain(vec![waiting("running…", frame)]);
     }
     if it.status == "interrupted" {
-        return vec!["interrupted".into()];
+        return plain(vec!["interrupted".into()]);
     }
     let text = it.result.replace('\r', "");
     let text = text.trim_end_matches('\n');
@@ -1176,22 +1244,23 @@ fn tool_result_lines(it: &Item, expanded: bool, frame: usize) -> Vec<String> {
     } else {
         text.split('\n').collect()
     };
+    // clamped categories keep the first lines; everything else is whole
+    let result_lines = |lines: &[&str]| {
+        let v: Vec<String> = lines.iter().map(|l| l.replace('\t', "  ")).collect();
+        if cat == Cat::Other {
+            (v, None)
+        } else {
+            clamp(v, expanded, false)
+        }
+    };
     if it.status == "error" {
         let lower = text.to_lowercase();
         if lower.contains("doesn't want to proceed") || lower.contains("rejected") {
-            return vec!["rejected by you".into()];
+            return plain(vec!["rejected by you".into()]);
         }
-        let keep = if expanded { 40 } else { 3 };
-        let mut v: Vec<String> = lines.iter().take(keep).map(|l| one_line(l)).collect();
-        if lines.len() > keep {
-            v.push(format!(
-                "… +{} lines (ctrl+o to expand)",
-                lines.len() - keep
-            ));
-        }
-        return v;
+        return result_lines(&lines);
     }
-    if (it.name == "Edit" || it.name == "MultiEdit") && it.status == "done" {
+    if (name == "Edit" || name == "MultiEdit") && it.status == "done" {
         let edits = input_edits(inp);
         let add: usize = edits
             .iter()
@@ -1201,18 +1270,17 @@ fn tool_result_lines(it: &Item, expanded: bool, frame: usize) -> Vec<String> {
             .iter()
             .map(|e| edit_lines(e.get("old_string")).len())
             .sum();
-        return vec![format!("updated · +{add} -{del} lines")];
+        return plain(vec![format!("updated · +{add} -{del} lines")]);
     }
-    if it.name == "Write" && !expanded {
+    if name == "Write" {
         let c = inp.get("content").and_then(Value::as_str).unwrap_or("");
-        return vec![format!("wrote {} lines", c.split('\n').count())];
+        return plain(vec![format!("wrote {} lines", c.split('\n').count())]);
     }
-    if it.name == "TodoWrite"
+    if name == "TodoWrite"
         && let Some(todos) = inp.get("todos").and_then(Value::as_array)
     {
-        return todos
+        let v = todos
             .iter()
-            .take(8)
             .map(|t| {
                 let m = match t.get("status").and_then(Value::as_str) {
                     Some("completed") => '☒',
@@ -1225,39 +1293,68 @@ fn tool_result_lines(it: &Item, expanded: bool, frame: usize) -> Vec<String> {
                 )
             })
             .collect();
+        return clamp(v, expanded, false);
     }
-    if it.name == "Read" && !expanded {
-        return vec![format!("read {} lines", lines.len())];
+    if name == "Read" {
+        return plain(vec![
+            diffview::read_summary(it).unwrap_or_else(|| format!("read {} lines", lines.len())),
+        ]);
     }
     if lines.is_empty() {
-        return vec!["done".into()];
+        return plain(vec!["done".into()]);
     }
-    let keep = if expanded {
-        40
-    } else if it.name == "Bash" || it.name == "PowerShell" {
-        3
-    } else {
-        1
+    result_lines(&lines)
+}
+
+/// File content / diff body of a Read, Write, Edit or NotebookEdit row: the first
+/// [`CLAMP_LINES`] lines (all after ctrl+o) and the clamp footer.
+fn code_body(it: &Item, w: usize, expanded: bool) -> (Vec<Row>, Option<String>) {
+    if it.status != "done" {
+        return (vec![], None);
+    }
+    let inp = &it.input;
+    let lang = lang_from_file(inp.get("file_path").and_then(Value::as_str)).unwrap_or("");
+    let text_rows = |code: &str, lang: &str| -> Vec<Row> {
+        highlight(&code.replace('\t', "  "), lang)
+            .into_iter()
+            .map(|l| l.iter().map(|t| r(&t.t, t.c)).collect())
+            .collect()
     };
-    let mut v: Vec<String> = lines
-        .iter()
-        .take(keep)
-        .map(|l| {
-            if expanded {
-                l.replace('\t', "  ")
-            } else {
-                one_line(l)
-            }
-        })
-        .collect();
-    if lines.len() > keep {
-        v.push(format!(
-            "… +{} lines{}",
-            lines.len() - keep,
-            if expanded { "" } else { " (ctrl+o to expand)" }
-        ));
-    }
-    v
+    let rows: Vec<Row> = match base_name(&it.name) {
+        "Edit" | "MultiEdit" => input_edits(inp)
+            .into_iter()
+            .flat_map(|e| {
+                diff_rows(
+                    e.get("old_string"),
+                    e.get("new_string"),
+                    w.saturating_sub(5).max(10),
+                    usize::MAX,
+                    lang,
+                    None,
+                )
+            })
+            .collect(),
+        "Write" => inp
+            .get("content")
+            .and_then(Value::as_str)
+            .map(|c| text_rows(c, lang))
+            .unwrap_or_default(),
+        "NotebookEdit" => inp
+            .get("new_source")
+            .and_then(Value::as_str)
+            .map(|c| text_rows(c, ""))
+            .unwrap_or_default(),
+        "Read" => it
+            .result
+            .replace('\r', "")
+            .trim_end_matches('\n')
+            .split('\n')
+            .filter(|_| !it.result.is_empty())
+            .map(|l| vec![r(l.replace('\t', "  "), C_DIM)])
+            .collect(),
+        _ => vec![],
+    };
+    clamp(rows, expanded, false)
 }
 
 fn history_icon(k: &str) -> &'static str {
@@ -1450,7 +1547,9 @@ fn item_rows(it: &Item, w: usize, frame: usize, now: i64, expanded: bool) -> Vec
         )),
         "text" => {
             rows.push(vec![]);
-            for (i, ln) in markdown(&it.text, expanded).iter().enumerate() {
+            // no blank rows at either end: the one blank between blocks is the separator above
+            let body = it.text.trim_start_matches(['\n', '\r']).trim_end();
+            for (i, ln) in markdown(body, expanded).iter().enumerate() {
                 let bar = || deco("▌ ", C_OK);
                 let lead = if it.is_final {
                     vec![bar()]
@@ -1489,38 +1588,7 @@ fn item_rows(it: &Item, w: usize, frame: usize, now: i64, expanded: bool) -> Vec
                 rows.last_mut().unwrap().push(r(" ▍", C_LIGHT));
             }
         }
-        "thinking" => {
-            rows.push(vec![]);
-            if it.streaming {
-                let last = one_line(it.text.split('\n').rfind(|l| !l.is_empty()).unwrap_or(""));
-                rows.push(vec![
-                    r(format!("{} ", spin(frame)), C_LIGHT),
-                    r(format!("Thinking{} ", dots(frame)), C_DIM),
-                    r(last, C_SUBTLE),
-                ]);
-            } else {
-                let dur = it.end.filter(|e| *e != 0).unwrap_or(now)
-                    - it.start.filter(|s| *s != 0).unwrap_or(now);
-                let mut row = vec![
-                    r("∴ ", C_SUBTLE),
-                    r(format!("Thought for {}", fmt_dur(dur)), C_SUBTLE),
-                ];
-                if !expanded {
-                    row.push(r(" (ctrl+o to show)", C_SUBTLE));
-                }
-                rows.push(row);
-                if expanded && !it.text.is_empty() {
-                    for ln in it.text.split('\n') {
-                        rows.extend(wrap(
-                            &[r(ln, C_SUBTLE)],
-                            w,
-                            &[r("  ", C_TEXT)],
-                            &[r("  ", C_TEXT)],
-                        ));
-                    }
-                }
-            }
-        }
+        "thinking" => rows.extend(thinking::rows(it, w, frame, now)),
         "tool" => {
             let st = it.status.as_str();
             let (dot, dcol) = match st {
@@ -1530,7 +1598,14 @@ fn item_rows(it: &Item, w: usize, frame: usize, now: i64, expanded: bool) -> Vec
                 _ => ("●", C_OK),
             };
             rows.push(vec![]);
-            let title = tool_title(it);
+            let dv = diffview::view(it, w, expanded);
+            let title = match &dv {
+                Some(v) => {
+                    let sub = it.name.strip_suffix(base_name(&it.name)).unwrap_or("");
+                    format!("{sub}{}({})", v.name, v.path)
+                }
+                None => tool_title(it),
+            };
             let (name, args) = match title.find('(').filter(|p| *p > 0) {
                 Some(p) => (&title[..p], &title[p..]),
                 None => (title.as_str(), ""),
@@ -1541,8 +1616,11 @@ fn item_rows(it: &Item, w: usize, frame: usize, now: i64, expanded: bool) -> Vec
                 &[rb(format!("{dot} "), dcol)],
                 &[r("  ", C_TEXT)],
             ));
-            let is_edit = (it.name == "Edit" || it.name == "MultiEdit") && st == "done";
-            for (i, ln) in tool_result_lines(it, expanded, frame).iter().enumerate() {
+            let (result, footer) = match &dv {
+                Some(v) => (vec![v.summary.clone()], None),
+                None => tool_result_lines(it, expanded, frame),
+            };
+            for (i, ln) in result.iter().enumerate() {
                 let c = if it.not_run || it.checking {
                     C_DIM
                 } else if st == "error" {
@@ -1559,28 +1637,20 @@ fn item_rows(it: &Item, w: usize, frame: usize, now: i64, expanded: bool) -> Vec
                     &[r("     ", C_TEXT)],
                 ));
             }
-            if is_edit && expanded {
-                let lang =
-                    lang_from_file(it.input.get("file_path").and_then(Value::as_str)).unwrap_or("");
-                let mut hidden = 0;
-                for e in input_edits(&it.input) {
-                    let mut more = |n: usize| hidden += n;
-                    for rw in diff_rows(
-                        e.get("old_string"),
-                        e.get("new_string"),
-                        w.saturating_sub(5).max(10),
-                        40,
-                        lang,
-                        Some(&mut more),
-                    ) {
-                        let mut line = vec![r("     ", C_TEXT)];
-                        line.extend(rw);
-                        rows.push(line);
-                    }
-                }
-                if hidden > 0 {
-                    rows.push(vec![r(format!("     … +{hidden} lines"), C_SUBTLE)]);
-                }
+            if let Some(f) = footer {
+                rows.push(vec![r(format!("     {f}"), C_SUBTLE)]);
+            }
+            let (body, footer) = match dv {
+                Some(v) => (v.body, v.footer),
+                None => code_body(it, w, expanded),
+            };
+            for rw in body {
+                let mut line = vec![r("     ", C_TEXT)];
+                line.extend(rw);
+                rows.push(line);
+            }
+            if let Some(f) = footer {
+                rows.push(vec![r(format!("     {f}"), C_SUBTLE)]);
             }
         }
         "note" => {
@@ -1702,8 +1772,12 @@ fn item_rows(it: &Item, w: usize, frame: usize, now: i64, expanded: bool) -> Vec
             } else {
                 out.split('\n').map(String::from).collect()
             };
-            let keep = if expanded { 60 } else { 6 };
-            for (i, ln) in lines.iter().take(keep).enumerate() {
+            let (shown, footer) = if it.status == "running" && !out.is_empty() {
+                clamp(lines, expanded, true) // streaming: the last lines
+            } else {
+                clamp(lines, expanded, false)
+            };
+            for (i, ln) in shown.iter().enumerate() {
                 rows.extend(wrap(
                     &[r(
                         ln.replace('\t', "  "),
@@ -1714,15 +1788,8 @@ fn item_rows(it: &Item, w: usize, frame: usize, now: i64, expanded: bool) -> Vec
                     &[r("     ", C_TEXT)],
                 ));
             }
-            if lines.len() > keep {
-                rows.push(vec![r(
-                    format!(
-                        "     … +{} lines{}",
-                        lines.len() - keep,
-                        if expanded { "" } else { " (ctrl+o to expand)" }
-                    ),
-                    C_SUBTLE,
-                )]);
+            if let Some(f) = footer {
+                rows.push(vec![r(format!("     {f}"), C_SUBTLE)]);
             }
             if it.status != "running" && !it.restored {
                 rows.push(vec![r(
@@ -1802,6 +1869,12 @@ fn item_rows(it: &Item, w: usize, frame: usize, now: i64, expanded: bool) -> Vec
         _ => {}
     }
     rows
+}
+
+/// A note has no separator row of its own (consecutive notes stay together); one blank row
+/// goes between it and any other kind before it, so every block change has exactly one.
+fn note_gap(prev: Option<&str>, it: &Item) -> Option<Rc<Vec<Row>>> {
+    (it.kind == "note" && prev.is_some_and(|k| k != "note")).then(|| Rc::new(vec![vec![]]))
 }
 
 fn cached_item_rows(it: &Item, w: usize, frame: usize, now: i64, expanded: bool) -> Rc<Vec<Row>> {
@@ -2779,39 +2852,49 @@ pub fn todo_window(todos: &[Todo], cap: usize) -> usize {
     start.min(todos.len() - cap)
 }
 
-fn todo_rows(todos: &[Todo], w: usize) -> Vec<Row> {
+fn todo_rows(todos: &[Todo], w: usize, expanded: bool) -> Vec<Row> {
     if todos.is_empty() {
         return vec![];
     }
-    let start = todo_window(todos, 5);
-    let shown = &todos[start..(start + 5).min(todos.len())];
-    let mut rows: Vec<Row> = shown
-        .iter()
-        .enumerate()
-        .map(|(i, t)| {
-            let (mark, c) = match t.status.as_str() {
-                "completed" => ("☒ ", C_SUBTLE),
-                "in_progress" => ("■ ", C_LIGHT),
-                _ => ("☐ ", C_DIM),
-            };
-            let text = clip_to(
-                if t.status == "in_progress" && !t.active_form.is_empty() {
-                    &t.active_form
-                } else {
-                    &t.content
-                },
-                w.saturating_sub(6),
-            );
-            vec![
+    let cap = if expanded {
+        todos.len()
+    } else {
+        CLAMP_LINES.min(todos.len())
+    };
+    let start = todo_window(todos, cap);
+    let shown = &todos[start..(start + cap).min(todos.len())];
+    let mut rows: Vec<Row> = vec![];
+    for (i, t) in shown.iter().enumerate() {
+        let (mark, c) = match t.status.as_str() {
+            "completed" => ("☒ ", C_SUBTLE),
+            "in_progress" => ("■ ", C_LIGHT),
+            _ => ("☐ ", C_DIM),
+        };
+        let text = if t.status == "in_progress" && !t.active_form.is_empty() {
+            &t.active_form
+        } else {
+            &t.content
+        };
+        rows.extend(wrap(
+            &[run_full(text, c, t.status == "in_progress", false, false)],
+            w,
+            &[
                 r(if i == 0 { "  ⎿ " } else { "    " }, C_SUBTLE),
                 r(mark, c),
-                run_full(text, c, t.status == "in_progress", false, false),
-            ]
-        })
-        .collect();
-    if todos.len() > shown.len() {
+            ],
+            &[r("      ", C_TEXT)],
+        ));
+    }
+    if todos.len() > CLAMP_LINES {
         rows.push(vec![r(
-            format!("    … +{} more", todos.len() - shown.len()),
+            if expanded {
+                "    (ctrl+o to collapse)".to_string()
+            } else {
+                format!(
+                    "    … +{} more lines (ctrl+o to expand)",
+                    todos.len() - shown.len()
+                )
+            },
             C_SUBTLE,
         )]);
     }
@@ -3250,7 +3333,7 @@ pub fn render_agent(
         ]);
     }
     if opts.preview.is_none() && todos.iter().any(|t| t.status != "completed") {
-        working.extend(todo_rows(todos, content_w));
+        working.extend(todo_rows(todos, content_w, opts.expanded));
     }
 
     let selector: Vec<Row> = if opts.preview.is_some()
@@ -3272,12 +3355,15 @@ pub fn render_agent(
     } else if items.is_empty() {
         parts.push(Rc::new(welcome_rows(agent, content_w)));
     } else {
+        let mut prev: Option<&str> = None;
         for it in items {
             let focus_kinds = ["user", "text", "result", "note", "help", "info", "compact"];
             if !agent.focus_view
                 || opts.preview.is_some()
                 || focus_kinds.contains(&it.kind.as_str())
             {
+                parts.extend(note_gap(prev, it));
+                prev = Some(&it.kind);
                 parts.push(cached_item_rows(it, content_w, frame, now, opts.expanded));
             }
         }
@@ -3346,11 +3432,14 @@ pub fn transcript_rows(
     expanded: bool,
     scroll: usize,
 ) -> (Vec<String>, usize) {
-    let parts: Vec<Rc<Vec<Row>>> = agent
-        .items
-        .iter()
-        .map(|it| cached_item_rows(it, w.max(10), frame, now, expanded))
-        .collect();
+    let mut parts: Vec<Rc<Vec<Row>>> = vec![];
+    for (i, it) in agent.items.iter().enumerate() {
+        parts.extend(note_gap(
+            i.checked_sub(1).map(|p| agent.items[p].kind.as_str()),
+            it,
+        ));
+        parts.push(cached_item_rows(it, w.max(10), frame, now, expanded));
+    }
     let win = window_rows(&parts, scroll, h);
     let mut lines: Vec<String> = vec![String::new(); h.saturating_sub(win.view.len())];
     lines.extend(win.view.iter().map(|rw| paint_row(rw)));

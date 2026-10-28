@@ -144,6 +144,13 @@ pub(crate) fn run(input: &Value, ctx: &ToolContext) -> ToolOutput {
         ));
     }
 
+    // cell source before the edit (`source` is a string or an array of lines)
+    let src_of = |c: &Value| match &c["source"] {
+        Value::String(s) => s.clone(),
+        Value::Array(a) => a.iter().filter_map(Value::as_str).collect(),
+        _ => String::new(),
+    };
+    let old_src = at.map(|i| src_of(&cells[i])).unwrap_or_default();
     let message = match (mode, at) {
         ("delete", Some(i)) => {
             cells.remove(i);
@@ -217,5 +224,17 @@ pub(crate) fn run(input: &Value, ctx: &ToolContext) -> ToolOutput {
         Ok(m) => ledger_set(ctx, &abs, mtime(&m)),
         Err(x) => return e(&format!("cannot access {}: {x}", abs.display())),
     }
-    ToolOutput::text(format!("{message} ({n} cells)")).with_meta(json!({"cells": n}))
+    // line numbers are relative to the cell source
+    let (kind, before) = match mode {
+        "delete" => ("delete", old_src.as_str()),
+        "insert" => ("create", ""),
+        _ => ("update", old_src.as_str()),
+    };
+    let after = if mode == "delete" {
+        ""
+    } else {
+        new_source.unwrap_or_default()
+    };
+    ToolOutput::text(format!("{message} ({n} cells)"))
+        .with_meta(json!({"cells": n, "diff": crate::diff::for_file(path, kind, before, after)}))
 }

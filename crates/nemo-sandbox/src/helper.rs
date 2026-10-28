@@ -102,11 +102,20 @@ pub fn parse_helper_args(
 mod tests {
     use super::*;
 
+    // POSIX-looking test paths get a drive letter on Windows so they are absolute there too.
+    fn p(s: &str) -> PathBuf {
+        PathBuf::from(if cfg!(windows) {
+            format!("C:{s}")
+        } else {
+            s.into()
+        })
+    }
+
     fn pol() -> SandboxPolicy {
         SandboxPolicy {
-            readable_roots: vec!["/usr".into()],
-            writable_roots: vec!["/work".into()],
-            deny_paths: vec!["/home/u/.ssh".into()],
+            readable_roots: vec![p("/usr")],
+            writable_roots: vec![p("/work")],
+            deny_paths: vec![p("/home/u/.ssh")],
             network: NetworkPolicy::Allow,
             allow_exec: true,
             ..Default::default()
@@ -129,7 +138,7 @@ mod tests {
             with("\"version\":1", "\"version\":2"),
             with("\"version\":1", "\"version\":1,\"extra\":true"),
             with("\"allow\"", "\"AllowHosts\""),
-            with("\"/work\"", "\"rel\""),
+            with(&serde_json::to_string(&p("/work")).unwrap(), "\"rel\""),
             "{}".into(),
             String::new(),
         ] {

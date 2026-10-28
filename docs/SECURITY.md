@@ -55,6 +55,10 @@ Release pipeline controls (all UNVERIFIED on GitHub until the first release runs
 
 Limits: a pinned SHA fixes which code runs, not that it is good; review Dependabot bumps. With `NEMO_SKIP_ATTESTATION=1` the installers authenticate nothing beyond TLS to GitHub. The attestation proves the artifacts were built by `release.yml` of the repository, not that the source is benign.
 
+## Artifacts are raw
+
+Command logs and `tool-results/` artifacts hold the tool's output UNREDACTED (redaction applies to events, not to these files). The `tool-results` directory is created 0700 and its files 0600 on unix; on Windows rely on the profile ACLs. Treat the artifact root like the working tree: do not share or upload it unreviewed.
+
 ## Known gaps
 
 No independent security audit; Windows has no filesystem/network confinement; Seatbelt is deprecated; secret redaction is pattern-based; macOS/Windows signing depends on owner-provided certificates (docs/RELEASE.md).

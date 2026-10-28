@@ -79,6 +79,16 @@ fn fixture() -> Fixture {
 
 #[test]
 fn sandbox_cannot_redirect_the_worktree_git_pin() {
+    // A git that does not run even outside the sandbox is the environment's problem, not the policy's.
+    if !Command::new("/bin/sh")
+        .args(["-c", "git --version"])
+        .env_clear()
+        .output()
+        .is_ok_and(|o| o.status.success())
+    {
+        eprintln!("SKIP: git does not run outside the sandbox either");
+        return;
+    }
     let f = fixture();
     let p = standard_policy_git(&f.ws, NetworkPolicy::Deny, Some(&f.git_dir)).unwrap();
     let ok = |s: &str| {

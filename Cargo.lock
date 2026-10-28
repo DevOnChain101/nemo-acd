@@ -1658,6 +1658,7 @@ dependencies = [
 name = "nemo-config"
 version = "0.1.0"
 dependencies = [
+ "dunce",
  "indexmap",
  "serde_json",
  "tempfile",
@@ -1681,6 +1682,7 @@ dependencies = [
 name = "nemo-core"
 version = "0.1.0"
 dependencies = [
+ "dunce",
  "nemo-events",
  "nemo-platform",
  "serde",
@@ -1705,6 +1707,7 @@ dependencies = [
  "futures-util",
  "jsonschema",
  "nemo-config",
+ "nemo-context",
  "nemo-core",
  "nemo-events",
  "nemo-hooks",
@@ -1715,6 +1718,7 @@ dependencies = [
  "nemo-tools",
  "nemo-verification",
  "serde_json",
+ "sha2",
  "tempfile",
  "tokio",
  "tokio-util",
@@ -1740,12 +1744,15 @@ name = "nemo-mcp"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "futures-util",
  "http",
  "nemo-config",
  "process-wrap",
+ "reqwest",
  "rmcp",
  "serde_json",
  "sha1 0.10.7",
+ "tempfile",
  "tokio",
  "tokio-util",
  "which",
@@ -1755,6 +1762,7 @@ dependencies = [
 name = "nemo-permissions"
 version = "0.1.0"
 dependencies = [
+ "dunce",
  "icu_normalizer",
  "nemo-core",
  "regex",
@@ -1788,6 +1796,7 @@ dependencies = [
 name = "nemo-sandbox"
 version = "0.1.0"
 dependencies = [
+ "dunce",
  "landlock",
  "serde",
  "serde_json",
@@ -1859,6 +1868,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "similar",
  "tempfile",
  "tokio",
  "tokio-util",
@@ -1892,6 +1902,7 @@ name = "nemo-tui-base"
 version = "0.1.0"
 dependencies = [
  "crossterm",
+ "dunce",
  "nemo-config",
  "nemo-platform",
  "serde_json",
@@ -2818,6 +2829,15 @@ name = "simdutf8"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
+
+[[package]]
+name = "similar"
+version = "3.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2f8bec09ae8fae0f4f265a4559a9334be3929d8504e9b536df0a41302bd1733"
+dependencies = [
+ "bstr",
+]
 
 [[package]]
 name = "slab"

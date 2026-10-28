@@ -107,6 +107,11 @@ fn event_stream_matches_transcript_model() {
             bytes: 6,
             truncated: false,
             result_ref: None,
+            origin: None,
+            output: Some("exit 1".into()),
+            output_truncated: false,
+            output_bytes: 6,
+            diff: None,
         },
     );
     nemo_tui_render::model::apply_event(&mut s, &done);

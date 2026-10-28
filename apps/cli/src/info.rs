@@ -318,7 +318,13 @@ fn report_discovery(env: &Env, h: &crate::Homes, cfg: &Config, cwd: Option<&Path
         st.nemo.verification.len(),
         v.checks.len()
     );
-    for d in st.diagnostics.iter().chain(&v.diagnostics) {
+    let (ac, ac_diag) = crate::ctx::read_auto_compact(&h.nemo.join("settings.json"));
+    out!(
+        "  context: auto_compact {}, threshold {} of the model window (nemo.context.auto_compact / auto_compact_threshold in the user settings.json)",
+        if ac.enabled { "on" } else { "off" },
+        ac.threshold
+    );
+    for d in st.diagnostics.iter().chain(&v.diagnostics).chain(&ac_diag) {
         out!("  warning: {}", san(d));
     }
 
@@ -328,6 +334,7 @@ fn report_discovery(env: &Env, h: &crate::Homes, cfg: &Config, cwd: Option<&Path
         plan.servers.len(),
         plan.skipped.len()
     );
+    let pass = crate::mcp::read_passthrough(&h.nemo.join("settings.json"));
     for s in &plan.servers {
         out!(
             "  {} [{}] {}",
@@ -335,11 +342,13 @@ fn report_discovery(env: &Env, h: &crate::Homes, cfg: &Config, cwd: Option<&Path
             s.scope.as_deref().unwrap_or("?"),
             san(&crate::mcp::describe(s)),
         );
+        for l in crate::mcp::credentials(s, env, &pass) {
+            out!("    {}", san(&l));
+        }
     }
     for (n, why) in &plan.skipped {
         out!("  {}: skipped, {}", san(n), san(why));
     }
-    let pass = crate::mcp::read_passthrough(&h.nemo.join("settings.json"));
     out!(
         "  env passthrough for ${{VAR}} (user scope only): {}",
         if pass.is_empty() {

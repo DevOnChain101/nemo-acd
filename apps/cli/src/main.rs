@@ -72,6 +72,11 @@ enum Cmd {
     Tui(Box<tui::TuiArgs>),
     /// Diagnose the installation.
     Doctor(CwdArg),
+    /// Manage MCP server entries in your own config files (never credentials).
+    Mcp {
+        #[command(subcommand)]
+        cmd: mcp::McpCmd,
+    },
 }
 
 #[derive(Subcommand)]
@@ -135,6 +140,7 @@ fn main() -> ExitCode {
         }) => info::auth_status(&env, a.cwd.as_deref()),
         Some(Cmd::Models(a)) => info::models(&env, &a),
         Some(Cmd::Doctor(a)) => info::doctor(&env, a.cwd.as_deref()),
+        Some(Cmd::Mcp { cmd }) => mcp::run_cmd(&env, cmd),
     };
     match r {
         Ok(code) => ExitCode::from(code),

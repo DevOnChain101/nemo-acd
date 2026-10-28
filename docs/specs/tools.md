@@ -26,7 +26,7 @@ pub struct ToolResult {          // [from-node tools/index.js:3-6]
 Rules:
 1. Expected failures are returned as `is_error: true`, never as a Rust `Err`; only cancellation propagates [from-node tools/index.js:3-6].
 2. Naming [new]: tools ported from Node keep their names (`Read`, `Bash`, …): the transcript parser keys on them [from-node parser.js:225, history.js:108] and two-way compatibility needs them. Doc §5.6 ids map to these instead of being added again: `file.read`=`Read`, `file.write`=`Write`, `file.patch`=`Edit`, `file.search`=`Grep`+`Glob`, `terminal.exec`=`Bash`. New tools use wire name = logical id with `.` → `_` (`terminal_spawn`), because dots are invalid in Anthropic/OpenAI tool names.
-3. MCP tools: `mcp__<server>__<tool>`, sanitized, truncated to 64 chars with a sha1-6 suffix [from-node mcp.js:115-140]. Default class `External`.
+3. MCP tools: `mcp__<server>__<tool>`, sanitized, truncated to 64 chars with a sha1-6 suffix [from-node mcp.js:115-140]; two tools that sanitize to the same name get the hash suffix on the later one, so names stay unique and reversible [new]. Default class `External`. See §6.
 4. Registry order is stable (it feeds prompt caching): the 17 built-ins in Node order [from-node tools/index.js:26], then Task/AskUserQuestion/ExitPlanMode, then new tools, then MCP.
 
 ## 2. Side-effect classes
@@ -82,6 +82,12 @@ Behaviour that is part of the contract [from-node]: Read output is `cat -n` styl
 
 Change [new]: `Bash` with `run_in_background` and `BashOutput`/`KillShell` are served by `TerminalRuntime` (`spawn`/`read_logs`/`signal`); `bash_id` == `process_id`. Node's 1 MiB in-memory tail [bash.js:34] becomes a log artifact with a cursor.
 
+### 4a. `meta.diff` of Edit / Write / NotebookEdit [new, additive]
+
+The model-facing text and schemas are unchanged. Where the whole file is known the tool also returns `ToolOutput.meta.diff` so the UI can show real line numbers; the harness copies it to `tool.completed.diff` (events.md).
+
+`{path, kind, added, removed, hunks, truncated, hidden?}`: `path` as the call gave it; `kind` is `update` (Edit, NotebookEdit replace/insert), `create` (Write of a new file), `overwrite` (Write over an existing UTF-8 file; no diff when the old file is not UTF-8 or over the read limit) or `delete` (NotebookEdit cell delete). `hunks[]` are unified-diff hunks with 3 lines of context: `old_start/old_lines/new_start/new_lines` (1-based; an empty side names the line before it) and `lines[]` of `{tag:" "|"+"|"-", old_no?, new_no?, text}` (`text` without the line terminator, CRLF stripped; tabs kept). `added`/`removed` always count every changed line; line text stops at 2000 diff lines or 64 KiB (`truncated:true`). For NotebookEdit the numbers are relative to the cell source. Files matching `nemo_core::secrets::is_secret_path` get `hidden:true`, the counts and no hunks. Edit diffs are taken on LF-normalised text, so a CRLF file diffs like an LF one.
+
 ## 5. New tools [new, drafts; schemas in JSON Schema]
 ```json
 {"terminal_spawn":{"properties":{"command":{"type":"string"},"name":{"type":"string"},"cwd":{"type":"string"},"env":{"type":"object","additionalProperties":{"type":"string"}},"tty":{"type":"boolean"},
@@ -104,6 +110,26 @@ Change [new]: `Bash` with `run_in_background` and `BashOutput`/`KillShell` are s
  "browser_network":{"properties":{"cursor":{"type":"string"},"failed_only":{"type":"boolean"}}}}
 ```
 Semantics: `terminal_spawn` returns `{process_id, pid, status, ready:bool, log_cursor}` and outlives the tool call but not the session (doc §5.8). `terminal_status` without id lists the session's processes only. `git_revert` restores paths to the session baseline (agent edits only), never runs `git reset`/`checkout` on user changes, and is always `ask` (doc §5.10). `browser_*` use accessibility refs first, selectors as fallback, no coordinates (doc §5.9); backend decided by the R6 spike. Permission rule syntax for new tools follows Node: `terminal_spawn(<cmd prefix>:*)` like Bash, `browser_navigate(domain:<host>)` like WebFetch [from-node permissions.js:442-507].
+
+## 6. MCP [new; user guide: docs/MCP.md]
+Spec revision 2025-06-18. Crate `nemo-mcp` (client manager), `apps/cli/src/mcp.rs` (adapter, config, `nemo mcp`), `nemo-harness/src/mcp_guard.rs` (read-before-write guard).
+
+- **Transports**: stdio (own process group / Job Object with kill-on-close), streamable HTTP (rmcp; `Mcp-Session-Id` 404 => transparent re-initialize), legacy HTTP+SSE (own thin client, `sse.rs`: https or loopback only, no private/metadata addresses, redirects revalidated, the `endpoint` event must stay on the stream's origin). A bare `url` tries streamable HTTP, then SSE. OAuth is out of scope (ADR-011): use `npx mcp-remote <url>` as a stdio server or a Bearer header from `${VAR}`.
+- **Capabilities advertised**: none (no sampling, roots, elicitation); such requests are declined by rmcp's defaults. `ping` is answered.
+- **Live registry**: `ToolBox::with_source` re-reads the MCP tools every turn; `tools/list_changed`, reconnects and losses change what the model sees (the old list is kept if a refresh fails). Pagination is followed.
+- **Tool metadata kept**: `annotations` (hints only: they never relax a rule), `outputSchema` verbatim, `structuredContent` verbatim in `McpToolResult.structured` and in the tool output `meta`, the text form is what the model reads.
+- **Results**: text capped at 28 000 chars; the MIDDLE is cut with an explicit `[… N chars omitted …]` marker (JSON keeps every key and short value such as `id`/`version`, only its longest strings are shortened); the full text is saved under `<session artifacts>/mcp/` and named in the result. Images pass through; audio, resource links and unknown blocks become one-line placeholders.
+- **Resources and prompts**: servers that declare them get two synthetic read-only tools, `mcp__<server>__resource_read {uri}` and `mcp__<server>__prompt_get {name, arguments}`, whose description lists what the server offers. A real tool of that name wins.
+- **Server `instructions`** are appended to the first tool's description inside a label that marks them as untrusted data.
+- **Timeouts**: per call 60 s, connect 30 s (`tool_timeout_sec|tool_timeout_ms|timeout`, `startup_timeout_sec|startup_timeout_ms` per server). Cancelling a call sends `notifications/cancelled`. A lost connection is re-established with a bounded backoff (1 s, 4 s, 15 s); the failed call is never retried (it may have been a write).
+- **Filters**: `enabled_tools` / `disabled_tools` per server (disabled wins; also enforced at call time).
+- **Read-before-write guard** (`McpGuard`, runs in the pipeline before the policy check, state per task):
+  - *Write tool* = listed in `nemo.mcp.servers.<server>.write_tools`, or (unless listed in `read_tools` / annotated `readOnlyHint: true`) `destructiveHint: true`, or a name (first 80 chars of the description if the name says nothing) with a write verb: update, edit, put, patch, replace, write, set, modify, delete, transition, comment, remove, restore, merge, move, archive. A name that starts with get/read/list/search/find/fetch/view/query/describe/discover/diff/show/lookup/count/check/retrieve is read. `executeRead|Write|Destructive`-style wrappers are judged by the inner `tool` and its `arguments`. `read_tools` can only come from the user's settings; a project settings file can only add `write_tools`.
+  - *Freshness proof* for each id-like argument of a write (`id`, `key`, `uri`, `issueIdOrKey`, `pageId`, `*_id`, `*Id`): an earlier successful read of the same server in this task whose arguments or result mention the id, and no successful write to that id since. Otherwise the call is NOT sent: a normal tool error says to fetch with the suggested read tool, MERGE, retry.
+  - *Version provenance*: a `version|etag|revision|ifMatch|updated` field of the write must equal a value in the fetched result (numbers may be fetched+1).
+  - *Approval*: a tool classed destructive always asks, in every mode and despite allow rules; an update whose `body|content|description|text|...` drops more than 30 % of the fetched text or any heading of it asks with "this update will replace N lines; M lines of the current content are not present in your update" and the changed lines. Headless runs deny these asks.
+  - Results only feed the guard's string comparisons; they never reach the permission engine.
+- **CLI**: `nemo mcp list|get|add|remove` edit `<NEMO_HOME>/nemo.json` (user) or `<cwd>/.mcp.json` (project, still needs approval); secret-looking env/header values must be `${VAR}` references.
 
 ## Open
 - `TodoWrite` vs `TaskCreate/Update` share one store in Node [from-node taskcreate.js:3-7]; keep both on the wire?

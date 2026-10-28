@@ -5,6 +5,7 @@
 
 use std::collections::BTreeMap;
 use std::fmt;
+use std::time::Duration;
 
 use nemo_config::Env;
 use serde_json::Value;
@@ -41,9 +42,25 @@ pub struct McpServerConfig {
     pub headers: BTreeMap<String, String>,
     pub disabled: bool,
     pub disabled_reason: Option<String>,
+    /// Per-server `tools/call` timeout (`tool_timeout_sec` | `tool_timeout_ms` | `timeout` in ms).
+    pub timeout: Option<Duration>,
+    /// Per-server connect timeout (`startup_timeout_sec` | `startup_timeout_ms`).
+    pub startup_timeout: Option<Duration>,
+    /// When set, only these server tool names are exposed.
+    pub enabled_tools: Option<Vec<String>>,
+    pub disabled_tools: Vec<String>,
 }
 
 impl McpServerConfig {
+    /// Whether the model may see / call this server tool (`disabled_tools` wins).
+    pub fn tool_enabled(&self, tool: &str) -> bool {
+        !self.disabled_tools.iter().any(|t| t == tool)
+            && self
+                .enabled_tools
+                .as_ref()
+                .is_none_or(|e| e.iter().any(|t| t == tool))
+    }
+
     pub fn stdio(name: impl Into<String>, command: impl Into<String>, args: Vec<String>) -> Self {
         Self::new(
             name,
@@ -82,6 +99,10 @@ impl McpServerConfig {
             headers: BTreeMap::new(),
             disabled: false,
             disabled_reason: None,
+            timeout: None,
+            startup_timeout: None,
+            enabled_tools: None,
+            disabled_tools: vec![],
         }
     }
 
@@ -132,6 +153,41 @@ fn non_empty_str<'a>(cfg: &'a Value, k: &str) -> Option<&'a str> {
     cfg.get(k).and_then(Value::as_str).filter(|s| !s.is_empty())
 }
 
+/// Timeouts and tool filters shared by both shapes. Seconds or milliseconds, any of the Claude
+/// Code / Codex spellings; non-positive or non-numeric values are ignored.
+fn common(e: &mut McpServerConfig, cfg: &Value) {
+    let dur = |keys: &[(&str, f64)]| {
+        keys.iter().find_map(|(k, mul)| {
+            let v = cfg
+                .get(*k)?
+                .as_f64()
+                .filter(|v| *v > 0.0 && v.is_finite())?;
+            Some(Duration::from_secs_f64(v * mul / 1000.0))
+        })
+    };
+    e.timeout = dur(&[
+        ("tool_timeout_sec", 1000.0),
+        ("toolTimeoutSec", 1000.0),
+        ("tool_timeout_ms", 1.0),
+        ("timeout", 1.0),
+    ]);
+    e.startup_timeout = dur(&[
+        ("startup_timeout_sec", 1000.0),
+        ("startupTimeoutSec", 1000.0),
+        ("startup_timeout_ms", 1.0),
+    ]);
+    let names = |k: &str| {
+        cfg.get(k).and_then(Value::as_array).map(|a| {
+            a.iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+    };
+    e.enabled_tools = names("enabled_tools");
+    e.disabled_tools = names("disabled_tools").unwrap_or_default();
+}
+
 /// Claude Code shape (`.mcp.json` `mcpServers.<name>`): `{type?, command, args, url, env, headers}`.
 pub fn from_claude_shape(name: &str, cfg: &Value, scope: Option<&str>) -> McpServerConfig {
     let kind = match cfg.get("type").and_then(Value::as_str) {
@@ -152,6 +208,7 @@ pub fn from_claude_shape(name: &str, cfg: &Value, scope: Option<&str>) -> McpSer
     }
     e.env = record(present(cfg, "env").or_else(|| cfg.get("environment")));
     e.headers = record(cfg.get("headers"));
+    common(&mut e, cfg);
     e
 }
 
@@ -182,6 +239,7 @@ pub fn from_opencode_shape(name: &str, cfg: &Value, scope: Option<&str>) -> McpS
     }
     e.env = record(present(cfg, "env").or_else(|| cfg.get("environment")));
     e.headers = record(cfg.get("headers"));
+    common(&mut e, cfg);
     if cfg.get("enabled") == Some(&Value::Bool(false)) {
         e.disabled = true;
         e.disabled_reason = Some("disabled".into());
@@ -275,6 +333,36 @@ pub fn stdio_base_env(env: &Env) -> BTreeMap<String, String> {
         .iter()
         .map(|(k, v)| (k.to_string(), v.to_string()))
         .collect()
+}
+
+/// The only variables `${VAR}` in a server definition of `scope` may read: `child_env`, plus the
+/// user's `passthrough` names for user-owned scopes ("user", "nemo"). Hostile repository config can
+/// never reach other secrets. Empty values count as unset, so `Bearer ${TOKEN}` can never silently
+/// become `Bearer `.
+pub fn expansion_env(env: &Env, passthrough: &[String], scope: Option<&str>) -> Env {
+    let base = env.child_env();
+    let nonempty = |(_, v): &(&str, &str)| !v.is_empty();
+    if !matches!(scope, Some("user" | "nemo")) {
+        // proxy URLs may carry credentials and SSL_CERT_* paths are local: a repo-chosen
+        // url/header must not be able to read them (children still inherit them as env)
+        return Env::from_pairs(
+            base.iter()
+                .filter(|(k, _)| {
+                    !k.to_ascii_lowercase().contains("proxy") && !k.starts_with("SSL_CERT")
+                })
+                .filter(nonempty),
+        );
+    }
+    let extra = passthrough.iter().filter_map(|n| {
+        // Windows variable names are case-insensitive: `Jira_Token` in the list finds `JIRA_TOKEN`
+        let found = if cfg!(windows) {
+            env.iter().find(|(k, _)| k.eq_ignore_ascii_case(n))
+        } else {
+            Some((n.as_str(), env.get(n)?))
+        };
+        found.map(|(_, v)| (n.as_str(), v))
+    });
+    Env::from_pairs(base.iter().chain(extra).filter(nonempty))
 }
 
 #[cfg(test)]

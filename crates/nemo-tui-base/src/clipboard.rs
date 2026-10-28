@@ -10,10 +10,11 @@
 
 use crate::Platform;
 use nemo_config::Env;
-use std::io::{self, IsTerminal, Write};
-use std::path::PathBuf;
+use std::io::{self, IsTerminal, Read, Write};
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Mutex;
+use std::time::Duration;
 
 pub trait ClipboardSink {
     fn copy(&self, text: &str) -> io::Result<()>;
@@ -185,6 +186,148 @@ pub fn default_chain(platform: Platform, env: &Env) -> Vec<Box<dyn ClipboardSink
     chain
 }
 
+/// One way to read the system clipboard. The text is DATA: callers sanitise it
+/// ([`crate::keys::clean_paste`]) before it goes anywhere.
+pub trait ClipboardSource {
+    fn paste(&self) -> io::Result<String>;
+}
+
+/// Most bytes read from a paste tool; the rest is dropped.
+pub const PASTE_MAX_BYTES: usize = 1 << 20;
+pub const PASTE_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// An OS tool that prints the clipboard on stdout. Absolute path, argument vector, no shell.
+#[derive(Clone, Debug)]
+pub struct PasteCommand {
+    pub program: PathBuf,
+    pub args: Vec<String>,
+}
+
+impl PasteCommand {
+    fn new(program: PathBuf, args: &[&str]) -> Self {
+        Self {
+            program,
+            args: args.iter().map(|a| (*a).to_string()).collect(),
+        }
+    }
+}
+
+impl ClipboardSource for PasteCommand {
+    /// Reads at most [`PASTE_MAX_BYTES`] within [`PASTE_TIMEOUT`]; the tool is killed on timeout
+    /// or when the cap is hit, and a failing exit status is an error.
+    fn paste(&self) -> io::Result<String> {
+        let mut cmd = Command::new(&self.program);
+        cmd.args(&self.args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null());
+        #[cfg(windows)]
+        std::os::windows::process::CommandExt::creation_flags(&mut cmd, 0x0800_0000); // CREATE_NO_WINDOW
+        let name = self.program.display().to_string();
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| io::Error::new(e.kind(), format!("{name}: {e}")))?;
+        let out = child.stdout.take().expect("stdout was piped");
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            let r = out.take(PASTE_MAX_BYTES as u64 + 1).read_to_end(&mut buf);
+            let _ = tx.send(r.map(|_| buf));
+        });
+        let got = rx.recv_timeout(PASTE_TIMEOUT);
+        let capped = matches!(&got, Ok(Ok(b)) if b.len() > PASTE_MAX_BYTES);
+        let status = if got.is_err() || capped {
+            let _ = child.kill();
+            None
+        } else {
+            child.wait().ok()
+        };
+        let _ = child.wait(); // reap
+        match got {
+            Err(_) => Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                format!("{name} did not answer in {}s", PASTE_TIMEOUT.as_secs()),
+            )),
+            Ok(Err(e)) => Err(e),
+            Ok(Ok(mut b)) => {
+                if !capped && status.is_some_and(|s| !s.success()) {
+                    return Err(io::Error::other(format!("{name} failed (no text copied?)")));
+                }
+                b.truncate(PASTE_MAX_BYTES);
+                Ok(String::from_utf8_lossy(&b).into_owned())
+            }
+        }
+    }
+}
+
+/// `name` in a standard system directory (never PATH or the cwd).
+fn find_tool(name: &str) -> Option<PathBuf> {
+    [
+        "/usr/bin",
+        "/usr/local/bin",
+        "/bin",
+        "/opt/homebrew/bin",
+        "/snap/bin",
+        "/run/current-system/sw/bin",
+    ]
+    .iter()
+    .map(|d| Path::new(d).join(name))
+    .find(|p| p.is_file())
+}
+
+/// Paste tools for `platform`, in the order to try them. Linux: wl-paste under Wayland
+/// (`WAYLAND_DISPLAY`), then xclip / xsel under X11 (`DISPLAY`), both read from the injected
+/// `env`; only tools found in standard directories are listed.
+pub fn paste_chain(platform: Platform, env: &Env) -> Vec<Box<dyn ClipboardSource>> {
+    let mut chain: Vec<Box<dyn ClipboardSource>> = Vec::new();
+    match platform {
+        Platform::MacOs => chain.push(Box::new(PasteCommand::new("/usr/bin/pbpaste".into(), &[]))),
+        Platform::Windows => {
+            // UTF-8 stdout; -Raw keeps the newlines as one string
+            let script = "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-Clipboard -Raw";
+            let args = ["-NoProfile", "-NonInteractive", "-Command", script];
+            chain.push(Box::new(PasteCommand::new(
+                nemo_platform::system32(r"WindowsPowerShell\v1.0\powershell.exe"),
+                &args,
+            )));
+            if let Some(pf) = env.get_nonempty("ProgramFiles") {
+                let pwsh = Path::new(pf).join(r"PowerShell\7\pwsh.exe");
+                if pwsh.is_file() {
+                    chain.push(Box::new(PasteCommand::new(pwsh, &args)));
+                }
+            }
+        }
+        Platform::Linux => {
+            let mut add = |tool: &str, args: &[&str]| {
+                if let Some(p) = find_tool(tool) {
+                    chain.push(Box::new(PasteCommand::new(p, args)));
+                }
+            };
+            if env.get_nonempty("WAYLAND_DISPLAY").is_some() {
+                add("wl-paste", &["-n"]);
+            }
+            if env.get_nonempty("DISPLAY").is_some() {
+                add("xclip", &["-selection", "clipboard", "-o"]);
+                add("xsel", &["-b", "-o"]);
+            }
+        }
+        Platform::Other => {}
+    }
+    chain
+}
+
+/// First source that answers wins; otherwise the last error (or "no clipboard tool").
+pub fn read_clipboard(sources: &[Box<dyn ClipboardSource>]) -> io::Result<String> {
+    let mut last = io::Error::new(io::ErrorKind::NotFound, "no clipboard tool found");
+    for s in sources {
+        match s.paste() {
+            Ok(t) => return Ok(t),
+            Err(e) => last = e,
+        }
+    }
+    Err(last)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -214,6 +357,88 @@ mod tests {
         assert_eq!(n(&[]), 1);
         assert_eq!(n(&[("WAYLAND_DISPLAY", "wayland-0")]), 2);
         assert_eq!(n(&[("WAYLAND_DISPLAY", "w"), ("DISPLAY", ":0")]), 3);
+    }
+
+    struct Fake(io::Result<&'static str>);
+    impl ClipboardSource for Fake {
+        fn paste(&self) -> io::Result<String> {
+            match &self.0 {
+                Ok(t) => Ok((*t).to_string()),
+                Err(e) => Err(io::Error::new(e.kind(), e.to_string())),
+            }
+        }
+    }
+
+    #[test]
+    fn first_working_source_wins_else_last_error() {
+        let bad = |m: &'static str| -> Box<dyn ClipboardSource> {
+            Box::new(Fake(Err(io::Error::other(m))))
+        };
+        let ok: Box<dyn ClipboardSource> = Box::new(Fake(Ok("hi")));
+        assert_eq!(read_clipboard(&[bad("a"), ok]).unwrap(), "hi");
+        assert_eq!(
+            read_clipboard(&[bad("a"), bad("b")])
+                .unwrap_err()
+                .to_string(),
+            "b"
+        );
+        assert!(
+            read_clipboard(&[])
+                .unwrap_err()
+                .to_string()
+                .contains("no clipboard tool")
+        );
+    }
+
+    #[test]
+    fn linux_paste_tools_follow_injected_env() {
+        let n = |pairs: &[(&str, &str)]| {
+            paste_chain(Platform::Linux, &Env::from_pairs(pairs.iter().copied())).len()
+        };
+        assert_eq!(n(&[]), 0, "no display, no tool");
+        assert_eq!(
+            paste_chain(Platform::MacOs, &Env::from_pairs([("A", "b")])).len(),
+            1
+        );
+    }
+
+    #[cfg(unix)]
+    fn script(dir: &Path, body: &str) -> PasteCommand {
+        use std::os::unix::fs::PermissionsExt;
+        let p = dir.join("tool.sh");
+        std::fs::write(&p, format!("#!/bin/sh\n{body}\n")).unwrap();
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+        PasteCommand {
+            program: p,
+            args: vec![],
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn paste_command_reads_caps_fails_and_times_out() {
+        let d = tempfile::tempdir().unwrap();
+        assert_eq!(
+            script(d.path(), "printf 'a\\nb\\303\\251'")
+                .paste()
+                .unwrap(),
+            "a\nbé"
+        );
+        let err = script(d.path(), "exit 1").paste().unwrap_err();
+        assert!(err.to_string().contains("failed"), "{err}");
+        let big = script(d.path(), "head -c 5000000 /dev/zero | tr '\\0' x")
+            .paste()
+            .unwrap();
+        assert_eq!(big.len(), PASTE_MAX_BYTES);
+        let t0 = std::time::Instant::now();
+        let err = script(d.path(), "sleep 30").paste().unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::TimedOut);
+        assert!(t0.elapsed() < Duration::from_secs(10));
+        let missing = PasteCommand {
+            program: d.path().join("nope"),
+            args: vec![],
+        };
+        assert!(missing.paste().is_err());
     }
 
     #[cfg(windows)]

@@ -377,7 +377,11 @@ impl ContextProvider for Compacting {
     fn build(&self, history: &[Message], p: Option<&str>) -> Result<Built, String> {
         StaticContext::default().build(history, p)
     }
-    fn compact<'a>(&'a self, _: &'a [Message]) -> BoxFut<'a, Result<Compaction, String>> {
+    fn compact<'a>(
+        &'a self,
+        _: &'a [Message],
+        _: &'a str,
+    ) -> BoxFut<'a, Result<Compaction, String>> {
         Box::pin(async {
             Ok(Compaction {
                 messages: vec![Message {
@@ -394,6 +398,7 @@ impl ContextProvider for Compacting {
                     mime: "text/plain".into(),
                 },
                 tokens_before: Some(123),
+                summary_chars: 3,
             })
         })
     }
@@ -489,6 +494,8 @@ fn gate_rig(turns: Vec<Turn>) -> Rig {
         Opts {
             tools: ToolBox::new(Registry::builtin()),
             mode: PermissionMode::AcceptEdits,
+            // the gate's check commands are judged like Bash calls: these two are allowed
+            allow: vec!["Bash(test:*)".into(), "Bash(false)".into()],
             ..Opts::default()
         },
         turns,

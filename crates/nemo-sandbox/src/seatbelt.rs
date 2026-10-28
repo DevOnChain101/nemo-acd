@@ -55,7 +55,9 @@ impl SeatbeltBackend {
 
 /// Developer dirs that Apple's tool shims (`/usr/bin/git` -> xcrun) must read and exec, resolved
 /// once: `$DEVELOPER_DIR`, `xcode-select -p`, the Command Line Tools and every installed
-/// `/Applications/Xcode*.app`. Read-only; only existing directories, canonicalised.
+/// `/Applications/Xcode*.app`. For an Xcode the whole `<app>/Contents` is granted (xcrun loads
+/// `Contents/SharedFrameworks/*.framework`, not only `Contents/Developer`). Read-only; only
+/// existing directories, canonicalised.
 fn developer_dirs() -> &'static [PathBuf] {
     static D: std::sync::OnceLock<Vec<PathBuf>> = std::sync::OnceLock::new();
     D.get_or_init(|| {
@@ -79,9 +81,12 @@ fn developer_dirs() -> &'static [PathBuf] {
             let n = e.file_name();
             let n = n.to_string_lossy();
             if n.starts_with("Xcode") && n.ends_with(".app") {
-                c.push(e.path().join("Contents/Developer"));
+                c.push(e.path().join("Contents"));
             }
         }
+        // `<x>.app/Contents/Developer` (from DEVELOPER_DIR / xcode-select) -> `<x>.app/Contents`
+        let bundles: Vec<PathBuf> = c.iter().filter_map(|p| xcode_contents(p)).collect();
+        c.extend(bundles);
         let mut c: Vec<PathBuf> = c
             .into_iter()
             .filter(|p| p.is_absolute())
@@ -92,6 +97,15 @@ fn developer_dirs() -> &'static [PathBuf] {
         c.dedup();
         c
     })
+}
+
+/// `.../X.app/Contents/Developer` -> `.../X.app/Contents`; anything else -> None.
+fn xcode_contents(p: &Path) -> Option<PathBuf> {
+    (p.file_name()? == "Developer").then_some(())?;
+    let contents = p.parent()?;
+    let app = contents.parent()?;
+    (contents.file_name()? == "Contents" && app.extension()? == "app")
+        .then(|| contents.to_path_buf())
 }
 
 fn canon(p: &Path) -> PathBuf {
@@ -131,6 +145,7 @@ pub fn seatbelt_profile(
         group("O", canon_all(&policy.readonly_paths)),
     );
     let guards = group("G", canon_all(&policy.parent_guards()));
+    let dev = group("X", developer_dirs().to_vec());
 
     let mut s = String::from(
         "(version 1)\n(deny default)\n(allow sysctl-read)\n\
@@ -148,6 +163,10 @@ pub fn seatbelt_profile(
     s += "(allow file-write* (literal \"/dev/null\") (literal \"/dev/tty\") (literal \"/dev/dtracehelper\"))\n";
     if !r.is_empty() {
         s += &format!("(allow file-read* {r})\n");
+    }
+    // dyld maps the Xcode frameworks that xcrun-shimmed tools (git, python3) load
+    if !dev.is_empty() {
+        s += &format!("(allow file-map-executable {dev})\n");
     }
     s += &format!("(allow file-write* {w})\n");
     match (policy.allow_exec, exec_literal) {
@@ -264,6 +283,24 @@ mod tests {
     }
 
     #[test]
+    fn xcode_bundle_contents_is_derived_from_the_developer_dir() {
+        let c = |s: &str| xcode_contents(Path::new(s));
+        assert_eq!(
+            c("/Applications/Xcode_26.app/Contents/Developer"),
+            Some("/Applications/Xcode_26.app/Contents".into())
+        );
+        for no in [
+            "/Library/Developer/CommandLineTools",
+            "/a/Contents/Developer",
+            "/a.app/Developer",
+            "/",
+        ] {
+            assert_eq!(c(no), None, "{no}");
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
     fn active_developer_dir_is_readable_and_git_runs_inside() {
         let sel = std::process::Command::new("/usr/bin/xcode-select")
             .arg("-p")
@@ -271,13 +308,25 @@ mod tests {
             .unwrap();
         let sel = PathBuf::from(String::from_utf8_lossy(&sel.stdout).trim()).canonicalize();
         if let Ok(sel) = sel {
-            let (_, params) = seatbelt_profile(&SandboxPolicy::default(), None);
+            let (s, params) = seatbelt_profile(&SandboxPolicy::default(), None);
+            // the developer dir itself, or the whole Xcode bundle `Contents` above it, is granted
             assert!(
-                params.iter().any(|(_, v)| *v == sel),
+                params.iter().any(|(_, v)| sel.starts_with(v)),
                 "{sel:?} not in {params:?}"
             );
+            assert!(s.contains("(allow file-map-executable "), "{s}");
         }
         if SeatbeltBackend::detect().is_none() {
+            return;
+        }
+        // An unusable git outside the sandbox is the environment's problem, not our policy's.
+        if !std::process::Command::new("/usr/bin/git")
+            .arg("--version")
+            .env_clear()
+            .output()
+            .is_ok_and(|o| o.status.success())
+        {
+            eprintln!("SKIP: /usr/bin/git does not run outside the sandbox either");
             return;
         }
         let tmp = tempfile::tempdir().unwrap();
@@ -307,9 +356,14 @@ mod tests {
             )
         };
         // xcrun may warn about its cache dir on stderr; only the exit status matters
-        assert!(run(&["--version"]).0);
-        assert!(run(&["init", "-q"]).0);
-        assert!(run(&["status", "--porcelain"]).0);
+        for args in [
+            &["--version"][..],
+            &["init", "-q"],
+            &["status", "--porcelain"],
+        ] {
+            let (ok, err) = run(args);
+            assert!(ok, "git {args:?} under Seatbelt: {err}");
+        }
     }
 
     #[test]

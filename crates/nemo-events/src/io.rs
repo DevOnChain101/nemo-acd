@@ -128,6 +128,8 @@ fn now_rfc3339_ms() -> String {
 }
 
 /// One line read back from a stream.
+// An `Envelope` is read, applied and dropped; boxing it would only add an allocation per event.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Record {
     Known(Envelope),
@@ -266,6 +268,7 @@ mod tests {
                 usage: usage(),
                 changed_files: vec![s("a.rs")],
                 artifacts_root: s("art"),
+                needed_permissions: vec![s("Bash(cargo test:*)")],
             },
             Event::UserMessage {
                 text: s("hi"),
@@ -309,12 +312,37 @@ mod tests {
                 trigger: s("auto"),
                 summary_ref: aref(),
                 tokens_before: Some(9),
+                reason: s("overflow"),
+                before_tokens: 9,
+                after_tokens: 4,
+                window_tokens: 100,
+                messages_before: 7,
+                messages_after: 2,
+                summary_chars: 30,
+                duration_ms: 12,
+            },
+            Event::ContextUsage {
+                used_tokens: 42,
+                window_tokens: 100,
+                percent: 42.0,
+                source: s("provider"),
+                stale: false,
+            },
+            Event::ContextCompacting {
+                reason: s("auto"),
+                used_tokens: 90,
+                window_tokens: 100,
+            },
+            Event::ContextCompactionFailed {
+                reason: s("manual"),
+                error: s("summarizer failed: x"),
             },
             Event::ToolRequested {
                 tool_call_id: s("t"),
                 name: s("Bash"),
                 input: json!({"cmd":"ls"}),
                 input_truncated: false,
+                origin: Some(s("user")),
             },
             Event::ToolApprovalRequired {
                 approval_id: s("ap"),
@@ -349,6 +377,18 @@ mod tests {
                 bytes: 1,
                 truncated: true,
                 result_ref: Some(aref()),
+                origin: Some(s("user")),
+                output: Some(s("full text")),
+                output_truncated: true,
+                output_bytes: 9,
+                diff: None,
+            },
+            Event::ToolOutput {
+                tool_call_id: s("t"),
+                stream: s("merged"),
+                text: s("line\n"),
+                seq: 1,
+                origin: None,
             },
             Event::HookRan {
                 event: s("e"),
@@ -455,6 +495,69 @@ mod tests {
     }
 
     #[test]
+    fn context_events_wire_shape_and_old_compacted_still_reads() {
+        let base = r#""v":1,"seq":1,"ts":"t","session_id":"s","task_id":null,"turn_id":null"#;
+        let mut w = writer();
+        w.emit(Event::ContextUsage {
+            used_tokens: 5,
+            window_tokens: 10,
+            percent: 50.0,
+            source: s("estimate"),
+            stale: true,
+        })
+        .unwrap();
+        let v: Value = serde_json::from_slice(&w.into_inner()).unwrap();
+        assert_eq!(v["type"], "context.usage");
+        assert_eq!(
+            v["payload"],
+            json!({"used_tokens":5,"window_tokens":10,"percent":50.0,"source":"estimate","stale":true})
+        );
+        // Written before the new fields existed, and with a field from the future.
+        let old = format!(
+            "{{{base},\"type\":\"context.compacted\",\"payload\":{{\"trigger\":\"auto\",\"summary_ref\":{{\"artifact_id\":\"a\",\"path\":\"p\",\"size\":1,\"sha256\":\"0\",\"mime\":\"text/plain\"}},\"future\":1}}}}\n"
+        );
+        let Record::Known(env) = &read(old.as_bytes())[0] else {
+            panic!("old context.compacted must stay readable")
+        };
+        assert!(matches!(
+            &env.event,
+            Event::ContextCompacted { reason, before_tokens: 0, duration_ms: 0, .. } if reason.is_empty()
+        ));
+    }
+
+    #[test]
+    fn tool_output_fields_are_additive_and_redacted() {
+        let mut w = writer();
+        w.emit(Event::ToolOutput {
+            tool_call_id: s("t"),
+            stream: s("merged"),
+            text: s("token ghp_abcdef123456\n"),
+            seq: 2,
+            origin: Some(s("user")),
+        })
+        .unwrap();
+        let v: Value = serde_json::from_slice(&w.into_inner()).unwrap();
+        assert_eq!(v["type"], "tool.output");
+        assert_eq!(v["payload"]["text"], "token [REDACTED:github]\n");
+        assert_eq!(v["payload"]["origin"], "user");
+        // a v1 tool.completed written before `output` existed still reads, with the defaults
+        let old = r#"{"v":1,"seq":1,"ts":"t","session_id":"s","task_id":null,"turn_id":null,"type":"tool.completed","payload":{"tool_call_id":"t","name":"n","status":"ok","is_error":false,"not_run":false,"duration_ms":0,"preview":"p","bytes":1,"truncated":false}}"#;
+        assert!(matches!(
+            &read(old.as_bytes())[0],
+            Record::Known(Envelope {
+                event: Event::ToolCompleted {
+                    origin: None,
+                    output: None,
+                    output_truncated: false,
+                    output_bytes: 0,
+                    ..
+                },
+                ..
+            })
+        ));
+    }
+
+    #[test]
     fn unknown_enum_value_is_other() {
         let line = r#"{"v":1,"seq":1,"ts":"t","session_id":"s","task_id":null,"turn_id":null,"type":"tool.completed","payload":{"tool_call_id":"t","name":"n","status":"brand_new","is_error":false,"not_run":false,"duration_ms":0,"preview":"","bytes":0,"truncated":false}}"#;
         let recs = read(line.as_bytes());
@@ -494,6 +597,7 @@ mod tests {
             name: s("Bash"),
             input: json!({"cmd": "login hunter2-secret now", "h": ["Bearer abc.def", "sk-ant-api03-XYZ"], "n": 7}),
             input_truncated: false,
+            origin: None,
         })
         .unwrap();
         let text = String::from_utf8(w.into_inner()).unwrap();
@@ -524,5 +628,49 @@ mod tests {
             );
         }
         assert_eq!(r.redact_str("sk-short"), "sk-short");
+    }
+
+    #[test]
+    fn tool_completed_diff_is_additive_round_trips_and_is_redacted() {
+        let done = |diff: Option<Value>| Event::ToolCompleted {
+            tool_call_id: s("t"),
+            name: s("Edit"),
+            status: ToolStatus::Ok,
+            is_error: false,
+            not_run: false,
+            duration_ms: 1,
+            preview: s("p"),
+            bytes: 1,
+            truncated: false,
+            result_ref: None,
+            origin: None,
+            output: None,
+            output_truncated: false,
+            output_bytes: 0,
+            diff,
+        };
+        let mut w = writer();
+        w.emit(done(None)).unwrap();
+        let v: Value = serde_json::from_slice(&w.into_inner()).unwrap();
+        assert!(v["payload"].get("diff").is_none(), "absent, not null");
+
+        let d = json!({"path": "a.rs", "kind": "update", "added": 1, "removed": 0, "truncated": false,
+            "hunks": [{"old_start": 1, "old_lines": 0, "new_start": 1, "new_lines": 1,
+                "lines": [{"tag": "+", "new_no": 1, "text": "token ghp_abcdef123456"}]}]});
+        let mut w = writer();
+        w.emit(done(Some(d.clone()))).unwrap();
+        let bytes = w.into_inner();
+        let v: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            v["payload"]["diff"]["hunks"][0]["lines"][0]["text"],
+            "token [REDACTED:github]"
+        );
+        assert_eq!(v["payload"]["diff"]["added"], 1);
+        let Record::Known(env) = &read(&bytes)[0] else {
+            panic!("diff event must read back")
+        };
+        assert!(
+            matches!(&env.event, Event::ToolCompleted { diff: Some(x), .. } if x["path"] == "a.rs")
+        );
     }
 }

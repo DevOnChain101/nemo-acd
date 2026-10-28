@@ -37,6 +37,12 @@ pub(crate) struct TaskDone {
     pub session: Option<AgentSession>,
 }
 
+pub(crate) struct UserDone {
+    /// The conversation with the command and its output appended, and what happened.
+    pub result: Result<(Vec<nemo_providers::Message>, nemo_harness::ToolOutcome), String>,
+    pub record_only: bool,
+}
+
 pub(crate) enum Msg {
     Bytes(Vec<u8>),
     InputClosed,
@@ -53,6 +59,10 @@ pub(crate) enum Msg {
     /// The approval/question with this id was cancelled or expired on the harness side.
     Withdraw(String),
     TaskDone(Box<TaskDone>),
+    /// A `!cmd` finished (the model turn that follows is started by the runtime).
+    UserCommandDone(Box<UserDone>),
+    /// `/compact` between tasks finished: the compacted history, or why not.
+    Compacted(Result<Vec<nemo_providers::Message>, String>),
 }
 
 pub(crate) type Tx = Sender<Msg>;
