@@ -76,6 +76,8 @@ pub struct AutoModeConfig {
     pub hard_deny: Option<Vec<String>>,
     pub classify_all_shell: Option<bool>,
     pub use_auto_mode_during_plan: Option<bool>,
+    /// Model that judges auto-mode calls (a model of the session's provider); `None` = the session model.
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -367,6 +369,11 @@ impl Settings {
             hard_deny: list("hard_deny"),
             classify_all_shell: flag("classifyAllShell"),
             use_auto_mode_during_plan: flag("useAutoModeDuringPlan"),
+            model: am
+                .get("model")
+                .and_then(Value::as_str)
+                .filter(|m| !m.trim().is_empty())
+                .map(|m| m.trim().to_string()),
         };
     }
 

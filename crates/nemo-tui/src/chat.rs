@@ -377,6 +377,15 @@ impl Chat {
                 format!("agent {} stopped ({})", i.agent_id, i.agent_type),
                 "",
             ),
+            Event::AutoVerdict {
+                name,
+                verdict,
+                reason,
+                ..
+            } => self.note(
+                format!("auto mode: {verdict} {name}: {reason}"),
+                if verdict == "allow" { "" } else { "warn" },
+            ),
             Event::ModelChanged { model, .. } => {
                 self.agent.model = clean_line(model);
                 self.note(format!("model: {model}"), "");

@@ -25,6 +25,7 @@
 
 mod agent;
 mod agents;
+mod classifier;
 mod context;
 mod exec;
 mod harness;
@@ -40,10 +41,11 @@ mod util;
 pub use agents::{
     AgentDef, AgentSource, AgentTable, GENERAL_PURPOSE, from_mode, stricter, to_mode,
 };
+pub use classifier::AutoJudge;
 pub use context::{RULES, StaticContext, wrap_tool_output};
 pub use harness::{
-    AutoCompact, GateFactory, Harness, HarnessConfig, HarnessError, Pricing, ShellSettings,
-    TaskOutcome, TaskRequest, browser_config, budget_from_settings,
+    AutoCompact, GateFactory, Harness, HarnessConfig, HarnessError, ModeError, Pricing,
+    ShellSettings, TaskOutcome, TaskRequest, browser_config, budget_from_settings,
 };
 pub use mcp_guard::{Check, GuardConfig, McpCatalog, McpGuard, McpToolInfo, ServerRules};
 pub use sink::{EventSink, Scope};

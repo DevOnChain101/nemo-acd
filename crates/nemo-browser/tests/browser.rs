@@ -144,7 +144,14 @@ fn browser_env() -> Option<Env> {
 
 /// Launches serially (ten Chrome cold starts at once can overwhelm a small CI runner) and panics
 /// with the full launch error, which carries the browser's exit status and stderr tail.
-async fn launch(opts: BrowserOptions, env: &Env) -> BrowserRuntime {
+async fn launch(mut opts: BrowserOptions, env: &Env) -> BrowserRuntime {
+    // GitHub Linux runners: AppArmor blocks Chrome's userns sandbox and /dev/shm is tiny, so a cold
+    // start can stall until createBrowserContext times out. Test-only; product defaults are untouched.
+    if cfg!(target_os = "linux") && Env::from_process().get_nonempty("CI").is_some() {
+        opts.no_sandbox = true;
+        opts.chrome_args
+            .extend(["--disable-dev-shm-usage", "--disable-gpu"].map(str::to_owned));
+    }
     static ONE_AT_A_TIME: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
     let _g = ONE_AT_A_TIME.lock().await;
     // Fail fast instead of hanging a CI job (a Windows run once sat 40 min).

@@ -200,3 +200,176 @@ fn gate_check_that_needs_approval_blocks_the_task_with_a_hint() {
         "{v}"
     );
 }
+
+fn write(path: &str) -> Value {
+    json!([
+        {"tools": [{"id": "w1", "name": "Write", "input": {"file_path": path, "content": "hi"}}]},
+        {"text": "done"}
+    ])
+}
+
+fn is_blocked(ev: &[Value]) -> bool {
+    let p = ended(ev);
+    p["status"] == "blocked" && p["reason"] == "approval_unavailable"
+}
+
+#[test]
+fn default_mode_blocks_a_write_the_model_cannot_work_around() {
+    let r = Rig::new();
+    let (o, ev) = r.run(write("hello.txt"), &[]);
+    assert!(!r.ws().join("hello.txt").exists());
+    assert!(is_blocked(&ev), "{:?}", ended(&ev));
+    assert_eq!(o.status.code(), Some(4), "{}", stderr(&o));
+    assert!(ended(&ev)["needed_permissions"].is_array());
+}
+
+#[test]
+fn accept_edits_allows_writes_in_the_workspace_but_not_commands() {
+    let r = Rig::new();
+    let (_, ev) = r.run(write("hello.txt"), &["--permission-mode", "acceptEdits"]);
+    assert!(r.ws().join("hello.txt").exists());
+    assert!(!is_blocked(&ev));
+    // `touch` is an in-workspace edit command in acceptEdits; `cargo test` is not
+    let (o, ev) = r.run(bash("cargo test"), &["--permission-mode", "acceptEdits"]);
+    assert!(is_blocked(&ev), "{}", stderr(&o));
+    assert_eq!(
+        ended(&ev)["needed_permissions"],
+        json!(["Bash(cargo test:*)"])
+    );
+}
+
+#[test]
+fn plan_mode_writes_nothing() {
+    let r = Rig::new();
+    let (_, _) = r.run(write("hello.txt"), &["--permission-mode", "plan"]);
+    assert!(!r.ws().join("hello.txt").exists());
+    let (_, _) = r.run(bash("touch made.txt"), &["--permission-mode", "plan"]);
+    assert!(!r.ws().join("made.txt").exists());
+}
+
+#[test]
+fn dont_ask_denies_asks_but_a_granted_rule_still_applies() {
+    let r = Rig::new();
+    let (_, _) = r.run(write("hello.txt"), &["--permission-mode", "dontAsk"]);
+    assert!(!r.ws().join("hello.txt").exists());
+    let (_, _) = r.run(
+        bash("touch made.txt"),
+        &["--permission-mode", "dontAsk", "--allow", "Bash(touch:*)"],
+    );
+    assert!(r.ws().join("made.txt").exists());
+}
+
+#[test]
+fn bypass_allows_commands_but_hard_stops_stay() {
+    let r = Rig::new();
+    let (o, ev) = r.run(
+        bash("touch made.txt"),
+        &["--permission-mode", "bypassPermissions"],
+    );
+    assert!(r.ws().join("made.txt").exists(), "{}", stderr(&o));
+    assert!(
+        stderr(&o).contains("bypassPermissions"),
+        "loud notice: {}",
+        stderr(&o)
+    );
+    assert!(
+        ev.iter().any(|e| e["type"] == "notice"
+            && e["payload"]["text"]
+                .as_str()
+                .is_some_and(|t| t.contains("bypassPermissions"))),
+        "notice event"
+    );
+    // deny rules and critical removals are not lifted (the ported engine does let bypass write
+    // protected paths such as .env: crates/nemo-permissions tests, "touch .nemo/settings.json")
+    std::fs::write(r.ws().join("keep.txt"), "x").unwrap();
+    for cmd in ["rm -rf .", "rm -rf ~"] {
+        let (_, _) = r.run(bash(cmd), &["--permission-mode", "bypassPermissions"]);
+        assert!(r.ws().join("keep.txt").exists(), "{cmd}");
+    }
+    let (_, _) = r.run(
+        bash("touch denied.txt"),
+        &[
+            "--permission-mode",
+            "bypassPermissions",
+            "--deny",
+            "Bash(touch:*)",
+        ],
+    );
+    assert!(!r.ws().join("denied.txt").exists());
+}
+
+fn judged(cmd: &str, answer: &str) -> Value {
+    json!([
+        {"tools": [{"id": "b1", "name": "Bash", "input": {"command": cmd}}]},
+        {"text": answer},
+        {"text": "done"}
+    ])
+}
+
+fn verdict(ev: &[Value]) -> Option<String> {
+    ev.iter()
+        .find(|e| e["type"] == "permission.auto_verdict")
+        .map(|e| e["payload"]["verdict"].as_str().unwrap().to_string())
+}
+
+#[test]
+fn auto_mode_asks_the_judge_model_and_follows_allow_and_deny() {
+    let r = Rig::new();
+    let auto = ["--permission-mode", "auto"];
+    // in-workspace edits need no judge
+    let (_, ev) = r.run(write("hello.txt"), &auto);
+    assert!(r.ws().join("hello.txt").exists());
+    assert_eq!(verdict(&ev), None);
+
+    // a command the rules leave open goes to the judge (the next scripted model turn)
+    let (o, ev) = r.run(
+        judged("make check", r#"{"decision":"allow","reason":"asked for"}"#),
+        &auto,
+    );
+    assert_eq!(verdict(&ev).as_deref(), Some("allow"), "{}", stderr(&o));
+    assert!(ev.iter().any(|e| e["type"] == "tool.started"));
+
+    let (_, ev) = r.run(
+        judged("make check", r#"{"decision":"block","reason":"not asked"}"#),
+        &auto,
+    );
+    assert_eq!(verdict(&ev).as_deref(), Some("deny"));
+    assert!(!ev.iter().any(|e| e["type"] == "tool.started"));
+}
+
+#[test]
+fn auto_mode_fails_closed_and_never_judges_protected_paths() {
+    let r = Rig::new();
+    let auto = ["--permission-mode", "auto"];
+    // unparseable judge answer = an ask, which a headless run cannot grant
+    let (o, ev) = r.run(judged("make check", "yes, go ahead"), &auto);
+    assert_eq!(verdict(&ev).as_deref(), Some("ask"));
+    assert!(is_blocked(&ev), "{}", stderr(&o));
+    assert!(!ev.iter().any(|e| e["type"] == "tool.started"));
+    // a protected path is a hard stop: decided before (and without) the judge
+    let allow = r#"{"decision":"allow","reason":"x"}"#;
+    let script = json!([
+        {"tools": [{"id": "w1", "name": "Write", "input": {"file_path": ".env", "content": "S=1"}}]},
+        {"text": allow},
+        {"text": "done"}
+    ]);
+    let (_, ev) = r.run(script, &auto);
+    assert!(!r.ws().join(".env").exists());
+    assert_eq!(verdict(&ev), None, "the judge was not consulted");
+}
+
+#[test]
+fn bypass_cannot_be_turned_on_from_project_settings() {
+    let r = Rig::new();
+    std::fs::create_dir_all(r.ws().join(".nemo")).unwrap();
+    std::fs::write(
+        r.ws().join(".nemo/settings.json"),
+        json!({"permissions": {"defaultMode": "bypassPermissions"}}).to_string(),
+    )
+    .unwrap();
+    for extra in [&[][..], &["--trust-project"][..]] {
+        let (o, ev) = r.run(bash("touch made.txt"), extra);
+        assert!(!r.ws().join("made.txt").exists(), "{extra:?}");
+        assert!(is_blocked(&ev), "{}", stderr(&o));
+    }
+}

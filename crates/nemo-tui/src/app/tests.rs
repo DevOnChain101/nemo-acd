@@ -545,12 +545,16 @@ fn slash_commands_pickers_and_unknowns() {
     keys(&mut a, "/nope\r");
     assert!(screen(&mut a).contains("unknown command: /nope"));
 
-    // /mode with an argument; auto is refused
+    // /mode with an argument; auto is offered, bypass only through its confirmation
     keys(&mut a, "/mode plan\r");
     assert_eq!(a.mode, Mode::Plan);
     keys(&mut a, "/mode auto\r");
-    assert_eq!(a.mode, Mode::Plan);
-    assert!(screen(&mut a).contains("not available"));
+    assert_eq!(a.mode, Mode::Auto);
+    keys(&mut a, "/mode bypass\r");
+    assert_eq!(a.mode, Mode::Auto);
+    assert!(screen(&mut a).contains("Bypass permissions?"));
+    keys(&mut a, "\x1b");
+    assert_eq!(a.mode, Mode::Auto);
 
     // model picker -> choose second entry
     keys(&mut a, "/model\r");
@@ -650,6 +654,8 @@ fn mode_cycle_and_status_line_facts() {
     assert_eq!(a.mode, Mode::AcceptEdits);
     keys(&mut a, "\x1b[Z");
     assert_eq!(a.mode, Mode::Plan);
+    keys(&mut a, "\x1b[Z");
+    assert_eq!(a.mode, Mode::Auto);
     keys(&mut a, "\x1b[Z");
     assert_eq!(a.mode, Mode::Default);
     let s = screen(&mut a);

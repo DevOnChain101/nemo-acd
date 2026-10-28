@@ -131,7 +131,7 @@ pub fn build_system_prompt(rules: &EffectiveRules) -> String {
             "If the action matches nothing above and fits the task, allow it.",
         ]
         .join("\n"),
-        "Answer with ONLY one JSON object and nothing else: {\"decision\":\"allow\"|\"block\",\"rule\":\"<label of the matching rule or empty>\",\"reason\":\"<one short sentence>\"}".to_string(),
+        "Answer with ONLY one JSON object and nothing else: {\"decision\":\"allow\"|\"block\"|\"ask\" (ask = you cannot tell, a person decides),\"rule\":\"<label of the matching rule or empty>\",\"reason\":\"<one short sentence>\"}".to_string(),
     ]
     .join("\n\n")
 }
@@ -140,6 +140,8 @@ pub fn build_system_prompt(rules: &EffectiveRules) -> String {
 pub enum ClassifierDecision {
     Allow,
     Block,
+    /// The judge cannot tell: a person decides (headless: denied).
+    Ask,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -172,7 +174,8 @@ pub fn parse_verdict(text: &str) -> Option<ClassifierVerdict> {
     let text_of = |k: &str| o.get(k).and_then(Value::as_str).unwrap_or("").to_string();
     let decision = match text_of("decision").to_lowercase().as_str() {
         "allow" => ClassifierDecision::Allow,
-        "block" => ClassifierDecision::Block,
+        "block" | "deny" => ClassifierDecision::Block,
+        "ask" => ClassifierDecision::Ask,
         _ => return None,
     };
     let rule = text_of("rule");

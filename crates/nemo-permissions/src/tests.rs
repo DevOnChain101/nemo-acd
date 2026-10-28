@@ -288,13 +288,16 @@ fn additional_directories_are_inside_and_their_parent_is_critical_only_as_a_glob
     let mut r = PermissionRules::default();
     r.additional_directories.push(extra.clone());
     let p = f.with(r, Mode::AcceptEdits);
+    // The path is in the message so a Windows-only failure shows the exact spelling used.
     assert_eq!(
         d(
             &p,
             "Bash",
             json!({ "command": format!("touch {}/x", extra.display()) })
         ),
-        A
+        A,
+        "extra = {extra:?}, cwd = {:?}",
+        f.cwd
     );
     assert_eq!(d(&p, "Write", json!({ "file_path": extra.join("x") })), A);
     assert_eq!(

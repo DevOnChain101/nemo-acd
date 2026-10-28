@@ -42,6 +42,11 @@ pub enum ModeArg {
     Plan,
     #[value(name = "dontAsk")]
     DontAsk,
+    /// Headless: no classifier is wired, so asks the classifier would review are denied.
+    Auto,
+    /// Everything except hard stops (deny rules, protected paths, critical rm). CLI only.
+    #[value(name = "bypassPermissions")]
+    BypassPermissions,
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -428,9 +433,22 @@ pub fn prepare(
         Some(ModeArg::AcceptEdits) => Mode::AcceptEdits,
         Some(ModeArg::Plan) => Mode::Plan,
         Some(ModeArg::DontAsk) => Mode::DontAsk,
+        Some(ModeArg::Auto) => Mode::Auto,
+        Some(ModeArg::BypassPermissions) => {
+            // A TUI session switches into bypass with a confirmation dialog instead (Shift+Tab
+            // never reaches it); the flag is for `nemo run`.
+            if matches!(front, Front::Tui) {
+                return Err(
+                    "--permission-mode bypassPermissions is only for `nemo run`; in the TUI use /mode bypass"
+                        .into(),
+                );
+            }
+            Mode::BypassPermissions
+        }
+        // Settings (user or project) never select bypassPermissions: only the CLI flag does.
         None => match Mode::parse(&settings.permissions.default_mode) {
             Some(m @ (Mode::Default | Mode::AcceptEdits | Mode::Plan | Mode::DontAsk)) => m,
-            _ => Mode::Default, // auto/bypassPermissions are not available headless
+            _ => Mode::Default,
         },
     };
     let mut budget = resume.map_or_else(
@@ -500,7 +518,11 @@ pub fn prepare(
             workspace: ws.clone(),
             model_config_id: res.label.clone(),
             permission_policy_id: r.record.permission_policy_id.clone(),
-            permission_mode: r.record.permission_mode,
+            // a session never resumes in bypassPermissions
+            permission_mode: match r.record.permission_mode {
+                nemo_core::PermissionMode::BypassPermissions => from_mode(mode),
+                m => m,
+            },
             event_cursor: r.record.event_cursor,
             budget: budget.clone(),
             usage: r.record.usage.clone(),
@@ -555,6 +577,17 @@ pub fn prepare(
         sandbox_preflight(&*nemo_sandbox::detect(), policy.as_ref().ok())?;
     }
     let mut notices = sandbox_notices(sandbox_mode, c.network);
+    match mode {
+        Mode::BypassPermissions => notices.push(
+            "bypassPermissions: tool calls run without approval; only deny rules, critical removals and destructive MCP asks still stop them"
+                .to_string(),
+        ),
+        Mode::Auto => notices.push(
+            "auto mode: a model call judges each call the rules leave open (allow / deny / ask); an unclear answer is an ask, which this run denies"
+                .to_string(),
+        ),
+        _ => {}
+    }
     for n in &notices {
         eprintln!("nemo: WARNING: {n}");
     }
@@ -686,6 +719,13 @@ pub fn prepare(
         rules,
         nemo_permissions::Env::new(cwd, &h.user, mode).interactive(true),
     );
+    perms.env.auto_mode = nemo_permissions::AutoModeSettings {
+        classify_all_shell: user_settings.auto_mode.classify_all_shell.unwrap_or(false),
+        use_auto_mode_during_plan: user_settings
+            .auto_mode
+            .use_auto_mode_during_plan
+            .unwrap_or(true),
+    };
     perms.block_outside_reads = settings.permissions.block_reads_outside_working_directories;
 
     let mut hcfg = HarnessConfig::new(res.model.clone());
@@ -702,6 +742,15 @@ pub fn prepare(
         eprintln!("nemo: warning: {d}");
     }
     hcfg.shell = shell;
+    let am = &user_settings.auto_mode;
+    hcfg.auto.model = am.model.clone();
+    hcfg.auto.rules =
+        nemo_permissions::automode::effective_rules(&nemo_permissions::automode::AutoModeRules {
+            environment: am.environment.clone(),
+            allow: am.allow.clone(),
+            soft_deny: am.soft_deny.clone(),
+            hard_deny: am.hard_deny.clone(),
+        });
 
     let put: PutArtifact = match &store {
         Some(s) => {

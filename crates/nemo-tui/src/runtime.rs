@@ -1,5 +1,6 @@
 //! The event loop: one thread owns the UI; everything else talks to it through `Msg`s.
 
+use nemo_permissions::Mode;
 use std::io::{self, Read, Write};
 use std::sync::Arc;
 use std::sync::mpsc::RecvTimeoutError;
@@ -146,7 +147,11 @@ fn cfg_for(o: &Options) -> AppConfig {
         version: o.version.clone(),
         budget: s.budget.clone(),
         sandbox: o.sandbox.clone(),
-        mode: nemo_harness::to_mode(s.permission_mode),
+        // a session never starts in bypassPermissions
+        mode: match nemo_harness::to_mode(s.permission_mode) {
+            Mode::BypassPermissions => Mode::Default,
+            m => m,
+        },
         models: o.models.clone(),
         extra_commands: o.extra_commands.clone(),
         saved: o.saved.clone(),
@@ -235,12 +240,19 @@ impl Runner {
         };
         // The mode applies from here to the end of the task (a later switch never changes a
         // running turn).
-        self.harness
-            .permissions()
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .set_mode(app.mode);
-        session.permission_mode = from_mode(app.mode);
+        // bypassPermissions only counts when `Harness::set_mode` took it with a confirmation.
+        let mode = {
+            let perms = self.harness.permissions();
+            let mut p = perms.lock().unwrap_or_else(|e| e.into_inner());
+            let m = if app.mode == Mode::BypassPermissions && p.mode() != Mode::BypassPermissions {
+                p.mode()
+            } else {
+                app.mode
+            };
+            p.set_mode(m);
+            m
+        };
+        session.permission_mode = from_mode(mode);
         let req = TaskRequest {
             request: text,
             criteria: vec![],
@@ -685,6 +697,20 @@ fn exec(
                 app.note(format!("could not open {}: {e}", describe(&t)), "error");
             }
         },
+        Cmd::SetMode {
+            mode,
+            confirmed_bypass,
+        } => {
+            if let Err(e) = runner.harness.set_mode(mode, confirmed_bypass) {
+                let now = runner
+                    .harness
+                    .permissions()
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .mode();
+                app.mode_rejected(now, &e.to_string());
+            }
+        }
         Cmd::SwitchModel(name) => match switch.as_mut() {
             None => app.note(
                 "/model: this host cannot switch models while running",

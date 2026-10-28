@@ -14,13 +14,13 @@ Phase R1 deliverable (design doc §10 Phase 0, §14). Base: `../Nemo_Solution_Co
 
 Status values: draft → reviewed (product owner + one engineer) → frozen (changes need a `v` bump or an ADR).
 
-Review record: all seven specs were reviewed and approved by the product owner on 2026-10-28 (chat approval; no second engineer reviewer). They stay `reviewed`, not `frozen`. Golden cases are a separate review: every `reviewed_by` in the golden `meta.json` files is still null.
+Review record: all seven specs were reviewed and approved by the product owner on 2026-10-28 (chat approval; no second engineer reviewer). They stay `reviewed`, not `frozen`. The product owner is the sole maintainer, so this spec review is final (there is no second reviewer to wait for). Golden cases are a separate review: every `reviewed_by` in the golden `meta.json` files is still null.
 
 ## Decisions taken in these drafts (challenge them here)
 1. Ported tools keep their Node/Claude names (`Read`, `Bash`, …). Doc §5.6 ids map onto them; new tools use `_` instead of `.` on the wire (dots are not valid in provider tool names). tools.md §1.
 2. `Idle` and `Recovering` are added to `SessionStatus`; terminal statuses are per task, and the session ends with `session.completed|failed|cancelled`. workspace-context.md §3.
 3. Headless `--cwd` is mandatory; the core is barred from `std::env::current_dir` by clippy. workspace-context.md §4.1.
-4. Headless `ask` → auto-denied. Node's "outside read is allowed when nobody can answer" is not carried over. tools.md §3.
+4. Headless `ask` is never prompted (no stdin approval). What happens depends on the permission MODE (`nemo run --permission-mode`, tools.md §3) plus a pre-declared allowlist (`--allow` / settings); an ask nobody can answer is auto-denied, and a denied write/execute call ends the task `blocked` / `approval_unavailable`. Node's "outside read is allowed when nobody can answer" is not carried over. Owner decision 2026-10-28. tools.md §3.
 5. Policy is re-checked after a hook or approver rewrites tool input (Node does not). tools.md §3.
 6. Rust adds nothing to `config.json/v1` during the parallel run; Rust-only settings live under `"nemo"` in `settings.json`. config.md §6.
 7. Rust mirror-writes Node-shaped transcript JSONL until cutover; SQLite is the source of truth. session-store.md §C.
@@ -28,7 +28,7 @@ Review record: all seven specs were reviewed and approved by the product owner o
 
 ## Open questions for the product owner
 1. Can inferred checks alone yield `passed`/exit 0 when the user gave no acceptance criteria, or is the ceiling `unverified`? (verification.md §3 rule 4; doc §13.7)
-2. Approval in headless/CI: auto-deny always (current draft), or allow a pre-approved allowlist / approval over stdin?
+2. ~~Approval in headless/CI~~ Resolved by the product owner (2026-10-28): approval depends on the permission mode, plus option 2 (a pre-declared allowlist via `--allow` / settings); no stdin prompting. See decision #4 and tools.md §3.
 3. ~~Credential migration~~ Resolved by the product owner (ADR-011): API keys only, user-managed (env vars / provider config); no keychain, Rust never writes credentials.
 4. Is the Node eval baseline allowed to run through an in-repo adapter that drives `NativeAgent` programmatically (Node has no headless mode)? Without it there is no baseline before Rust exists.
 5. Is `Idle` acceptable in the doc's state machine, and is the doc §7.2 schema allowed to grow (`messages`, `parent_session_id`, `legacy_transcript_path`)?

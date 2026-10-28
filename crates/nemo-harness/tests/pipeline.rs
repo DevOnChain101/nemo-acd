@@ -139,8 +139,8 @@ async fn read_only_tools_run_in_parallel_writes_serially() {
 }
 
 #[tokio::test]
-async fn denial_is_evidence_not_an_abort() {
-    let w = Probe::new("Mutate", SideEffectClass::Write, 0, "changed");
+async fn read_denial_is_evidence_not_an_abort() {
+    let w = Probe::new("Mutate", SideEffectClass::Read, 0, "changed");
     let mut rig = Rig::new(
         Opts {
             tools: ToolBox::empty().with_tool(w.clone()),
@@ -178,6 +178,27 @@ async fn denial_is_evidence_not_an_abort() {
         "a denied call has no tool.started"
     );
     check_stream(&rig.events());
+}
+
+#[tokio::test]
+async fn write_denial_without_approver_ends_blocked() {
+    // A denied change cannot be worked around by finishing: Completed would claim work that
+    // was never done (the hello.txt case), so the task ends blocked / approval_unavailable.
+    let w = Probe::new("Mutate", SideEffectClass::Write, 0, "changed");
+    let mut rig = Rig::new(
+        Opts {
+            tools: ToolBox::empty().with_tool(w.clone()),
+            ..Opts::default()
+        },
+        vec![
+            Turn::tool("m1", "Mutate", json!({})),
+            Turn::text("I could not change it."),
+        ],
+    );
+    let out = rig.run("mutate").await;
+    assert_eq!(w.runs(), 0, "denied tool must not run");
+    assert_eq!(out.status, TaskStatus::Blocked);
+    assert_eq!(out.reason, "approval_unavailable");
 }
 
 #[tokio::test]

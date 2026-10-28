@@ -53,9 +53,17 @@ const ARM_MS: i64 = 400;
 const PASTE_QUIET_MS: i64 = 300;
 const TOAST_MS: i64 = 1800;
 
-/// Modes the UI offers. `auto` and `bypassPermissions` are not available interactively yet.
-const OFFERED_MODES: [Mode; 4] = [Mode::Default, Mode::AcceptEdits, Mode::Plan, Mode::DontAsk];
-const CYCLE: [Mode; 3] = [Mode::Default, Mode::AcceptEdits, Mode::Plan];
+/// Modes the `/mode` picker offers. `bypassPermissions` is last and always asks for confirmation.
+const OFFERED_MODES: [Mode; 6] = [
+    Mode::Default,
+    Mode::AcceptEdits,
+    Mode::Plan,
+    Mode::Auto,
+    Mode::DontAsk,
+    Mode::BypassPermissions,
+];
+/// Shift+Tab. Not `bypassPermissions` (needs a confirmation); from it one press leaves to the first.
+const CYCLE: [Mode; 4] = [Mode::Default, Mode::AcceptEdits, Mode::Plan, Mode::Auto];
 
 pub(crate) struct AppConfig {
     pub cwd: String,
@@ -93,6 +101,12 @@ pub(crate) enum Cmd {
     Copy(String),
     Open(OpenTarget),
     SwitchModel(String),
+    /// The person switched the permission mode: the host calls `Harness::set_mode` (which
+    /// refuses `bypassPermissions` without `confirmed_bypass`).
+    SetMode {
+        mode: Mode,
+        confirmed_bypass: bool,
+    },
     /// Leave and re-enter the alternate screen (ctrl+l).
     ResetScreen,
     /// Right click in the prompt: the host reads the system clipboard and hands the text back
@@ -144,6 +158,8 @@ enum PickerKind {
     Command,
     Folder,
     Resume,
+    /// "Bypass permissions?" yes/no.
+    BypassConfirm,
 }
 
 struct PickerState {
@@ -202,6 +218,10 @@ pub(crate) struct App {
     armed: Option<(String, i64)>,
     paste_quiet_until: i64,
     picker: Option<PickerState>,
+    /// Set only by the bypass confirmation; cleared when the mode leaves bypass.
+    bypass_confirmed: bool,
+    /// Mode changes made while handling one key, sent to the host as `Cmd::SetMode`.
+    mode_changes: Vec<(Mode, bool)>,
     search: Option<HistSearch>,
     sug: Option<complete::Suggestions>,
     sug_view: Vec<Sug>,
@@ -306,6 +326,8 @@ impl App {
             scroll: 0,
             expanded: false,
             dialogs: vec![],
+            bypass_confirmed: false,
+            mode_changes: vec![],
             armed: None,
             paste_quiet_until: 0,
             picker: None,
@@ -623,7 +645,23 @@ impl App {
             self.agent_key(&k, now, &mut out);
         }
         self.refresh_suggestions(now);
+        out.extend(
+            self.mode_changes
+                .drain(..)
+                .map(|(mode, confirmed_bypass)| Cmd::SetMode {
+                    mode,
+                    confirmed_bypass,
+                }),
+        );
         out
+    }
+
+    /// The host refused a mode change (or could not apply it): show the mode it still has.
+    pub fn mode_rejected(&mut self, now_mode: Mode, why: &str) {
+        self.mode = now_mode;
+        self.bypass_confirmed = false;
+        self.mode_changed_ui();
+        self.out_item(format!("mode not changed: {why}"), true);
     }
 
     fn running(&self) -> bool {
@@ -829,6 +867,14 @@ impl App {
     }
 
     fn mode_changed(&mut self) {
+        if self.mode != Mode::BypassPermissions {
+            self.bypass_confirmed = false;
+        }
+        self.mode_changes.push((self.mode, self.bypass_confirmed));
+        self.mode_changed_ui();
+    }
+
+    fn mode_changed_ui(&mut self) {
         self.chat.agent.mode = mode_str(self.mode).into();
     }
 
@@ -981,7 +1027,14 @@ impl App {
     }
 
     fn set_mode_arg(&mut self, arg: &str) {
+        let arg = if arg == "bypass" {
+            "bypassPermissions"
+        } else {
+            arg
+        };
         match normalize_mode(Some(arg)).and_then(Mode::parse) {
+            Some(Mode::BypassPermissions) if self.mode == Mode::BypassPermissions => {}
+            Some(Mode::BypassPermissions) => self.open_bypass_confirm(),
             Some(m) if OFFERED_MODES.contains(&m) => {
                 self.mode = m;
                 self.mode_changed();
@@ -995,6 +1048,42 @@ impl App {
             ),
             None => self.out_item(format!("unknown mode: {arg}"), true),
         }
+    }
+
+    /// Esc, "No" (the first item) or anything but "Yes" keeps the current mode.
+    fn open_bypass_confirm(&mut self) {
+        let items = vec![
+            (
+                PickerItem {
+                    label: format!(
+                        "No, keep {}",
+                        nemo_tui_render::dialogs::mode_name(Some(self.mode.as_str()))
+                    ),
+                    detail: "esc also cancels".into(),
+                    current: true,
+                },
+                "no".to_string(),
+            ),
+            (
+                PickerItem {
+                    label: "Yes, bypass permissions".into(),
+                    detail: "this session only; shift+tab leaves it".into(),
+                    current: false,
+                },
+                "yes".to_string(),
+            ),
+        ];
+        self.out_item(
+            "bypassPermissions turns OFF approval prompts: every tool call runs, including edits and shell commands anywhere the sandbox allows. Still blocked: deny rules, critical removals (rm -rf ~ or /), destructive MCP calls (they still ask). It is never saved and never restored on resume.",
+            false,
+        );
+        self.open_picker(
+            PickerKind::BypassConfirm,
+            "Bypass permissions?",
+            "enter confirms the highlighted choice",
+            items,
+            PathBuf::new(),
+        );
     }
 
     fn switch_model(&mut self, name: &str, out: &mut Vec<Cmd>) {
@@ -1280,6 +1369,14 @@ impl App {
             PickerKind::Mode => {
                 self.picker = None;
                 self.set_mode_arg(value);
+            }
+            PickerKind::BypassConfirm => {
+                self.picker = None;
+                if value == "yes" {
+                    self.mode = Mode::BypassPermissions;
+                    self.bypass_confirmed = true;
+                    self.mode_changed();
+                }
             }
             PickerKind::Command => {
                 self.picker = None;

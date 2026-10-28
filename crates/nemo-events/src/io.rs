@@ -421,6 +421,18 @@ mod tests {
             },
             Event::SubagentStarted(sub()),
             Event::SubagentStopped(sub()),
+            Event::SessionModeChanged {
+                from: s("default"),
+                to: s("plan"),
+                reason: Some(s("user")),
+            },
+            Event::AutoVerdict {
+                tool_call_id: s("t"),
+                name: s("Bash"),
+                verdict: s("allow"),
+                reason: s("r"),
+                source: s("model"),
+            },
             Event::ModelChanged {
                 model: s("m"),
                 effort: Some(s("high")),

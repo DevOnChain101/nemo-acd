@@ -12,6 +12,7 @@ use std::time::Instant;
 use futures_util::future::join_all;
 use nemo_events::{Event, Todo, ToolStatus};
 use nemo_hooks::{Decision as HookDecision, HookEvent};
+use nemo_permissions::automode::ClassifierDecision;
 use nemo_permissions::{Decision, Mode, Suggestion, Verdict};
 use nemo_providers::{Block, Content, Message, Role};
 use nemo_tools::{
@@ -609,9 +610,8 @@ impl Harness {
                 }
             };
             if verdict.decision == Decision::Classify {
-                // No classifier in the harness: unclassified means a person decides.
-                verdict.decision = Decision::Ask;
-                verdict.reason = format!("{} (no auto-mode classifier available)", verdict.reason);
+                self.resolve_classify(task, agent, turn, call, input, mode, &mut verdict)
+                    .await;
             }
             if verdict.decision == Decision::Allow
                 && let Some(why) = forced.take()
@@ -625,7 +625,14 @@ impl Harness {
                     return Err(Denial {
                         unavailable: true,
                         from_hook: false,
-                        text: self.approval_unavailable(task, agent, call, input, &verdict.reason),
+                        text: self.approval_unavailable(
+                            task,
+                            agent,
+                            call,
+                            spec,
+                            input,
+                            &verdict.reason,
+                        ),
                     });
                 }
                 Decision::Deny => {
@@ -649,7 +656,14 @@ impl Harness {
                 return Err(Denial {
                     unavailable: true,
                     from_hook: false,
-                    text: self.approval_unavailable(task, agent, call, input, &verdict.reason),
+                    text: self.approval_unavailable(
+                        task,
+                        agent,
+                        call,
+                        spec,
+                        input,
+                        &verdict.reason,
+                    ),
                 });
             }
             let a = self.approve(task, agent, turn, call, input, &verdict).await;
@@ -659,7 +673,7 @@ impl Harness {
                     unavailable: auto,
                     from_hook: false,
                     text: if auto {
-                        self.approval_unavailable(task, agent, call, input, &verdict.reason)
+                        self.approval_unavailable(task, agent, call, spec, input, &verdict.reason)
                     } else {
                         a.message.unwrap_or_else(|| DENY_MESSAGE.to_string())
                     },
@@ -695,6 +709,51 @@ impl Harness {
         })
     }
 
+    /// Settles a `Classify` verdict. Protected paths are a hard stop and never reach the judge;
+    /// outside auto mode (plan) nobody classifies. Otherwise the judge's allow/deny stands and
+    /// anything else is an ask (a person decides; headless: denied). `forced` asks (destructive
+    /// MCP calls) are applied after this, so an allow here cannot lift them.
+    #[allow(clippy::too_many_arguments)]
+    async fn resolve_classify(
+        &self,
+        task: &TaskRun,
+        agent: &AgentCtx,
+        turn: &str,
+        call: &Call,
+        input: &Value,
+        mode: Mode,
+        verdict: &mut Verdict,
+    ) {
+        if verdict.reason.starts_with("protected path") {
+            verdict.decision = Decision::Ask;
+            verdict.hard = true;
+            return;
+        }
+        if mode != Mode::Auto {
+            verdict.decision = Decision::Ask;
+            verdict.reason = format!("{} (classified only in auto mode)", verdict.reason);
+            return;
+        }
+        let (d, why) = self
+            .judge(task, agent, turn, call, input, &verdict.reason)
+            .await;
+        let note = sanitize_for_display(&why);
+        match d {
+            ClassifierDecision::Allow => {
+                verdict.decision = Decision::Allow;
+                verdict.reason = format!("auto mode: {note}");
+            }
+            ClassifierDecision::Block => {
+                verdict.decision = Decision::Deny;
+                verdict.reason = format!("auto mode judge blocked it: {note}");
+            }
+            ClassifierDecision::Ask => {
+                verdict.decision = Decision::Ask;
+                verdict.reason = format!("{} ({note})", verdict.reason);
+            }
+        }
+    }
+
     /// Result text for a call that needs an approval nobody can give. Remembers the rule that
     /// would allow it (`task.ended.needed_permissions`) and that the task may be blocked on it.
     fn approval_unavailable(
@@ -702,6 +761,7 @@ impl Harness {
         task: &TaskRun,
         agent: &AgentCtx,
         call: &Call,
+        spec: &ToolSpec,
         input: &Value,
         reason: &str,
     ) -> String {
@@ -709,9 +769,11 @@ impl Harness {
             &call.name,
             &lock(&agent.perms).suggestions(&call.name, input),
         );
-        // Commands (tests, builds) are what the task cannot go on without; another tool's
-        // denial stays evidence the model may work around.
-        if matches!(call.name.as_str(), "Bash" | "verify_run" | "terminal_spawn") {
+        // A denied change (write, command, MCP write tool) is what the task cannot go on
+        // without; a denied read stays evidence the model may work around.
+        if spec.side_effect != SideEffectClass::Read
+            || matches!(call.name.as_str(), "Bash" | "verify_run" | "terminal_spawn")
+        {
             task.pending_approval.store(true, Ordering::SeqCst);
         }
         lock(&task.needed).extend(rules.iter().cloned());

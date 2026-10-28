@@ -155,6 +155,20 @@ pub struct HarnessConfig {
     pub env: BTreeMap<String, String>,
     pub auto_compact: AutoCompact,
     pub shell: ShellSettings,
+    /// The judge of auto mode.
+    pub auto: crate::classifier::AutoJudge,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModeError {
+    /// `bypassPermissions` was requested without the person's confirmation.
+    BypassNotConfirmed,
+}
+
+impl std::fmt::Display for ModeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("bypassPermissions needs an explicit confirmation")
+    }
 }
 
 /// `env` may hold credentials: only its keys are printed.
@@ -171,6 +185,7 @@ impl std::fmt::Debug for HarnessConfig {
             .field("max_tool_result_chars", &self.max_tool_result_chars)
             .field("auto_compact", &self.auto_compact)
             .field("shell", &self.shell)
+            .field("auto", &self.auto)
             .field("env_keys", &self.env.keys().collect::<Vec<_>>())
             .finish()
     }
@@ -202,6 +217,7 @@ impl HarnessConfig {
             env: BTreeMap::new(),
             auto_compact: AutoCompact::default(),
             shell: ShellSettings::default(),
+            auto: crate::classifier::AutoJudge::default(),
         }
     }
 }
@@ -317,6 +333,9 @@ pub(crate) struct TaskRun {
     pub needed: Mutex<BTreeSet<String>>,
     /// A gate check was blocked for lack of an approval.
     pub gate_blocked: AtomicBool,
+    /// Recent user messages, the task last: what the auto-mode judge is told the task is.
+    pub user_texts: Mutex<Vec<String>>,
+    pub auto: Mutex<crate::classifier::AutoState>,
 }
 
 pub(crate) struct AgentCtx {
@@ -464,6 +483,45 @@ impl Harness {
     /// Current (session-wide) permission engine, e.g. to inspect the mode in tests.
     pub fn permissions(&self) -> Arc<Mutex<Permissions>> {
         self.permissions.clone()
+    }
+
+    /// Switches the permission mode for the tasks that start from now on (a running task keeps
+    /// the mode it was sent in). The one entry point for every front end (TUI, GUI). Entering
+    /// `bypassPermissions` needs `confirmed_bypass`: the caller vouches that the person said yes
+    /// to a dialog that named what it disables; it is checked here, not only in the UI.
+    /// Emits `session.mode_changed` (and a warning notice for bypass).
+    pub fn set_mode(&self, mode: Mode, confirmed_bypass: bool) -> Result<(), ModeError> {
+        if mode == Mode::BypassPermissions && !confirmed_bypass {
+            return Err(ModeError::BypassNotConfirmed);
+        }
+        let from = {
+            let mut p = lock(&self.permissions);
+            let from = p.mode();
+            p.set_mode(mode);
+            from
+        };
+        if from == mode {
+            return Ok(());
+        }
+        let scope = Scope::default();
+        self.sink.emit(
+            &scope,
+            Event::SessionModeChanged {
+                from: from.as_str().into(),
+                to: mode.as_str().into(),
+                reason: Some("user".into()),
+            },
+        );
+        if mode == Mode::BypassPermissions {
+            self.sink.emit(
+                &scope,
+                Event::Notice {
+                    level: "warning".into(),
+                    text: "bypassPermissions: tool calls run without approval; only hard stops (deny rules, critical rm, destructive MCP asks) still apply".into(),
+                },
+            );
+        }
+        Ok(())
     }
 
     // ---- events --------------------------------------------------------------------------
@@ -635,6 +693,7 @@ impl Harness {
         let task_id = uuid();
         session.task_id = Some(task_id.clone());
         let (task, main) = self.run_ctx(session, task_id.clone(), start, cancel);
+        *lock(&task.user_texts) = crate::classifier::user_texts(&req.history, &req.request);
         let mut st = AgentState::new(req.history);
         st.messages.push(Message {
             role: Role::User,
@@ -789,6 +848,8 @@ impl Harness {
             pending_approval: AtomicBool::new(false),
             needed: Mutex::default(),
             gate_blocked: AtomicBool::new(false),
+            user_texts: Mutex::default(),
+            auto: Mutex::default(),
         };
         let main = AgentCtx {
             agent_id: None,

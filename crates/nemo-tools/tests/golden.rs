@@ -78,16 +78,46 @@ impl Sandbox {
     }
     /// Longest root first, as the README prescribes.
     fn normalize_str(&self, s: &str) -> String {
-        // tools may re-spell our paths with backslashes on Windows
-        let folded = s.replace('\\', "/");
-        let s = if cfg!(windows) && folded.contains(&self.tmp) {
-            &folded
-        } else {
-            s
-        };
-        s.replace(&self.nemo_home, "<NEMO_HOME>")
-            .replace(&self.home, "<HOME>")
-            .replace(&self.tmp, "<TMP>")
+        self.normalize_with(s, cfg!(windows))
+    }
+    /// With `win`, tools may re-spell our paths with backslashes: a root in either spelling is
+    /// replaced and `\` -> `/` is folded only in the path token right after it, never in content.
+    fn normalize_with(&self, s: &str, win: bool) -> String {
+        let roots = [
+            (&self.nemo_home, "<NEMO_HOME>"),
+            (&self.home, "<HOME>"),
+            (&self.tmp, "<TMP>"),
+        ];
+        let same = |a: u8, b: u8| a == b || (win && a == b'\\' && b == b'/');
+        let mut out = String::new();
+        let mut i = 0;
+        'scan: while i < s.len() {
+            for (root, ph) in roots {
+                let n = root.len();
+                if s.len() - i >= n
+                    && s.is_char_boundary(i + n)
+                    && s.as_bytes()[i..i + n]
+                        .iter()
+                        .zip(root.bytes())
+                        .all(|(&a, b)| same(a, b))
+                {
+                    out.push_str(ph);
+                    i += n;
+                    while let Some(c) = s[i..].chars().next() {
+                        if c.is_whitespace() || c == '"' || c == '\'' {
+                            break;
+                        }
+                        out.push(if win && c == '\\' { '/' } else { c });
+                        i += c.len_utf8();
+                    }
+                    continue 'scan;
+                }
+            }
+            let c = s[i..].chars().next().unwrap();
+            out.push(c);
+            i += c.len_utf8();
+        }
+        out
     }
     fn map(&self, v: &Value, f: &dyn Fn(&Self, &str) -> String) -> Value {
         match v {
@@ -431,4 +461,16 @@ fn every_divergence_names_an_existing_case() {
             );
         }
     }
+}
+
+#[test]
+fn windows_normaliser_folds_only_path_tokens_not_content() {
+    let sb = Sandbox::new();
+    let t = sb.tmp.clone();
+    let bs = t.replace('/', "\\");
+    let input = format!("Edited {bs}\\ws\\a.txt:\n 1\tprice \\n $& {bs}\\home\\x");
+    assert_eq!(
+        sb.normalize_with(&input, true),
+        "Edited <TMP>/ws/a.txt:\n 1\tprice \\n $& <HOME>/x"
+    );
 }

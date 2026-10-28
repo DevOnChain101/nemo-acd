@@ -435,6 +435,25 @@ pub enum Event {
     SubagentStarted(SubagentInfo),
     #[serde(rename = "subagent.stopped")]
     SubagentStopped(SubagentInfo),
+    /// The permission mode changed (TUI/GUI switch). Never emitted for the mode a session starts in.
+    #[serde(rename = "session.mode_changed")]
+    SessionModeChanged {
+        from: String,
+        to: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
+    /// Auto mode: what the judge model decided about one pending call.
+    #[serde(rename = "permission.auto_verdict")]
+    AutoVerdict {
+        tool_call_id: String,
+        name: String,
+        /// `"allow"` | `"deny"` | `"ask"`.
+        verdict: String,
+        reason: String,
+        /// `"model"` | `"cache"` | `"fail_closed"` (judge unavailable, unparseable, over the cap).
+        source: String,
+    },
     #[serde(rename = "model.changed")]
     ModelChanged {
         model: String,

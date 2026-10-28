@@ -57,6 +57,8 @@ Doc §5.12 types are kept verbatim; additions are marked. Payload field types: `
 | `verification.completed` | `report_id:str, status:VerificationStatus, attempt:int, summary:str` | doc §5.12; see verification.md |
 | `todo.updated` | `todos:[{id:str?, content:str, status:"pending"\|"in_progress"\|"completed", active_form:str}]` | [from-node agent.js:3646, taskcreate.js] |
 | `subagent.started` / `subagent.stopped` | `agent_id:str, agent_type:str, tool_call_id:str?, reason:str?` | [from-node agent.js:3913 'subagent-start', 874 'subagent-evicted', 3017 SubagentStop] |
+| `session.mode_changed` | `from:str, to:str, reason:str?` | [new] permission mode switched while the session runs (TUI Shift+Tab, `/mode`, a future GUI via `Harness::set_mode`); not emitted for the starting mode. Entering `bypassPermissions` also emits a `notice` |
+| `permission.auto_verdict` | `tool_call_id:str, name:str, verdict:"allow"\|"deny"\|"ask", reason:str, source:"model"\|"cache"\|"fail_closed"` | [new] auto mode: the judge's decision on one call before it runs (audit trail; `fail_closed` = judge unavailable, unparseable, timed out or over the per-task cap, so the call is an ask) |
 | `model.changed` | `model:str, effort:str?` | [from-node agent.js:1539 'model-changed'] |
 | `budget.exceeded` | `budget:str, limit:number, used:number` | [new] |
 | `notice` | `level:"info"\|"warn"\|"error", text:str` | [from-node agent.js:919-925 note()/toast()] |
