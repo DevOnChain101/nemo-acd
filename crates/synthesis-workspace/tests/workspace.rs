@@ -170,6 +170,23 @@ fn create_diff_cleanup_leaves_user_tree_untouched() {
 }
 
 #[test]
+fn source_subdirectory_maps_to_the_same_subdirectory_of_the_worktree() {
+    need_git!();
+    let f = fx();
+    fs::create_dir_all(f.repo.join("pkg")).unwrap();
+    fs::write(f.repo.join("pkg/b.txt"), "b\n").unwrap();
+    g(&f.repo, &["add", "."]);
+    g(&f.repo, &["commit", "-q", "-m", "pkg"]);
+    let a = f
+        .mgr
+        .create(&f.repo.join("pkg"), "sub", f.base.join("art/sub"), false)
+        .unwrap();
+    let wt = a.git.unwrap().worktree;
+    assert_eq!(a.context.root, wt);
+    assert_eq!(a.context.cwd, wt.join("pkg"));
+}
+
+#[test]
 fn clean_cleanup_without_force() {
     need_git!();
     let f = fx();

@@ -872,6 +872,36 @@ fn worktree_run_produces_a_branch_and_a_diff_and_leaves_the_original_alone() {
 }
 
 #[test]
+fn worktree_run_applies_deny_rules_anchored_at_the_worktree() {
+    let rig = Rig::new();
+    git(&rig.ws(), &["init", "-q"]);
+    git(&rig.ws(), &["add", "."]);
+    git(&rig.ws(), &["commit", "-q", "-m", "init"]);
+    let (_, ev) = rig.run(
+        edit_script(),
+        &[
+            "--permission-mode",
+            "acceptEdits",
+            "--worktree",
+            "--deny",
+            "Edit(./a.txt)",
+        ],
+    );
+    let done = ev.iter().rfind(|e| e["type"] == "tool.completed").unwrap();
+    assert_eq!(done["payload"]["status"], "denied", "{done}");
+    let sid = ev[0]["session_id"].as_str().unwrap();
+    let wt = rig.home().join("worktrees").join(sid);
+    assert_eq!(
+        std::fs::read_to_string(wt.join("a.txt")).unwrap(),
+        "hello\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(rig.ws().join("a.txt")).unwrap(),
+        "hello\n"
+    );
+}
+
+#[test]
 fn worktree_in_a_non_git_directory_exits_2() {
     let rig = Rig::new();
     let o = rig

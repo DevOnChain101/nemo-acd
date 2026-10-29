@@ -293,7 +293,14 @@ impl WorktreeManager {
             )?;
             baseline = g.out_str(&wt, &["rev-parse", "HEAD"])?;
         }
-        let mut context = WorkspaceContext::open(ws_id, &wt, &wt, &[], artifact_root, session_id)?;
+        // a source inside a subdirectory of the repo maps to the same subdirectory of the worktree
+        let cwd = source
+            .strip_prefix(&repo_root)
+            .map(|rel| wt.join(rel))
+            .ok()
+            .filter(|d| d.is_dir())
+            .unwrap_or_else(|| wt.clone());
+        let mut context = WorkspaceContext::open(ws_id, &wt, &cwd, &[], artifact_root, session_id)?;
         context.git_worktree = Some(context.root.clone());
         let info = GitInfo {
             repo_root,

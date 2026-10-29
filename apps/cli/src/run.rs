@@ -817,7 +817,8 @@ pub fn prepare(
     // `interactive` lets asks reach the approver, so each one leaves approval events.
     let mut perms = Permissions::new(
         rules,
-        synthesis_permissions::Env::new(cwd, &h.user, mode)
+        // the session's workspace (the worktree under --worktree), not the launch dir
+        synthesis_permissions::Env::new(&ws.cwd, &h.user, mode)
             .with_project_root(&ws.root)
             .interactive(true)
             .protect(state_paths),
