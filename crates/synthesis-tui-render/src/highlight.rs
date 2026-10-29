@@ -51,7 +51,7 @@ pub fn comment_c() -> Col {
 pub fn variable_c() -> Col {
     col(t().syntax.variable)
 }
-/// Same value as [`keyword`], a different object in Node.
+/// Same value as `keyword`, a different object in Node.
 pub fn operator_c() -> Col {
     Col {
         rgb: t().syntax.keyword,
