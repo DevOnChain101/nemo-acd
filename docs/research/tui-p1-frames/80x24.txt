@@ -1,0 +1,52 @@
+===== 80x24 welcome (offline, scripted dummy model) [80x24] cursor=(26,18) hidden=False modes={7: False, 25: True, 1000: True, 1002: True, 1006: True, 1049: True, 2004: True, 2026: False}
+00| ⢎⡱  S Y N T H E S I S   qa-repo                             ● 1 live  │  14:48
+01|┏━ ◆ Workspace 1 ━━┓┏━ ◆ Status ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+02|┃ ▌● qa-repo      1┃┃                                                          ┃
+03|┗━━━━━━━━━━━━━━━━━━┛│ ✢ THINKING  last activity 0s ago                         │
+04|┏━ ◆ Running · qa… ┓│   █▆▄▃▁▁▁▂▃▅▆███▇▆▄▂▁▁▁▂▃▅▇███▇▆▄▂                       │
+05|┃ ▌● synthesis ⌘   ┃│ Context  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░   0% 0/200.0k      │
+06|│ qa-repo (…pad)   │┃                                                          ┃
+07|┃                  ┃┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+08|┗━━━━━━━━━━━━━━━━━━┛┏━ ◆ SYNTHESIS · …/scratchpad/qa-repo  ready ━━━━━━━━━━━━━━┓
+09|┏━ ◆ Session ━━━━━━┓┃                                                          ┃
+10|┃                  ┃│  Tips for getting started:                               │
+11|│ model  fake/fake…││   1. Ask Synthesis to explain, fix or build              │
+12|│ mode   manual    ││      something in this folder                            │
+13|│ effort auto      ││   2. Type / for commands and skills, @ to mention a      │
+14|│ cwd    qa-repo   ││      file                                                │
+15|│ uptime 0s        ││   3. Drop or paste an image path to attach a             │
+16|│ turns  0 prompts…││      screenshot                                          │
+17|│                  ││ ╭───────────────────────────────────────────────────────╮│
+18|┃                  ┃│ │ >  Enter send · Shift+Enter newline · / commands      ││
+19|┗━━━━━━━━━━━━━━━━━━┛│ ╰───────────────────────────────────────────────────────╯│
+20|                    ┃ ⏸ manual mode on                fake/model · effort: auto┃
+21|                    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+22|tab workspace selector (when multiple) → sessions → prompt   enter send
+23| sandbox: enforce [seatbelt fs:weak net:weak] · verify n/a
+
+===== 80x24 after one scripted turn [80x24] cursor=(26,18) hidden=False modes={7: False, 25: True, 1000: True, 1002: True, 1006: True, 1049: True, 2004: True, 2026: False}
+00| ⢎⡱  S Y N T H E S I S   qa-repo                             ● 1 live  │  14:48
+01|┏━ ◆ Workspace 1 ━━┓┏━ ◆ Status ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+02|┃ ▌● qa-repo      1┃┃                                                          ┃
+03|┗━━━━━━━━━━━━━━━━━━┛│ ● IDLE  last activity 0s ago                             │
+04|┏━ ◆ Running · qa… ┓│   waiting for the next prompt…                           │
+05|┃ ▌● synthesis ⌘   ┃│ Context  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░   0% 10/200.0k     │
+06|│ qa-repo (…pad)   │┃                                                          ┃
+07|┃                  ┃┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+08|┗━━━━━━━━━━━━━━━━━━┛┏━ ◆ SYNTHESIS · …/scratchpad/qa-repo  ready ━━━━━━━━━━━━━━┓
+09|┏━ ◆ Session ━━━━━━┓┃      stat                                                ┃
+10|┃                  ┃│      '/private/tmp/claude-501/-Users-hunghq-Vibe-Nemo-ACD│
+11|│ model  fake/fake…││      /267e4f0e-f43b-4ec2-89e8-488a8602f780/scratchpad/qa-│
+12|│ mode   manual    ││      repo/src/main.rs'                                   │
+13|│ effort auto      ││                                                          │
+14|│ window 200.0k to…││ ▌ Done: the retry now waits 50 ms.                       │
+15|│ cwd    qa-repo   ││                                                          │
+16|│ uptime 1s        ││ ✓ Done · 2 turns · 0s                                    │
+17|│ turns  1 prompts…││ ╭───────────────────────────────────────────────────────╮│
+18|┃                  ┃│ │ >  Enter send · Shift+Enter newline · / commands      ││
+19|┗━━━━━━━━━━━━━━━━━━┛│ ╰───────────────────────────────────────────────────────╯│
+20|                    ┃ ⏸ manual mode on                fake/model · effort: auto┃
+21|                    ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+22|tab workspace selector (when multiple) → sessions → prompt   enter send
+23| sandbox: enforce [seatbelt fs:weak net:weak]
+
