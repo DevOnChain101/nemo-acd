@@ -35,14 +35,16 @@ fn copy(from: &Path, to: &Path) {
 
 fn fixture() -> Fx {
     let t = tempfile::tempdir().unwrap();
-    let root = fs::canonicalize(t.path()).unwrap();
+    let root = nemo_core::canonicalize(t.path()).unwrap();
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/import");
     let (home, project) = (root.join("home"), root.join("project"));
     copy(&src.join("home"), &home);
     copy(&src.join("project"), &project);
     let cj = home.join(".claude.json");
     let s = fs::read_to_string(&cj).unwrap();
-    fs::write(&cj, s.replace("__PROJECT__", project.to_str().unwrap())).unwrap();
+    // JSON-escape the path: a Windows path has backslashes
+    let quoted = serde_json::to_string(project.to_str().unwrap()).unwrap();
+    fs::write(&cj, s.replace("\"__PROJECT__\"", &quoted)).unwrap();
     let key: String = project
         .to_str()
         .unwrap()

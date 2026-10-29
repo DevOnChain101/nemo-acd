@@ -10,9 +10,14 @@ use tokio::net::TcpListener;
 /// Prints the test name when it starts and fails it after 120 s, so a hanging test shows in the log.
 async fn traced(name: &str, f: impl std::future::Future<Output = ()>) {
     eprintln!("START {name}");
-    tokio::time::timeout(Duration::from_secs(120), f)
+    if tokio::time::timeout(Duration::from_secs(90), f)
         .await
-        .unwrap_or_else(|_| panic!("{name} timed out after 120 s"));
+        .is_err()
+    {
+        // exit instead of panic: unwinding drops the runtime, which can block on a stuck Chrome task
+        eprintln!("HANG {name} timed out after 90 s");
+        std::process::exit(101);
+    }
     eprintln!("END {name}");
 }
 

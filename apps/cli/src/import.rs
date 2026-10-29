@@ -1933,7 +1933,8 @@ fn claude(env: &Env, a: &ClaudeArgs) -> Result<u8, String> {
     let project = match (&a.project_dir, a.scope) {
         (_, ScopeSel::User) => None,
         (Some(p), _) => Some(
-            std::fs::canonicalize(p).map_err(|e| format!("--project-dir {}: {e}", p.display()))?,
+            nemo_core::canonicalize(p)
+                .map_err(|e| format!("--project-dir {}: {e}", p.display()))?,
         ),
         (None, ScopeSel::Project) => return Err("--scope project needs --project-dir DIR".into()),
         (None, ScopeSel::All) => None,
@@ -2053,7 +2054,7 @@ fn claude(env: &Env, a: &ClaudeArgs) -> Result<u8, String> {
                 .and_then(|m| {
                     m.iter().find(|(k, _)| {
                         Path::new(k) == p.as_path()
-                            || std::fs::canonicalize(k).is_ok_and(|c| c == *p)
+                            || nemo_core::canonicalize(k).is_ok_and(|c| c == *p)
                     })
                 })
                 .and_then(|(k, v)| v.get("mcpServers").map(|s| (k.clone(), s.clone())));

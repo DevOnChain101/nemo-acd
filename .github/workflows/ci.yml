@@ -170,18 +170,14 @@ jobs:
           failed=""
           for t in $("$bin" --list --format terse | sed -n 's/: test$//p'); do
             say "[$(date -u +%T)] START $t"
-            "$bin" --exact "$t" --nocapture --test-threads=1 > one.log 2>&1 &
-            pid=$!
-            for _ in $(seq 1 150); do kill -0 $pid 2>/dev/null || break; sleep 1; done
-            if kill -0 $pid 2>/dev/null; then
-              say "[$(date -u +%T)] HANG $t (no exit after 150 s)"
-              kill -9 $pid 2>/dev/null || true
-              if [ "$RUNNER_OS" = Windows ]; then taskkill //F //T //PID "$(ps -p $pid -o winpid= 2>/dev/null | tr -d ' ')" >/dev/null 2>&1 || true; fi
+            # GNU timeout (also in Git for Windows' bash): 124 = timed out, 137 = needed the KILL
+            timeout --kill-after=10 150 "$bin" --exact "$t" --nocapture --test-threads=1 > one.log 2>&1
+            rc=$?
+            if [ $rc -eq 124 ] || [ $rc -eq 137 ]; then
+              say "[$(date -u +%T)] HANG $t (rc=$rc, no exit after 150 s)"
               failed="$failed $t(hang)"
-              rc=1
-            else
-              wait $pid; rc=$?
-              [ $rc -eq 0 ] || failed="$failed $t(rc=$rc)"
+            elif [ $rc -ne 0 ]; then
+              failed="$failed $t(rc=$rc)"
             fi
             killchrome
             cat one.log >> browser.log; tail -n 40 one.log

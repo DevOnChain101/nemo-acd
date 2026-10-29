@@ -709,6 +709,7 @@ mod signals {
     struct Child {
         child: std::process::Child,
         out: Arc<Mutex<Vec<u8>>>,
+        reader: Option<std::thread::JoinHandle<()>>,
     }
 
     fn spawn_child(mode: &str) -> Child {
@@ -727,7 +728,7 @@ mod signals {
             .unwrap();
         let out = Arc::new(Mutex::new(Vec::new()));
         let (o2, mut so) = (out.clone(), child.stdout.take().unwrap());
-        std::thread::spawn(move || {
+        let reader = std::thread::spawn(move || {
             let mut b = [0u8; 4096];
             while let Ok(n) = so.read(&mut b) {
                 if n == 0 {
@@ -736,7 +737,11 @@ mod signals {
                 o2.lock().unwrap().extend_from_slice(&b[..n]);
             }
         });
-        Child { child, out }
+        Child {
+            child,
+            out,
+            reader: Some(reader),
+        }
     }
 
     impl Child {
@@ -760,6 +765,13 @@ mod signals {
             self.wait_for("MISSION CONTROL"); // the title is set when the screen is entered
             self.wait_for("sandbox: unknown");
         }
+        /// Exit status, after the reader has drained the pipe: without the join, the child's last
+        /// bytes (the restore sequence) can still sit unread in the pipe when `text()` is called.
+        fn wait(&mut self) -> std::process::ExitStatus {
+            let st = self.child.wait().unwrap();
+            self.reader.take().unwrap().join().unwrap();
+            st
+        }
         fn signal(&self, name: &str) {
             let st = Command::new("kill")
                 .arg(format!("-{name}"))
@@ -775,7 +787,7 @@ mod signals {
         let mut c = spawn_child("term");
         c.ready();
         c.signal("TERM");
-        let st = c.child.wait().unwrap();
+        let st = c.wait();
         assert_eq!(
             st.signal(),
             Some(15),
@@ -793,7 +805,7 @@ mod signals {
         let mut c = spawn_child("hup");
         c.ready();
         c.signal("HUP");
-        let st = c.child.wait().unwrap();
+        let st = c.wait();
         assert_eq!(st.signal(), Some(1));
         assert!(c.text().contains("\x1b[?1049l"));
     }
@@ -805,7 +817,7 @@ mod signals {
         c.signal("INT");
         c.wait_for("press ctrl+c again to quit");
         c.signal("INT");
-        let st = c.child.wait().unwrap();
+        let st = c.wait();
         assert!(st.success(), "{st:?}");
         let t = c.text();
         assert!(
