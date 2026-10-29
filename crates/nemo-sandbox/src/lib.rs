@@ -365,6 +365,8 @@ impl SandboxBackend for NullSandbox {
 
 /// Usable backends for this OS, probed at call time, best first (bubblewrap -> Landlock on
 /// Linux). Empty = nothing can confine. `nemo-terminal` degrades along this list in best-effort.
+// Only the cfg'd extends/pushes inside differ per OS; on Windows exactly one push remains.
+#[allow(clippy::vec_init_then_push)]
 pub fn detect_chain() -> Vec<Box<dyn SandboxBackend>> {
     #[cfg(all(feature = "test-backend", debug_assertions))]
     if std::env::var_os("NEMO_TEST_FORCE_BACKEND").is_some_and(|v| v == "none") {

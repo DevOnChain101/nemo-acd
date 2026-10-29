@@ -144,7 +144,13 @@ jobs:
           NEMO_BROWSER_PATH: ${{ steps.pre.outputs.path || steps.chrome.outputs.chrome-path }}
         run: |
           echo "Chrome: $NEMO_BROWSER_PATH"
-          "$NEMO_BROWSER_PATH" --version || echo "(could not print the Chrome version)"
+          # `chrome.exe --version` does NOT print on Windows: it launches the browser and never returns
+          # (this alone hung the step for 15-25 min). Read the file version instead.
+          if [ "$RUNNER_OS" = Windows ]; then
+            powershell -NoProfile -Command "(Get-Item -LiteralPath '$NEMO_BROWSER_PATH').VersionInfo.ProductVersion" || echo "(could not read the Chrome version)"
+          else
+            "$NEMO_BROWSER_PATH" --version || echo "(could not print the Chrome version)"
+          fi
           # Chrome's OWN helper sandbox is unusable on these ephemeral VMs (Linux: AppArmor userns
           # restriction; macOS: Mach port rendezvous denied, "Page.enable got no answer"). The test
           # hook only adds --no-sandbox so the tests can exercise OUR URL policy; production keeps
