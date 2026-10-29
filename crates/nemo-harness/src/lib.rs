@@ -26,9 +26,11 @@
 mod agent;
 mod agents;
 mod classifier;
+mod comm;
 mod context;
 mod exec;
 mod harness;
+mod hub;
 mod live;
 mod mcp_guard;
 mod sink;
@@ -42,6 +44,7 @@ pub use agents::{
     AgentDef, AgentSource, AgentTable, GENERAL_PURPOSE, from_mode, stricter, to_mode,
 };
 pub use classifier::AutoJudge;
+pub use comm::{AgentInfo, TaskAgent};
 pub use context::{RULES, StaticContext, wrap_tool_output};
 pub use harness::{
     AutoCompact, GateFactory, Harness, HarnessConfig, HarnessError, ModeError, Pricing,

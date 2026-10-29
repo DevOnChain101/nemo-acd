@@ -21,6 +21,7 @@ use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
 use crate::agents::{AgentTable, from_mode, to_mode};
+use crate::comm::TaskAgent;
 use crate::context::StaticContext;
 use crate::sink::{EventSink, Scope};
 use crate::toolbox::ToolBox;
@@ -342,6 +343,10 @@ pub(crate) struct TaskRun {
 
 pub(crate) struct AgentCtx {
     pub agent_id: Option<String>,
+    /// Instance name (`main` for the main agent): the address of its inbox.
+    pub name: String,
+    /// Cancels this agent only; a sub-agent's is a child of the task's token.
+    pub cancel: CancellationToken,
     pub depth: u32,
     /// Mode the task was sent in (spec: a later switch never changes a running turn).
     pub mode: Mutex<Mode>,
@@ -364,6 +369,8 @@ pub(crate) struct AgentState {
     pub auto_failures: u32,
     /// No proactive compaction before this request number.
     pub auto_pause_until: u64,
+    /// Where the next inbox delivery happens, for `message.delivered.at`.
+    pub drain_at: &'static str,
 }
 
 impl AgentState {
@@ -377,6 +384,7 @@ impl AgentState {
             requests: 0,
             auto_failures: 0,
             auto_pause_until: 0,
+            drain_at: "tool_round",
         }
     }
 }
@@ -421,6 +429,8 @@ pub struct Harness {
     /// Called with the allow rules a person accepted with "allow always" (to persist them).
     pub(crate) rule_store: Option<RuleStore>,
     pub(crate) verify_ok: Mutex<std::collections::HashSet<String>>,
+    /// Sub-agents of this session and their inboxes (messaging.md Part A).
+    pub(crate) hub: crate::hub::Hub,
 }
 
 impl Harness {
@@ -457,6 +467,7 @@ impl Harness {
             reasoning_effort: Mutex::default(),
             verify_ok: Mutex::default(),
             rule_store: None,
+            hub: crate::hub::Hub::default(),
         }
     }
 
@@ -639,6 +650,7 @@ impl Harness {
             Event::SessionStarted {
                 workspace: WorkspaceInfo {
                     workspace_id: ws.workspace_id.clone(),
+                    workspace_key: Some(ws.workspace_key.clone()).filter(|k| !k.is_empty()),
                     root: ws.root.to_string_lossy().into_owned(),
                     cwd: ws.cwd.to_string_lossy().into_owned(),
                     additional_dirs: ws
@@ -697,6 +709,29 @@ impl Harness {
         req: TaskRequest,
         cancel: CancellationToken,
     ) -> Result<TaskOutcome, HarnessError> {
+        self.run_task_as(session, req, cancel, None).await
+    }
+
+    /// Like [`Harness::run_task`], but a sub-agent of this session answers the request instead of
+    /// the main agent (`req.history` is ignored: the agent has its own). The agent keeps its
+    /// conversation afterwards; `TaskOutcome.messages` is that conversation, not the main one.
+    pub async fn run_agent_task(
+        &self,
+        session: &mut AgentSession,
+        agent: TaskAgent,
+        req: TaskRequest,
+        cancel: CancellationToken,
+    ) -> Result<TaskOutcome, HarnessError> {
+        self.run_task_as(session, req, cancel, Some(agent)).await
+    }
+
+    async fn run_task_as(
+        &self,
+        session: &mut AgentSession,
+        req: TaskRequest,
+        cancel: CancellationToken,
+        agent: Option<TaskAgent>,
+    ) -> Result<TaskOutcome, HarnessError> {
         let start = session.status;
         let allowed =
             start == SessionStatus::Created || start.can_transition_to(SessionStatus::Running);
@@ -708,9 +743,60 @@ impl Harness {
         }
         let task_id = uuid();
         session.task_id = Some(task_id.clone());
-        let (task, main) = self.run_ctx(session, task_id.clone(), start, cancel);
-        *lock(&task.user_texts) = crate::classifier::user_texts(&req.history, &req.request);
-        let mut st = AgentState::new(req.history);
+        let (task, mut main) = self.run_ctx(session, task_id.clone(), start, cancel);
+        let mut parked_kind = None;
+        let mut st = match &agent {
+            None => AgentState::new(req.history),
+            Some(TaskAgent::Existing(name)) => {
+                let (r, id, kind, _) = self
+                    .hub
+                    .take_idle(name, task.cancel.clone())
+                    .map_err(HarnessError::Rejected)?;
+                let mode = crate::agents::stricter(r.mode, to_mode(session.permission_mode));
+                lock(&r.perms).set_mode(mode);
+                main = AgentCtx {
+                    agent_id: Some(id),
+                    name: name.clone(),
+                    cancel: task.cancel.clone(),
+                    depth: r.depth,
+                    mode: Mutex::new(mode),
+                    perms: r.perms,
+                    allowed: r.allowed,
+                    prompt: r.prompt,
+                };
+                parked_kind = Some(kind);
+                AgentState::new(r.messages)
+            }
+            Some(TaskAgent::New(def)) => {
+                let def = self.agents.get(def).ok_or_else(|| {
+                    HarnessError::Rejected(format!("unknown agent type \"{def}\""))
+                })?;
+                let (ctx, mut st) = self
+                    .new_child(&task, &main, def, None, String::new())
+                    .map_err(HarnessError::Rejected)?;
+                st.messages.clear();
+                self.emit(
+                    &task,
+                    &ctx,
+                    None,
+                    Event::SubagentStarted(nemo_events::SubagentInfo {
+                        agent_id: ctx.agent_id.clone().unwrap_or_default(),
+                        agent_type: def.name.clone(),
+                        tool_call_id: None,
+                        reason: None,
+                        name: Some(ctx.name.clone()),
+                        background: false,
+                    }),
+                );
+                parked_kind = Some(def.name.clone());
+                main = ctx;
+                st
+            }
+        };
+        let (bg_tx, mut bg_rx) = tokio::sync::mpsc::unbounded_channel();
+        self.hub
+            .begin_task(bg_tx, task.cancel.clone(), task.task_id.clone());
+        *lock(&task.user_texts) = crate::classifier::user_texts(&st.messages, &req.request);
         st.messages.push(Message {
             role: Role::User,
             content: Content::Text(req.request.clone()),
@@ -780,19 +866,43 @@ impl Harness {
         }
 
         let mut gate = self.gate.as_ref().map(|f| f(session));
-        let (status, reason, report_id, final_text) = if let Some(why) = blocked_prompt {
-            // The hook's text goes to the caller, never into the event log (events.md §5.1).
-            (
-                TaskStatus::Blocked,
-                "blocked_by_hook:UserPromptSubmit".into(),
-                None,
-                why,
-            )
-        } else {
-            self.tracker.begin(&task.workspace, &task.task_id).await;
-            self.drive(&task, &main, &mut st, &mut gate, &req.criteria)
-                .await
+        let work = async {
+            if let Some(why) = blocked_prompt {
+                // The hook's text goes to the caller, never into the event log (events.md §5.1).
+                (
+                    TaskStatus::Blocked,
+                    "blocked_by_hook:UserPromptSubmit".into(),
+                    None,
+                    why,
+                )
+            } else {
+                self.tracker.begin(&task.workspace, &task.task_id).await;
+                self.drive(&task, &main, &mut st, &mut gate, &req.criteria)
+                    .await
+            }
         };
+        let (status, reason, report_id, final_text) =
+            self.with_background(&task, &mut bg_rx, work).await;
+        self.hub.end_task();
+        match parked_kind {
+            Some(kind) => {
+                let why = if status == TaskStatus::Cancelled {
+                    "cancelled"
+                } else {
+                    "finished"
+                };
+                self.park(
+                    &task,
+                    &main,
+                    &kind,
+                    st.messages.clone(),
+                    why,
+                    &final_text,
+                    None,
+                );
+            }
+            None => self.drop_mail(&task, &main.name),
+        }
         self.terminal(&task, status, &reason);
 
         let usage = self.usage(&task);
@@ -870,6 +980,8 @@ impl Harness {
         };
         let main = AgentCtx {
             agent_id: None,
+            name: crate::hub::MAIN.into(),
+            cancel: task.cancel.clone(),
             depth: 0,
             mode: Mutex::new(to_mode(session.permission_mode)),
             perms: self.permissions.clone(),
@@ -958,7 +1070,7 @@ impl Harness {
     ) -> (TaskStatus, String, Option<String>, String) {
         let mut text = String::new();
         loop {
-            match self.run_agent(task, main, st).await {
+            match self.run_with_mail(task, main, st).await {
                 AgentEnd::Finished(t) => {
                     text = t;
                     if task.pending_user_need.load(Ordering::SeqCst) {

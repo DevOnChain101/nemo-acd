@@ -278,6 +278,8 @@ pub struct Prepared {
     pub sandbox: nemo_tui::SandboxStatus,
     pub link: Option<nemo_tui::UiLink>,
     pub homes: crate::Homes,
+    /// `#` notes and `/memory` (TUI).
+    pub notes: crate::memory::Notes,
 }
 
 /// Rows of `{"nemo":{"pricing":{"<provider/model>"|"<model>": {input_per_mtok, output_per_mtok}}}}`
@@ -385,6 +387,34 @@ pub fn sandbox_status(mode: SandboxMode, unsandboxed: bool) -> nemo_tui::Sandbox
     }
 }
 
+/// Does a `Read(..)` deny rule (or any deny) cover `p`? Bypass mode keeps the answer to the rules
+/// alone: no ask for outside reads or protected paths.
+fn read_denied(perms: &Permissions, p: &Path) -> bool {
+    perms
+        .check(
+            "Read",
+            &serde_json::json!({ "file_path": p }),
+            Mode::BypassPermissions,
+        )
+        .decision
+        == nemo_permissions::Decision::Deny
+}
+
+/// Default `--max-wall-secs` of a headless `nemo run` (one hour). Turns (50) and tool calls (200)
+/// are bounded by default already; a cost cap needs a configured price, so it has no default.
+const HEADLESS_WALL_SECS: u64 = 3600;
+
+/// The repository root (nearest trusted ancestor with `.git` or `.nemo`, see
+/// `nemo_settings::find_project_root`), else the launch dir. The home directory and anything above
+/// it never count: `~/.nemo` or a stray `/Users/.git` would otherwise make `$HOME` the workspace
+/// (and writable).
+pub fn workspace_root(cwd: &Path, home: &Path) -> PathBuf {
+    let real = nemo_core::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
+    let root = nemo_settings::find_project_root(&real);
+    let home = nemo_core::canonicalize(home).unwrap_or_else(|_| home.to_path_buf());
+    if home.starts_with(&root) { real } else { root }
+}
+
 #[allow(clippy::too_many_lines)]
 pub fn prepare(
     c: &Common,
@@ -400,7 +430,7 @@ pub fn prepare(
     );
     let is_tui = matches!(front, Front::Tui);
     let h = homes(env)?;
-    let nemo_deny = [h.nemo.join("auth.json"), h.nemo.join("settings.json")];
+    let nemo_deny = nemo_sandbox::nemo_state_paths(&h.nemo);
     // Before anything is created (worktree, store): a bad grant is a usage error.
     let reads = {
         let mut probe = SandboxPolicy::standard(cwd, Path::new("/nemo-probe-tmp"));
@@ -518,7 +548,11 @@ pub fn prepare(
         budget.max_verify_attempts = v;
     }
     budget.max_cost_usd = limits.max_cost_usd;
-    budget.max_wall_ms = limits.max_wall_secs.map(|s| s.saturating_mul(1000));
+    // an unattended run must not run (and spend) forever; the TUI has a person watching
+    budget.max_wall_ms = limits
+        .max_wall_secs
+        .or((!is_tui).then_some(HEADLESS_WALL_SECS))
+        .map(|s| s.saturating_mul(1000));
 
     let mut extra_dirs: Vec<PathBuf> = settings
         .permissions
@@ -553,7 +587,7 @@ pub fn prepare(
         (
             WorkspaceContext::open(
                 format!("ws-{}", &sid[..8]),
-                cwd,
+                &workspace_root(cwd, &h.user),
                 cwd,
                 &extra_dirs,
                 artifact_root.clone(),
@@ -604,6 +638,7 @@ pub fn prepare(
     let sandbox_mode = c.sandbox_mode();
     let net = c.network.policy();
     let git_dir = worktree.as_ref().map(|w| w.info.git_dir.clone());
+    let state_paths = nemo_deny.clone();
     let build = Arc::new(move |ws: &nemo_core::WorkspaceContext| {
         let mut p = standard_policy_git(ws, net.clone(), git_dir.as_deref())?;
         p.deny_paths.extend(nemo_deny.clone());
@@ -631,6 +666,13 @@ pub fn prepare(
     }
     let mut notices = sandbox_notices(sandbox_mode, c.network);
     notices.extend(sandbox_default_notice(c));
+    if ws.root != ws.cwd {
+        notices.push(format!(
+            "workspace root is {} (launched in {}); the sandbox may write there",
+            sanitize_for_display(&ws.root.display().to_string()),
+            sanitize_for_display(&ws.cwd.display().to_string())
+        ));
+    }
     match mode {
         Mode::BypassPermissions => notices.push(
             "bypassPermissions: tool calls run without approval; only deny rules, ask rules, critical removals and destructive MCP asks still stop them; protected paths are not stopped"
@@ -771,7 +813,10 @@ pub fn prepare(
     // `interactive` lets asks reach the approver, so each one leaves approval events.
     let mut perms = Permissions::new(
         rules,
-        nemo_permissions::Env::new(cwd, &h.user, mode).interactive(true),
+        nemo_permissions::Env::new(cwd, &h.user, mode)
+            .with_project_root(&ws.root)
+            .interactive(true)
+            .protect(state_paths),
     );
     perms.env.auto_mode = nemo_permissions::AutoModeSettings {
         classify_all_shell: user_settings.auto_mode.classify_all_shell.unwrap_or(false),
@@ -819,13 +864,49 @@ pub fn prepare(
         None => artifact_to_dir(artifact_root.clone()),
     };
     let user_files = [h.nemo.join("NEMO.md")];
-    let instructions = nemo_context::load_instructions(
+    // Read-deny rules apply to instruction files and their imports; a denied file is reported.
+    let denied = Mutex::new(Vec::<PathBuf>::new());
+    let deny = |p: &Path| {
+        let d = read_denied(&perms, p);
+        if d {
+            denied
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(p.to_path_buf());
+        }
+        d
+    };
+    let mut instructions = nemo_context::load_instructions_with(
         &ws,
         &user_files,
         Some(&h.user),
         &nemo_context::DEFAULT_NAMES,
         &nemo_context::InstructionLimits::default(),
+        Some(&deny),
     );
+    let mut denied = denied.into_inner().unwrap_or_else(|e| e.into_inner());
+    denied.sort();
+    denied.dedup();
+    for p in denied {
+        let w = format!(
+            "instruction file not loaded (blocked by a Read deny rule): {}",
+            p.display()
+        );
+        eprintln!("nemo: warning: {}", sanitize_for_display(&w));
+        notices.push(w);
+    }
+    // lowest priority: before the user and repository files
+    instructions.splice(
+        0..0,
+        crate::ctx::load_auto_memory(&h.nemo, &[&ws.root, &ws.cwd]),
+    );
+    let notes = crate::memory::Notes {
+        user: user_files[0].clone(),
+        project: crate::memory::project_file(&ws.root),
+        root: ws.root.clone(),
+        secrets: res.secrets.clone(),
+        loaded: crate::memory::describe(&instructions),
+    };
     let skills = crate::ctx::visible_skills(
         nemo_tools::discover_skills(env, &ws.root),
         trust == ProjectTrust::Trusted,
@@ -1000,6 +1081,7 @@ pub fn prepare(
         sandbox: sandbox_status(sandbox_mode, sandbox_mode != SandboxMode::Enforce),
         link,
         homes: h,
+        notes,
     })
 }
 
@@ -1520,6 +1602,119 @@ mod tests {
         assert!(
             e.contains("nemo doctor") && e.contains("no OS sandbox"),
             "{e}"
+        );
+    }
+
+    #[test]
+    fn workspace_root_is_the_repo_root_not_the_launch_dir_and_never_home() {
+        let d = tempfile::tempdir().unwrap();
+        let base = nemo_core::canonicalize(d.path()).unwrap();
+        let (repo, sub) = (base.join("repo"), base.join("repo/src/deep"));
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::create_dir_all(repo.join(".git")).unwrap();
+        assert_eq!(workspace_root(&sub, &base), repo);
+        assert_eq!(workspace_root(&repo, &base), repo);
+        // `.nemo` also marks a root
+        let proj = base.join("proj");
+        std::fs::create_dir_all(proj.join(".nemo")).unwrap();
+        std::fs::create_dir_all(proj.join("a")).unwrap();
+        assert_eq!(workspace_root(&proj.join("a"), &base), proj);
+        // no marker: the launch dir
+        let lone = base.join("lone/x");
+        std::fs::create_dir_all(&lone).unwrap();
+        assert_eq!(workspace_root(&lone, &base), lone);
+        // `$HOME/.nemo` must not turn the home directory into the workspace
+        std::fs::create_dir_all(base.join(".nemo")).unwrap();
+        assert_eq!(workspace_root(&lone, &base), lone);
+        // ... nor may a marker ABOVE home (`/Users/.git`)
+        std::fs::remove_dir(base.join(".nemo")).unwrap();
+        std::fs::create_dir_all(base.join(".git")).unwrap();
+        let home = base.join("users/me");
+        std::fs::create_dir_all(home.join("proj")).unwrap();
+        assert_eq!(workspace_root(&home.join("proj"), &home), home.join("proj"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_world_writable_marker_directory_is_not_a_workspace_root() {
+        use std::os::unix::fs::PermissionsExt;
+        let d = tempfile::tempdir().unwrap();
+        let base = nemo_core::canonicalize(d.path()).unwrap();
+        let (repo, sub) = (base.join("repo"), base.join("repo/src"));
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::create_dir_all(repo.join(".git")).unwrap();
+        let home = base.join("home");
+        assert_eq!(workspace_root(&sub, &home), repo);
+        std::fs::set_permissions(&repo, std::fs::Permissions::from_mode(0o777)).unwrap();
+        assert_eq!(workspace_root(&sub, &home), sub, "writable by anyone");
+        std::fs::set_permissions(&repo, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::set_permissions(repo.join(".git"), std::fs::Permissions::from_mode(0o777))
+            .unwrap();
+        assert_eq!(
+            workspace_root(&sub, &home),
+            sub,
+            "marker writable by anyone"
+        );
+    }
+
+    #[test]
+    fn started_in_a_subfolder_the_repo_instructions_and_skills_are_found() {
+        let d = tempfile::tempdir().unwrap();
+        let base = nemo_core::canonicalize(d.path()).unwrap();
+        let (repo, sub) = (base.join("repo"), base.join("repo/pkg"));
+        std::fs::create_dir_all(sub.clone()).unwrap();
+        std::fs::create_dir_all(repo.join(".git")).unwrap();
+        std::fs::write(repo.join("AGENTS.md"), "root rules").unwrap();
+        std::fs::write(sub.join("NEMO.md"), "pkg rules").unwrap();
+        let root = workspace_root(&sub, &base.join("home"));
+        let ws = WorkspaceContext::open("w", &root, &sub, &[], base.join("art"), "pg").unwrap();
+        assert_eq!(ws.cwd, sub);
+        let got = nemo_context::load_instructions(
+            &ws,
+            &[],
+            None,
+            &nemo_context::DEFAULT_NAMES,
+            &nemo_context::InstructionLimits::default(),
+        );
+        let text: Vec<_> = got.iter().map(|f| f.content.as_str()).collect();
+        assert_eq!(text, ["root rules", "pkg rules"], "root first");
+    }
+
+    #[test]
+    fn a_read_deny_rule_keeps_an_instruction_file_out_of_the_prompt() {
+        let d = tempfile::tempdir().unwrap();
+        let base = nemo_core::canonicalize(d.path()).unwrap();
+        std::fs::write(base.join("AGENTS.md"), "secret plan").unwrap();
+        std::fs::write(base.join("docs.md"), "imported").unwrap();
+        std::fs::create_dir_all(base.join("sub")).unwrap();
+        std::fs::write(base.join("sub/NEMO.md"), "see @../docs.md").unwrap();
+        let rules = PermissionRules {
+            // `/x` is anchored at the cwd (= base)
+            deny: vec!["Read(/AGENTS.md)".into(), "Read(/docs.md)".into()],
+            ..PermissionRules::default()
+        };
+        let perms = Permissions::new(
+            rules,
+            nemo_permissions::Env::new(&base, &base, Mode::Default),
+        );
+        assert!(read_denied(&perms, &base.join("AGENTS.md")));
+        assert!(!read_denied(&perms, &base.join("sub/NEMO.md")));
+        let ws = WorkspaceContext::open("w", &base, &base.join("sub"), &[], base.join("art"), "pg")
+            .unwrap();
+        let deny = |p: &Path| read_denied(&perms, p);
+        let got = nemo_context::load_instructions_with(
+            &ws,
+            &[],
+            None,
+            &nemo_context::DEFAULT_NAMES,
+            &nemo_context::InstructionLimits::default(),
+            Some(&deny),
+        );
+        let text: Vec<_> = got.iter().map(|f| f.content.as_str()).collect();
+        assert_eq!(
+            text,
+            ["see @../docs.md"],
+            "the denied AGENTS.md and the denied import are not injected"
         );
     }
 }

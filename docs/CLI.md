@@ -16,12 +16,14 @@ The agent runs tests itself. A call that needs permission opens the approval dia
 
 | mode | `nemo run` behaviour |
 |---|---|
-| `default` | asks are auto-denied unless allowed by `--allow`/settings |
-| `acceptEdits` | edits inside the workspace are allowed; other asks (Bash, MCP, ...) are auto-denied |
-| `plan` | read-only; writes are denied |
+| `default` | asks are auto-denied unless allowed by `--allow`/settings (`SendMessage` between agents asks; `ListAgents` is read-only) |
+| `acceptEdits` | edits inside the workspace are allowed, and so is `SendMessage`; other asks (Bash, MCP, ...) are auto-denied |
+| `plan` | read-only; writes are denied; `SendMessage` is denied (it can steer another agent) |
 | `dontAsk` | an ask becomes a deny |
 | `auto` | a judge model call decides each open call (allow / deny / ask); ask, unclear answer, error or timeout = denied |
 | `bypassPermissions` | skips approval prompts; still stops: deny rules, ask rules (they still ask, so an unattended run denies them), critical `rm`, destructive MCP asks. Protected paths (`.git`, `.nemo`, `.ssh`, ...) are NOT stopped by plain writes, as in Claude Code; the sandbox still confines commands. Loud notice at start. Only from the CLI flag: never from project settings, `.mcp.json` or the environment |
+
+**Default limits.** `nemo run` ends a task after 3600 s of wall time unless `--max-wall-secs N` says otherwise (the interactive app has no default); turns (50) and tool calls (200) are bounded by default as well. `--max-cost-usd` has no default because it needs a configured price.
 
 **Inferred verification checks.** In `default` and `acceptEdits` the checks the harness infers from the repo (`cargo test`, `npm run test`, `pytest`, `go test`, `make test`, ... see `docs/specs/verification.md` section 4) run without an `--allow`, so `nemo run --permission-mode acceptEdits` no longer ends `blocked` only because such a check asked. They stay sandboxed and deny rules still win; any other check command (user-declared or model-registered, or not a recognised test/lint/build invocation) still needs an allow.
 

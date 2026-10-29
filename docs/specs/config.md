@@ -21,7 +21,7 @@ Tags as in events.md. "Faithful port" means golden-tested equality with Node (ev
 | `~/.claude/settings.json`, `~/.claude.json`, `<projectRoot>/.mcp.json` | Claude Code sources | tolerant JSON | read only when `nemo.json` has `claude.readUserConfig: true` [claudecfg.js:780-789, 803] |
 | `NEMO.md` / `AGENTS.md` / `CLAUDE.md` / `.claude/CLAUDE.md` in each directory from the workspace root down to cwd (not `~`), plus the private `CLAUDE.local.md` | memory | Markdown with `@imports` | per directory only the FIRST non-empty of NEMO.md > AGENTS.md > CLAUDE.md > .claude/CLAUDE.md is loaded (owner decision D2); root to cwd order; 32 KiB combined cap (also per file); imports as before [claudecfg.js:374-399] |
 | `$NEMO_HOME/{agents,skills,commands}/`, `<projectRoot>/.nemo/{agents,skills,commands}/` | extensions | frontmatter Markdown | built-in skills ship with the binary [claudecfg.js:823-837] |
-| `$NEMO_HOME/projects/<sanitized-cwd>/memory/MEMORY.md` | auto-memory | Markdown | [claudecfg.js:813-821] |
+| `$NEMO_HOME/projects/<sanitized-cwd>/memory/*.md` | auto-memory (staged by `nemo import claude`), loaded at the lowest priority: `MEMORY.md` first, 8 KiB per file, 16 KiB total, untrusted data; the key is the workspace root or the launch dir | Markdown | [claudecfg.js:813-821] |
 
 ## 3. Layering (lowest → highest) [from-node config.js:3-24, 247-310]
 1. Built-in defaults: providers `anthropic` + `openai` (official base URLs), `maxTokens: 32000`, aliases `opus|sonnet|haiku|fable` with null targets, no default model [config.js:45-81].

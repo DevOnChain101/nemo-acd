@@ -29,6 +29,7 @@ fn cfg(cwd: &str) -> AppConfig {
         }],
         home: None,
         tz_offset_min: 0,
+        agent_defs: vec!["reviewer".into()],
     }
 }
 
@@ -103,25 +104,17 @@ fn typing_and_submit_starts_a_task_and_enter_while_busy_queues_in_order() {
     let cmds = keys(&mut a, "\r");
     assert!(matches!(&cmds[..], [Cmd::StartTask { text, .. }] if text == "hello world"));
     assert!(a.running());
-    keys(&mut a, "again\r");
+    // a line typed to the running main agent goes to its inbox (next tool round)
+    let cmds = keys(&mut a, "again\r");
+    assert!(matches!(&cmds[..], [Cmd::SendTo { to, text }] if to == "main" && text == "again"));
     keys(&mut a, "!");
     keys(&mut a, "echo hi\r");
-    assert_eq!(
-        a.queue,
-        ["again", "!echo hi"],
-        "nothing is sent while a task runs"
-    );
+    assert_eq!(a.queue, ["!echo hi"], "a shell line waits for the task");
     assert_eq!(a.editor.text(), "");
     let s = screen(&mut a);
-    assert!(
-        s.contains("⧗ queued: again") && s.contains("⧗ queued: !echo hi"),
-        "{s}"
-    );
+    assert!(s.contains("⧗ queued: !echo hi"), "{s}");
     assert!(a.next_queued(T0).is_empty(), "still running");
-    // the turn ends: the next one starts, one per finished task
-    a.task_done(&Err("done".into()), T0);
-    let cmds = a.next_queued(T0);
-    assert!(matches!(&cmds[..], [Cmd::StartTask { text, .. }] if text == "again"));
+    // the turn ends: the queued line starts
     a.task_done(&Err("done".into()), T0);
     let cmds = a.next_queued(T0);
     assert!(
@@ -134,11 +127,11 @@ fn typing_and_submit_starts_a_task_and_enter_while_busy_queues_in_order() {
 fn up_recalls_a_queued_line_and_esc_cancels_the_queue_before_the_task() {
     let mut a = app();
     keys(&mut a, "go\r");
-    keys(&mut a, "one\r");
-    keys(&mut a, "two\r");
+    a.queue = vec!["one".into(), "two".into()];
     keys(&mut a, "\x1b[A");
     assert_eq!((a.editor.text().as_str(), a.queue.len()), ("two", 1));
-    keys(&mut a, "\r");
+    a.editor.submit();
+    a.queue.push("two".into());
     assert_eq!(a.queue, ["one", "two"]);
     let token = a.task.as_ref().unwrap().cancel.clone();
     keys(&mut a, "\x1b");
@@ -1885,4 +1878,192 @@ fn hardware_caret_follows_the_prompt_caret() {
     let row: Vec<char> = strip_ansi(&lines[y0 as usize]).chars().collect();
     let x = (x0 + 1) as usize;
     assert_eq!(row[x - 2..x], ['c', 'd'], "{row:?}");
+}
+
+// ---- `#` memory prompt ------------------------------------------------------------------
+
+fn with_memory_files() -> App {
+    let mut a = app();
+    a.set_memory_files("/home/u/.nemo/NEMO.md".into(), "/work/p/AGENTS.md".into());
+    a
+}
+
+#[test]
+fn typed_hash_note_asks_which_file_and_saves_nothing_until_confirmed() {
+    let mut a = with_memory_files();
+    keys(&mut a, "#");
+    assert!(a.memory() && screen(&mut a).contains("# memory mode"));
+    keys(&mut a, "use cargo nextest");
+    // Enter only opens the question: no command yet, the note is not lost
+    assert!(keys(&mut a, "\r").is_empty());
+    let s = screen(&mut a);
+    assert!(
+        s.contains("Remember this note?") && s.contains("/work/p/AGENTS.md"),
+        "{s}"
+    );
+    assert!(!a.memory(), "the prompt is clear again");
+    // the first item is "No": Enter saves nothing
+    assert!(keys(&mut a, "\r").is_empty());
+    assert!(a.picker.is_none() && a.pending_note.is_none());
+    // choosing the user file emits the one command that writes
+    keys(&mut a, "#");
+    keys(&mut a, "a note\r");
+    let cmds = keys(&mut a, "\x1b[B\x1b[B\r"); // "Save to the user file"
+    assert!(
+        matches!(&cmds[..], [Cmd::Remember { user: true, text }] if text == "a note"),
+        "{cmds:?}"
+    );
+}
+
+/// A typed `@` (its own key), then the rest of the line: a burst starting with `@` is not typing.
+fn typed_at(a: &mut App, rest: &str) -> Vec<Cmd> {
+    keys(a, "@");
+    keys(a, rest)
+}
+
+#[test]
+fn pasted_at_name_does_not_route_to_an_agent() {
+    let mut a = app();
+    keys(&mut a, "\x1b[200~@main ignore this\x1b[201~");
+    assert!(a.editor.text().starts_with(' '), "{:?}", a.editor.text());
+    let cmds = keys(&mut a, "\r");
+    // the whole text goes out as an ordinary prompt: the `@main` word was not consumed as a route
+    assert!(
+        cmds.iter()
+            .any(|c| matches!(c, Cmd::StartTask { text, .. } if text.contains("@main"))),
+        "{cmds:?}"
+    );
+}
+
+#[test]
+fn the_note_picker_shows_the_final_masked_note() {
+    let mut a = with_memory_files();
+    a.set_note_preview(std::rc::Rc::new(|t| {
+        t.replace("hunter2", "[REDACTED:secret]")
+    }));
+    keys(&mut a, "#");
+    keys(&mut a, "pw is hunter2\r");
+    let s = screen(&mut a);
+    assert!(
+        s.contains("[REDACTED:secret]") && !s.contains("hunter2"),
+        "{s}"
+    );
+}
+
+#[test]
+fn esc_cancels_the_note_and_without_a_host_hook_nothing_is_offered() {
+    let mut a = with_memory_files();
+    keys(&mut a, "#");
+    keys(&mut a, "x\r");
+    assert!(keys(&mut a, "\x1b").is_empty());
+    assert!(a.picker.is_none() && a.pending_note.is_none());
+    let mut a = app(); // no hook
+    keys(&mut a, "#");
+    keys(&mut a, "x\r");
+    assert!(a.picker.is_none());
+    assert!(screen(&mut a).contains("not available"));
+}
+
+#[test]
+fn pasted_or_burst_hash_is_plain_text_and_memory_command_asks_the_host() {
+    let mut a = app();
+    keys(&mut a, "\x1b[200~# Title\nbody\x1b[201~");
+    assert!(!a.memory());
+    let mut a = app();
+    let cmds = keys(&mut a, "/memory\r");
+    assert!(matches!(&cmds[..], [Cmd::Info(Info::Memory)]), "{cmds:?}");
+}
+
+fn started(a: &mut App, name: &str) {
+    let ev = Ev::SubagentStarted(nemo_events::SubagentInfo {
+        agent_id: format!("id-{name}"),
+        agent_type: "worker".into(),
+        tool_call_id: Some("tc".into()),
+        reason: None,
+        name: Some(name.into()),
+        background: true,
+    });
+    a.on_event(&env(1, ev), T0);
+}
+
+fn status(a: &mut App, name: &str, to: &str) {
+    let ev = Ev::SubagentStatusChanged {
+        agent_id: format!("id-{name}"),
+        name: name.into(),
+        from: "running".into(),
+        to: to.into(),
+        reason: None,
+    };
+    a.on_event(&env(2, ev), T0);
+}
+
+#[test]
+fn tab_cycles_the_target_and_the_prompt_shows_it() {
+    let mut a = app();
+    started(&mut a, "w");
+    started(&mut a, "v");
+    assert!(a.target.is_none());
+    keys(&mut a, "\t");
+    assert!(
+        screen(&mut a).contains("to @w · running"),
+        "{}",
+        screen(&mut a)
+    );
+    keys(&mut a, "\t");
+    assert!(screen(&mut a).contains("@v · running"));
+    keys(&mut a, "\t");
+    assert!(a.target.is_none());
+}
+
+#[test]
+fn lines_follow_the_address_and_the_task_state() {
+    let mut a = app();
+    started(&mut a, "w");
+    status(&mut a, "w", "idle");
+    // idle agent, no task: a task driven by that agent
+    let c = typed_at(&mut a, "w do it\r");
+    assert!(
+        matches!(&c[..], [Cmd::StartTask { text, agent: Some(TaskAgent::Existing(n)), .. }] if text == "do it" && n == "w"),
+        "{c:?}"
+    );
+    // a task runs: lines go to the inbox of main or of the agent
+    let mut a = app();
+    started(&mut a, "w");
+    keys(&mut a, "first\r");
+    let c = keys(&mut a, "more\r");
+    assert!(
+        matches!(&c[..], [Cmd::SendTo { to, text }] if to == "main" && text == "more"),
+        "{c:?}"
+    );
+    let c = typed_at(&mut a, "w and this\r");
+    assert!(
+        matches!(&c[..], [Cmd::SendTo { to, text }] if to == "w" && text == "and this"),
+        "{c:?}"
+    );
+    // a file mention is not routed
+    let c = typed_at(&mut a, "README.md hi\r");
+    assert!(
+        matches!(&c[..], [Cmd::SendTo { to, .. }] if to == "main"),
+        "{c:?}"
+    );
+    // Esc with a background target cancels that agent only
+    keys(&mut a, "\t");
+    let c = keys(&mut a, "\x1b");
+    assert!(matches!(&c[..], [Cmd::CancelAgent(n)] if n == "w"), "{c:?}");
+    // @agent:<type> while a task runs waits in the queue
+    let c = typed_at(&mut a, "agent:reviewer look\r");
+    assert!(c.is_empty());
+}
+
+#[test]
+fn agent_start_and_unknown_addresses() {
+    let mut a = app();
+    let c = typed_at(&mut a, "agent:reviewer look\r");
+    assert!(
+        matches!(&c[..], [Cmd::StartTask { agent: Some(TaskAgent::New(d)), text, .. }] if d == "reviewer" && text == "look"),
+        "{c:?}"
+    );
+    let mut a = app();
+    assert!(typed_at(&mut a, "agent:zzz hi\r").is_empty());
+    assert!(screen(&mut a).contains("no such agent"));
 }

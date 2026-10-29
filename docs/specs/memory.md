@@ -1,6 +1,6 @@
 # Spec: Long-term memory — draft 0.1
 
-Status: draft (2026-10-29), not reviewed. Tags as in events.md. Design doc: §5.5.1, ADR-013, roadmap R11.
+Status: accepted (2026-10-29); decisions D1–D8 are settled (§15); M0 (F1–F7) is implemented. Tags as in events.md. Design doc: §5.5.1, ADR-013, roadmap R11.
 
 ## 0. Non-negotiables
 1. Memory is **data, never instructions or permission grants**. It never reaches the permission engine, the auto-mode judge's user intent, approval dialogs or `set_mode`.
@@ -61,7 +61,7 @@ Nemo takes: a small pinned always-on set, on-demand FTS, typed records, a repo s
 
 ## 4. Scopes and identity
 - `user` (`scope_key=''`): preferences, cross-repo facts.
-- `workspace` (`scope_key = workspace_key`): the messaging.md §0 function, first 12 hex of SHA-256 over the folded canonical root. Memory deliberately feeds it the **repository root**: the main worktree root (from `git rev-parse --git-common-dir`), else `find_project_root(cwd)`. All worktrees and subdirs share memory (as in Claude Code; messaging keys worktrees separately, its D16). `workspaces` keeps root and label.
+- `workspace` (`scope_key = workspace_key`): the messaging.md §0 function, first 24 hex (96 bits) of SHA-256 over the folded canonical root. Memory deliberately feeds it the **repository root**: the main worktree root (from `git rev-parse --git-common-dir`), else `find_project_root(cwd)`. All worktrees and subdirs share memory (as in Claude Code; messaging keys worktrees separately, its D16). `workspaces` keeps root and label.
 - `agent` (`"<definition>@<workspace_key|*>"`): read only by sub-agents of that definition. Sub-agents get no main workspace memory except pinned facts.
 - Episodic records are `workspace` rows with `source.session_id`.
 
@@ -248,3 +248,23 @@ Gate: if (2) fails after one tuning round, injection defaults to off and `Memory
 - **D6** Raw history FTS (`messages_fts` in `nemo.db` v2) in M3, or episodes only?
 - **D7** May a project `.nemo/settings.json` opt out? Recommended: yes, opt-out only.
 - **D8** Retention: episodes 365 d; facts, lessons and skills never auto-deleted?
+
+### Decisions (accepted 2026-10-29)
+The owner accepted every recommendation above:
+- **D1** Memory is on by default (deterministic episodes, reflection, injection); `--no-memory` turns it off for a run. Injection stays default-on only if the M4 evaluation passes.
+- **D2** Learned skills are proposals: they become active only after the owner approves.
+- **D3** The memory key is the repository root, shared by all worktrees of that repository (`repo_key`, §4). Messaging keys a worktree session separately (messaging.md D16).
+- **D4** Separate `$NEMO_HOME/memory/memory.db`, not tables in `nemo.db`.
+- **D5** Reflection runs on `smallModel`, capped at 0.50 USD per day.
+- **D6** Raw-session FTS (`messages_fts`) is built in M3.
+- **D7** A project `.nemo/settings.json` may only turn memory off, never on.
+- **D8** Episodes are kept 365 days. Facts, lessons and skills are never deleted automatically.
+
+### M0 status (audit findings, implemented 2026-10-29)
+- **F1** The workspace root is the repository root (nearest ancestor with `.git` or `.nemo`, never `$HOME`; else the launch dir); the launch dir stays the cwd. `AGENTS.md`/`NEMO.md` of every ancestor between root and cwd (root first) and `<root>/.nemo/skills` load when Nemo starts in a subfolder. Side effect: the sandbox write root is now the repository, not the launch dir (file tools still resolve against the cwd).
+- **F2** Instruction files and their `@imports` honour `Read` deny rules; a denied file is not injected and is reported as a startup notice.
+- **F3** `TaskState` records successfully edited files (`Write`/`Edit`/`NotebookEdit`) and open failed `Bash` checks (closed by a later success of the same command), derived from the history before each request and each compaction.
+- **F4** TUI `# note` and `/memory`: the person picks the file (project: root `NEMO.md`, else `AGENTS.md`, else `.nemo/NEMO.md`; user: `$NEMO_HOME/NEMO.md`), the note is one line, secrets are masked, and nothing is written before the choice. `.nemo/NEMO.md` is loaded beside the winning instruction file. Notes apply to new sessions.
+- **F5** Auto-memory staged by `nemo import claude` (`$NEMO_HOME/projects/<sanitized dir>/memory/*.md`) loads at the lowest priority, `MEMORY.md` first, 8 KiB per file and 16 KiB in total, inside the untrusted-data fence.
+- **F6** `workspace_key`, `workspace_label` and `repo_key` (nemo-core `key.rs`) are on `WorkspaceContext`; `session.started.workspace.workspace_key` carries the key (events.md). `repo_key` follows the `.git` file and `commondir` as `git rev-parse --git-common-dir` does, without spawning git.
+- **F7** Confirmed on macOS: without a deny rule a sandboxed command read `nemo.db` and the memory files. `nemo_sandbox::nemo_state_paths` (`auth.json`, `settings.json`, `nemo.db`, `-wal`, `-shm`, `memory/`) is now denied in the sandbox policy (also in the standard credential list for `~/.nemo`) and in the permission engine's protected paths (`Env::protect`), so it also holds for a custom `NEMO_HOME`.

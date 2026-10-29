@@ -94,6 +94,7 @@ pub const READ_ONLY_TOOLS: &[&str] = &[
     "Skill",
     "Task",
     "Agent",
+    "ListAgents",
     "AskUserQuestion",
     "ExitPlanMode",
 ];
@@ -164,6 +165,11 @@ const PROTECTED_FILES: &[&str] = &[
     "pyrightconfig.json",
     ".mcp.json",
     ".claude.json",
+    // instruction files are loaded as trusted prompt context (lowercase: case-folded policies)
+    "NEMO.md",
+    "AGENTS.md",
+    "nemo.md",
+    "agents.md",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -291,6 +297,13 @@ pub struct Env {
     pub path_policy: PathPolicy,
     /// `false` = nobody can answer a prompt (headless): every `ask` becomes `deny`.
     pub interactive: bool,
+    /// Extra protected paths (files or directories, e.g. Nemo's own state under a custom
+    /// `NEMO_HOME`, which the `.nemo` directory name does not cover).
+    pub protected: Vec<PathBuf>,
+    /// The repository / project root when the session started in a subdirectory of it. `None` =
+    /// `cwd`. Rules written `/x` or `./x`, and the inside-the-workspace test, are anchored here;
+    /// a bare cwd-relative path keeps `cwd`.
+    pub project_root: Option<PathBuf>,
 }
 
 impl Env {
@@ -303,7 +316,24 @@ impl Env {
             auto_mode: AutoModeSettings::default(),
             path_policy: PathPolicy::NATIVE,
             interactive: false,
+            protected: vec![],
+            project_root: None,
         }
+    }
+
+    pub fn with_project_root(mut self, root: impl Into<PathBuf>) -> Self {
+        self.project_root = Some(root.into());
+        self
+    }
+
+    /// Where `/x` rules and the workspace begin.
+    fn anchor(&self) -> &Path {
+        self.project_root.as_deref().unwrap_or(&self.cwd)
+    }
+
+    pub fn protect(mut self, paths: impl IntoIterator<Item = PathBuf>) -> Self {
+        self.protected.extend(paths);
+        self
     }
 
     pub fn interactive(mut self, yes: bool) -> Self {
@@ -572,15 +602,13 @@ impl Permissions {
         let Some(spec) = spec else { return true };
         if PATH_TOOLS.contains(&rt) {
             // deny/ask: any target, lexical or real; allow: every target, both forms
+            let (spec, base) = self.rule_base(spec);
             let m = |t: &String| {
-                paths::match_path_rule_real(
-                    spec,
-                    t,
-                    &self.env.cwd,
-                    &self.env.home,
-                    self.policy(),
-                    any,
-                )
+                // resolve against cwd first: only the rule's own anchor moves
+                let t = paths::resolve(&self.env.cwd, t)
+                    .to_string_lossy()
+                    .into_owned();
+                paths::match_path_rule_real(spec, &t, base, &self.env.home, self.policy(), any)
             };
             let targets = self.path_targets(tool, input);
             return if any {
@@ -590,6 +618,16 @@ impl Permissions {
             };
         }
         scope_match(spec, tool, input, any)
+    }
+
+    /// `/x` and `./x` rules are written for the project root, wherever the session started; any
+    /// other spec (bare, `~/`, `//`) keeps `cwd`. Returns the spec in `/x` form and its base.
+    fn rule_base<'a>(&'a self, spec: &'a str) -> (&'a str, &'a Path) {
+        match spec.strip_prefix('.') {
+            Some(r) if r.starts_with('/') => (r, self.env.anchor()),
+            _ if spec.starts_with('/') && !spec.starts_with("//") => (spec, self.env.anchor()),
+            _ => (spec, &self.env.cwd),
+        }
     }
 
     /// A `Read(..)` deny rule names something under the directory a Grep / Glob call searches
@@ -611,7 +649,8 @@ impl Permissions {
         self.rules.deny.iter().find_map(|r| {
             let (rt, spec) = bash::parse_rule(r);
             let spec = spec.filter(|_| rt == "Read")?;
-            let at = paths::rule_root(spec, &self.env.cwd, &self.env.home, policy);
+            let (spec, base) = self.rule_base(spec);
+            let at = paths::rule_root(spec, base, &self.env.home, policy);
             (paths::within(&root, &at, policy) || paths::within(&at, &root, policy))
                 .then(|| r.clone())
         })
@@ -683,7 +722,7 @@ impl Permissions {
     // --- workspace scope -----------------------------------------------------------------
 
     fn roots(&self) -> Vec<PathBuf> {
-        std::iter::once(&self.env.cwd)
+        std::iter::once(&self.env.anchor().to_path_buf())
             .chain(&self.rules.additional_directories)
             .map(|d| paths::resolve(&self.env.cwd, &d.to_string_lossy()))
             .collect()
@@ -771,6 +810,14 @@ impl Permissions {
             .into_iter()
             .flatten()
             .any(|c| {
+                if self
+                    .env
+                    .protected
+                    .iter()
+                    .any(|x| paths::within(x, &c, policy))
+                {
+                    return true;
+                }
                 let mut root: Option<&PathBuf> = None;
                 for r in roots.iter().filter(|r| paths::within(r, &c, policy)) {
                     if root.is_none_or(|b| r.as_os_str().len() > b.as_os_str().len()) {
@@ -1367,6 +1414,15 @@ impl Permissions {
 
         if READ_ONLY_TOOLS.contains(&tool) {
             return v(Allow, "read-only tool");
+        }
+
+        // A message can wake another agent and steer it: not read-only, never in plan/dontAsk.
+        if tool == "SendMessage" {
+            return match mode {
+                Mode::Plan | Mode::DontAsk => v(Deny, format!("{} mode", mode.as_str())),
+                Mode::AcceptEdits | Mode::Auto => v(Allow, format!("{} mode", mode.as_str())),
+                _ => v(Ask, "SendMessage requires confirmation"),
+            };
         }
 
         // both send text (a URL, a query) to a third party, so they ask first

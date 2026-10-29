@@ -9,7 +9,7 @@ use std::time::Duration;
 use nemo_config::Env;
 use nemo_core::AgentSession;
 use nemo_events::Envelope;
-use nemo_harness::{Harness, TaskOutcome, TaskRequest, from_mode};
+use nemo_harness::{Harness, TaskAgent, TaskOutcome, TaskRequest, from_mode};
 use nemo_providers::Message;
 use nemo_tui_base::Platform;
 use nemo_tui_base::clipboard::{
@@ -50,6 +50,22 @@ pub struct Exit {
     pub last_outcome: Option<TaskOutcome>,
 }
 
+type SaveNote = Box<dyn Fn(bool, &str) -> Result<String, String>>;
+
+/// `#` notes and `/memory`, supplied by the host that knows the instruction files.
+pub struct MemoryHook {
+    /// Display paths of the user and project instruction files a note can go to.
+    pub user_file: String,
+    pub project_file: String,
+    /// Lines for `/memory`.
+    pub report: Box<dyn Fn() -> Vec<String>>,
+    /// The note as it will be written (one line, secrets masked): shown before the person confirms.
+    pub preview: std::rc::Rc<dyn Fn(&str) -> String>,
+    /// Appends the note (`user` = user file) after the person confirmed; `Ok` is the text to show.
+    /// The host redacts secrets and never overwrites.
+    pub save: SaveNote,
+}
+
 type ModelSwitch = Box<dyn FnMut(&str) -> Result<(Arc<Harness>, String), String>>;
 
 pub struct Options {
@@ -75,6 +91,7 @@ pub struct Options {
     pub extra_commands: Vec<CmdDef>,
     /// Lines for `/mcp`: servers, state, tools, errors (called each time the command runs).
     pub mcp_report: Option<Box<dyn Fn() -> Vec<String>>>,
+    pub memory: Option<MemoryHook>,
     pub saved: Vec<SavedSession>,
     pub resume: Option<Resume>,
     /// Shown as warnings in the pane from the first frame (sanitised on ingest); the matching
@@ -119,6 +136,7 @@ impl Options {
             switch_model: None,
             extra_commands: vec![],
             mcp_report: None,
+            memory: None,
             saved: vec![],
             resume: None,
             startup_notes: vec![],
@@ -169,15 +187,19 @@ fn cfg_for(o: &Options) -> AppConfig {
             .get_nonempty(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
             .map(Into::into),
         tz_offset_min: 0,
+        agent_defs: o.harness.agent_defs().into_iter().map(|(n, _)| n).collect(),
     }
 }
 
 struct Runner {
     mcp_report: Option<Box<dyn Fn() -> Vec<String>>>,
+    memory: Option<MemoryHook>,
     harness: Arc<Harness>,
     session: Option<AgentSession>,
     history: Vec<Message>,
     last_outcome: Option<TaskOutcome>,
+    /// The running task answers as a sub-agent: its conversation is not `history`.
+    agent_task: bool,
     runtime: tokio::runtime::Handle,
     tx: crate::link::Tx,
 }
@@ -217,8 +239,26 @@ impl Runner {
                     false,
                 ),
             },
+            Info::Memory => match &self.memory {
+                Some(m) => ((m.report)(), false),
+                None => (vec!["/memory: not available in this session".into()], true),
+            },
             Info::Agents => {
-                let mut v = vec!["Agents the Task tool can start:".to_string()];
+                let mut v = vec!["Agents in this session (@name routes a line):".to_string()];
+                v.extend(self.harness.agents().into_iter().map(|a| {
+                    format!(
+                        "  @{} · {} · {}{}",
+                        a.name,
+                        a.kind,
+                        a.status,
+                        if a.queued > 0 {
+                            format!(" · {} queued", a.queued)
+                        } else {
+                            String::new()
+                        }
+                    )
+                }));
+                v.push("Types @agent:<type> starts (Task tool and chat):".to_string());
                 v.extend(
                     self.harness
                         .agent_defs()
@@ -313,6 +353,7 @@ impl Runner {
         text: String,
         display_text: Option<String>,
         cancel: tokio_util::sync::CancellationToken,
+        agent: Option<TaskAgent>,
     ) {
         let Some(mut session) = self.session.take() else {
             app.task_done(
@@ -343,11 +384,13 @@ impl Runner {
             display_text,
         };
         let (h, tx) = (self.harness.clone(), self.tx.clone());
+        self.agent_task = agent.is_some();
         let inner = self.runtime.spawn(async move {
-            let r = h
-                .run_task(&mut session, req, cancel)
-                .await
-                .map_err(|e| e.to_string());
+            let r = match agent {
+                Some(a) => h.run_agent_task(&mut session, a, req, cancel).await,
+                None => h.run_task(&mut session, req, cancel).await,
+            }
+            .map_err(|e| e.to_string());
             let warn = match &r {
                 Ok(_) => h.to_idle(&mut session).err().map(|e| e.to_string()),
                 Err(_) => None,
@@ -428,6 +471,10 @@ pub fn run_interactive(mut o: Options, tty: Tty) -> io::Result<Exit> {
         .map(|r| r.history.clone())
         .unwrap_or_default();
     let mut app = App::new(cfg_for(&o), &replay, clock());
+    if let Some(m) = &o.memory {
+        app.set_memory_files(m.user_file.clone(), m.project_file.clone());
+        app.set_note_preview(m.preview.clone());
+    }
     app.startup_notes(&o.startup_notes);
 
     if o.session.status == nemo_core::SessionStatus::Created {
@@ -476,10 +523,12 @@ pub fn run_interactive(mut o: Options, tty: Tty) -> io::Result<Exit> {
 
     let mut runner = Runner {
         mcp_report: o.mcp_report.take(),
+        memory: o.memory.take(),
         harness: o.harness.clone(),
         session: Some(o.session.clone()),
         history,
         last_outcome: None,
+        agent_task: false,
         runtime: o.runtime.clone(),
         tx: tx.clone(),
     };
@@ -652,6 +701,10 @@ pub fn run_interactive(mut o: Options, tty: Tty) -> io::Result<Exit> {
                     dirty = true;
                     urgent = true;
                 }
+                Msg::SendFailed(text, why) => {
+                    app.send_failed(&text, &why);
+                    dirty = true;
+                }
                 Msg::UserCommandDone(d) => {
                     let UserDone {
                         result,
@@ -674,6 +727,7 @@ pub fn run_interactive(mut o: Options, tty: Tty) -> io::Result<Exit> {
                                     nemo_harness::user_command_note().to_string(),
                                     Some(String::new()),
                                     cancel,
+                                    None,
                                 );
                             }
                         }
@@ -692,7 +746,10 @@ pub fn run_interactive(mut o: Options, tty: Tty) -> io::Result<Exit> {
                         runner.session = Some(s);
                     }
                     if let Ok(out) = &result {
-                        runner.history.clone_from(&out.messages);
+                        // a sub-agent's conversation stays with the agent
+                        if !std::mem::take(&mut runner.agent_task) {
+                            runner.history.clone_from(&out.messages);
+                        }
                         runner.last_outcome = Some(out.clone());
                     }
                     app.task_done(&result, now);
@@ -767,7 +824,21 @@ fn exec(
             text,
             display_text,
             cancel,
-        } => runner.start(app, text, display_text, cancel),
+            agent,
+        } => runner.start(app, text, display_text, cancel, agent),
+        Cmd::SendTo { to, text } => {
+            let (h, tx) = (runner.harness.clone(), runner.tx.clone());
+            runner.runtime.spawn(async move {
+                if let Err(e) = h.send_user_message(&to, text.clone()).await {
+                    let _ = tx.send(Msg::SendFailed(text, e));
+                }
+            });
+        }
+        Cmd::CancelAgent(name) => {
+            if !runner.harness.cancel_agent(&name) {
+                app.note(format!("@{name} is not running"), "warn");
+            }
+        }
         Cmd::UserCommand {
             command,
             record_only,
@@ -796,6 +867,12 @@ fn exec(
             let (lines, error) = runner.info(i);
             app.output(lines.join("\n"), error);
         }
+        Cmd::Remember { user, text } => match runner.memory.as_ref().map(|m| (m.save)(user, &text))
+        {
+            Some(Ok(done)) => app.output(done, false),
+            Some(Err(e)) => app.output(format!("# note not saved: {e}"), true),
+            None => app.output("# notes are not available in this session".into(), true),
+        },
         Cmd::Compact { instructions } => runner.compact(app, instructions, now),
         Cmd::Open(t) => match opener.open(&t) {
             Ok(()) => app.toast(format!("opening {}", t.describe()), now, false),
@@ -885,6 +962,7 @@ pub fn render_once(o: &OnceOptions, out: &mut impl Write) -> io::Result<()> {
         saved: o.saved.clone(),
         home: None,
         tz_offset_min: 0,
+        agent_defs: vec![],
     };
     let mut app = App::new(cfg, &o.events, o.now);
     app.startup_notes(&o.startup_notes);

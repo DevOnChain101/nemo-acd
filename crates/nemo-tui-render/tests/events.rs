@@ -31,6 +31,7 @@ fn event_stream_matches_transcript_model() {
             Event::SessionStarted {
                 workspace: WorkspaceInfo {
                     workspace_id: "w".into(),
+                    workspace_key: None,
                     root: "/r".into(),
                     cwd: "/work/proj".into(),
                     additional_dirs: vec![],

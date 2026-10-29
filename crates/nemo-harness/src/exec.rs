@@ -2,9 +2,7 @@
 //! execute -> PostToolUse -> result. Also the harness-run tools: `Task`, `AskUserQuestion`,
 //! `ExitPlanMode`.
 
-use std::collections::BTreeSet;
 use std::hash::{Hash, Hasher};
-use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
@@ -14,7 +12,7 @@ use nemo_events::{Event, Todo, ToolStatus};
 use nemo_hooks::{Decision as HookDecision, HookEvent};
 use nemo_permissions::automode::ClassifierDecision;
 use nemo_permissions::{Decision, Mode, Suggestion, Verdict};
-use nemo_providers::{Block, Content, Message, Role};
+use nemo_providers::Block;
 use nemo_tools::{
     Block as ToolBlock, Content as ToolContent, NeedsUser, SideEffectClass, ToolRuntime, ToolSpec,
 };
@@ -25,9 +23,8 @@ use nemo_verification::{
 use serde_json::{Value, json};
 
 use crate::agent::{Call, Problem};
-use crate::agents::stricter;
 use crate::context::wrap_tool_output;
-use crate::harness::{AgentCtx, AgentEnd, AgentState, Harness, TaskRun};
+use crate::harness::{AgentCtx, Harness, TaskRun};
 use crate::live::{Live, result_artifact};
 use crate::sink::Scope;
 use crate::toolbox::validate;
@@ -329,7 +326,7 @@ impl Harness {
                     origin: None,
                 },
             );
-            if task.cancel.is_cancelled() {
+            if agent.cancel.is_cancelled() {
                 let r = self.not_run(
                     task,
                     agent,
@@ -496,7 +493,9 @@ impl Harness {
             });
         }
         // The interface tools only describe a question; they are not policy-checked here.
-        if spec.runtime == ToolRuntime::Harness && call.name != "Task" {
+        if spec.runtime == ToolRuntime::Harness
+            && !matches!(call.name.as_str(), "Task" | "SendMessage" | "ListAgents")
+        {
             return Plan::Special { input };
         }
         let denied = |d: Denial| {
@@ -1020,14 +1019,16 @@ impl Harness {
             reason,
             suggestions,
         };
+        self.waiting(task, agent, true);
         let a = tokio::select! {
             biased;
-            () = task.cancel.cancelled() => Approval {
+            () = agent.cancel.cancelled() => Approval {
                 reviewer: "policy",
                 ..Approval::deny("Cancelled before the approval was answered.")
             },
-            a = self.approver.approve(req, &task.cancel) => a,
+            a = self.approver.approve(req, &agent.cancel) => a,
         };
+        self.waiting(task, agent, false);
         self.emit(
             task,
             agent,
@@ -1040,7 +1041,7 @@ impl Harness {
                 message: a.message.clone(),
             },
         );
-        if !task.cancel.is_cancelled() {
+        if !agent.cancel.is_cancelled() {
             let back = if before == nemo_core::SessionStatus::Verifying {
                 before
             } else {
@@ -1123,7 +1124,7 @@ impl Harness {
         );
         let out = tokio::select! {
             biased;
-            () = task.cancel.cancelled() => Err(ToolStatus::Interrupted),
+            () = agent.cancel.cancelled() => Err(ToolStatus::Interrupted),
             () = async {
                 match deadline {
                     Some(d) => tokio::time::sleep_until(tokio::time::Instant::from_std(d)).await,
@@ -1364,6 +1365,8 @@ impl Harness {
         let t0 = Instant::now();
         let res = if call.name == "Task" {
             self.run_subagent(task, agent, turn, &call.id, input).await
+        } else if matches!(call.name.as_str(), "SendMessage" | "ListAgents") {
+            self.run_comm(task, agent, &call.name, &input)
         } else {
             self.run_interface(task, agent, turn, call, input).await
         };
@@ -1380,7 +1383,7 @@ impl Harness {
         )
     }
 
-    fn plain(&self, text: impl Into<String>, is_error: bool, status: ToolStatus) -> Res {
+    pub(crate) fn plain(&self, text: impl Into<String>, is_error: bool, status: ToolStatus) -> Res {
         let text = text.into();
         Res {
             content: Value::String(text.clone()),
@@ -1404,7 +1407,7 @@ impl Harness {
         let ctx = self.tool_ctx(task, agent, turn, &call.id);
         let out = tokio::select! {
             biased;
-            () = task.cancel.cancelled() => return self.plain("Interrupted.", true, ToolStatus::Interrupted),
+            () = agent.cancel.cancelled() => return self.plain("Interrupted.", true, ToolStatus::Interrupted),
             o = self.tools.execute(&call.name, input, &ctx) => o,
         };
         let need = out
@@ -1462,8 +1465,8 @@ impl Harness {
         );
         let reply = tokio::select! {
             biased;
-            () = task.cancel.cancelled() => None,
-            r = self.input.ask(&need, &task.cancel) => r,
+            () = agent.cancel.cancelled() => None,
+            r = self.input.ask(&need, &agent.cancel) => r,
         };
         let resolved =
             |decision: &str, reviewer: &str, message: Option<String>| Event::ToolApprovalResolved {
@@ -1473,7 +1476,7 @@ impl Harness {
                 input_changed: false,
                 message,
             };
-        if task.cancel.is_cancelled() {
+        if agent.cancel.is_cancelled() {
             self.emit(
                 task,
                 agent,
@@ -1559,7 +1562,9 @@ impl Harness {
         }
     }
 
-    /// Runs a child agent with its own history. Boxed: the loop calls back into this function.
+    /// Runs a child agent with its own history, now (the result is the tool result) or in the
+    /// background (`run_in_background`: the result arrives later as a message). Boxed: the loop
+    /// calls back into this function.
     fn run_subagent<'a>(
         &'a self,
         task: &'a TaskRun,
@@ -1593,113 +1598,82 @@ impl Harness {
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_string();
-
-            // Never wider than the parent: stricter mode, same rules (copied), subset of tools.
-            let parent_mode = *lock(&parent.mode);
-            let mode = stricter(parent_mode, def.mode.unwrap_or(parent_mode));
-            let perms = {
-                let mut p = lock(&parent.perms).clone();
-                p.set_mode(mode);
-                Arc::new(Mutex::new(p))
-            };
-            let mut allowed: BTreeSet<String> = match &def.tools {
-                Some(t) => t.iter().cloned().collect(),
-                None => self.tools.specs().into_iter().map(|s| s.name).collect(),
-            };
-            // Never delegable, even when the definition lists them: no nesting, no questions to
-            // the user from a child.
-            allowed.retain(|n| !matches!(n.as_str(), "Task" | "AskUserQuestion" | "ExitPlanMode"));
-            if let Some(pa) = &parent.allowed {
-                allowed.retain(|n| pa.contains(n));
-            }
-            let child = AgentCtx {
-                agent_id: Some(uuid()),
-                depth: parent.depth + 1,
-                mode: Mutex::new(mode),
-                perms,
-                allowed: Some(allowed),
-                prompt: Some(def.prompt.clone()),
-            };
-            let info = |reason: Option<String>| nemo_events::SubagentInfo {
-                agent_id: child.agent_id.clone().unwrap_or_default(),
-                agent_type: def.name.clone(),
-                tool_call_id: Some(call_id.to_string()),
-                reason,
-            };
-            self.emit(task, &child, Some(turn), Event::SubagentStarted(info(None)));
-
-            let mut st = AgentState::new(vec![Message {
-                role: Role::User,
-                content: Content::Text(prompt),
-            }]);
-            let end = self.run_agent(task, &child, &mut st).await;
-            let (text, is_error, reason, status) = match end {
-                AgentEnd::Finished(t) if t.trim().is_empty() => (
-                    "(subagent finished with no text output)".to_string(),
-                    false,
-                    "finished",
-                    ToolStatus::Ok,
-                ),
-                AgentEnd::Finished(t) => (t, false, "finished", ToolStatus::Ok),
-                AgentEnd::Cancelled => (
-                    "Interrupted.".into(),
-                    true,
-                    "cancelled",
-                    ToolStatus::Interrupted,
-                ),
-                AgentEnd::Budget(k) => (
-                    format!("Task stopped: budget exceeded ({k})."),
-                    true,
-                    "budget_exceeded",
-                    ToolStatus::BudgetExceeded,
-                ),
-                AgentEnd::NoProgress { .. } => (
-                    "Task stopped: no progress.".into(),
-                    true,
-                    "no_progress",
-                    ToolStatus::Error,
-                ),
-                AgentEnd::ModelError { reason, .. } => (
-                    format!("Task failed: {reason}"),
-                    true,
-                    "model_error",
-                    ToolStatus::Error,
-                ),
-                AgentEnd::UnsafeWorkspace(w) => (
-                    format!("Task stopped: unsafe workspace: {w}"),
-                    true,
-                    "unsafe_workspace",
-                    ToolStatus::Error,
-                ),
-                AgentEnd::Refusal => (
-                    "Task failed: the model refused.".into(),
-                    true,
-                    "refusal",
-                    ToolStatus::Error,
-                ),
-                AgentEnd::Internal(w) => (
-                    format!("Task failed: {w}"),
-                    true,
-                    "internal",
-                    ToolStatus::Error,
-                ),
+            let background = input
+                .get("run_in_background")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let (child, mut st) = match self.new_child(
+                task,
+                parent,
+                def,
+                input.get("name").and_then(Value::as_str),
+                prompt,
+            ) {
+                Ok(c) => c,
+                Err(e) => return self.plain(e, true, ToolStatus::Error),
             };
             self.emit(
                 task,
                 &child,
                 Some(turn),
-                Event::SubagentStopped(info(Some(reason.into()))),
+                Event::SubagentStarted(nemo_events::SubagentInfo {
+                    agent_id: child.agent_id.clone().unwrap_or_default(),
+                    agent_type: def.name.clone(),
+                    tool_call_id: Some(call_id.to_string()),
+                    reason: None,
+                    name: Some(child.name.clone()),
+                    background,
+                }),
             );
-            self.run_hook(
-                task,
-                &child,
-                Some(turn),
-                HookEvent::SubagentStop,
-                json!({"agent_type": def.name, "agent_id": child.agent_id, "stop_reason": reason}),
-                Some(&def.name),
-            )
-            .await;
-
+            let first = (turn.to_string(), call_id.to_string());
+            if background {
+                let info = json!({
+                    "agent_id": child.agent_id,
+                    "name": child.name,
+                    "kind": def.name,
+                    "status": "running",
+                });
+                let job = crate::hub::Job {
+                    name: child.name.clone(),
+                    agent_id: child.agent_id.clone().unwrap_or_default(),
+                    kind: def.name.clone(),
+                    parent: parent.name.clone(),
+                    retained: crate::hub::Retained {
+                        depth: child.depth,
+                        mode: *lock(&child.mode),
+                        perms: child.perms.clone(),
+                        allowed: child.allowed.clone(),
+                        prompt: child.prompt.clone(),
+                        messages: std::mem::take(&mut st.messages),
+                    },
+                    cancel: child.cancel.clone(),
+                    first: Some(first),
+                };
+                return if self.hub.spawn(job) {
+                    self.plain(info.to_string(), false, ToolStatus::Ok)
+                } else {
+                    self.hub.set_status(&child.name, crate::hub::CANCELLED);
+                    self.plain(
+                        "Task: background agents need a running task.",
+                        true,
+                        ToolStatus::Error,
+                    )
+                };
+            }
+            let end = self.run_agent(task, &child, &mut st).await;
+            let (text, is_error, _, status) = self
+                .conclude(
+                    task,
+                    &child,
+                    &def.name,
+                    Some(&first),
+                    Some(turn),
+                    false,
+                    None,
+                    st.messages,
+                    end,
+                )
+                .await;
             let content = if is_error {
                 Value::String(text.clone())
             } else {

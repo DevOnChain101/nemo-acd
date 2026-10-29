@@ -215,7 +215,12 @@ pub struct FakeProvider {
     caps: ProviderCapabilities,
     script: Mutex<VecDeque<Turn>>,
     requests: Mutex<Vec<Request>>,
+    responder: Option<Responder>,
 }
+
+/// Chooses the answer from the request (for tests with several agents asking in any order);
+/// `None` falls back to the script.
+pub type Responder = Arc<dyn Fn(&Request) -> Option<Turn> + Send + Sync>;
 
 impl FakeProvider {
     pub fn new(turns: impl IntoIterator<Item = Turn>) -> Self {
@@ -223,7 +228,13 @@ impl FakeProvider {
             caps: ProviderCapabilities::defaults(Protocol::Anthropic),
             script: Mutex::new(turns.into_iter().collect()),
             requests: Mutex::default(),
+            responder: None,
         }
+    }
+
+    pub fn with_responder(mut self, f: Responder) -> Self {
+        self.responder = Some(f);
+        self
     }
 
     pub fn with_caps(mut self, caps: ProviderCapabilities) -> Self {
@@ -261,11 +272,12 @@ impl ModelProvider for FakeProvider {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .push(req.clone());
-        let turn = self
-            .script
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .pop_front();
+        let turn = self.responder.as_ref().and_then(|f| f(req)).or_else(|| {
+            self.script
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .pop_front()
+        });
         let steps: VecDeque<Step> = match turn {
             Some(t) => t.steps.into(),
             None => [Step::Fail(ProviderError::new(

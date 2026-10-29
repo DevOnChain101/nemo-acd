@@ -39,23 +39,8 @@ pub struct ToolOutcome {
     pub blocked: Option<String>,
 }
 
-/// Keeps command text and output from closing the delimiter that frames them.
-/// Any `<`, `</`, `< /` ... before `user-bash` (any case, spaces allowed) loses its `<`.
 fn fence(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for (i, c) in s.char_indices() {
-        let is_tag = c == '<' && {
-            let rest = s[i + 1..].trim_start().trim_start_matches('/').trim_start();
-            rest.get(..9)
-                .is_some_and(|t| t.eq_ignore_ascii_case("user-bash"))
-        };
-        out.push_str(if is_tag {
-            "&lt;"
-        } else {
-            &s[i..i + c.len_utf8()]
-        });
-    }
-    out
+    crate::context::fence("user-bash", s)
 }
 
 /// Text of the model turn that follows a `!cmd` (a note from the harness, not the person).

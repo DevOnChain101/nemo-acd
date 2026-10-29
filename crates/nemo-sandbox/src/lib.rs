@@ -163,10 +163,20 @@ impl SandboxPolicy {
             writable_roots: vec![workspace_root.to_path_buf()],
             tmp_dir: Some(tmp_dir.to_path_buf()),
             deny_paths: deny,
-            readonly_paths: vec![
-                workspace_root.join(".git/hooks"),
-                workspace_root.join(".git/config"),
-            ],
+            // The root is writable, so everything Nemo or git later trusts as code or prompt must
+            // be read-only: hooks/config (also of submodules), project settings (hooks, MCP,
+            // agents, skills) and the instruction files loaded as trusted context.
+            readonly_paths: [
+                ".git/hooks",
+                ".git/config",
+                ".git/modules",
+                ".gitmodules",
+                ".nemo",
+                "NEMO.md",
+                "AGENTS.md",
+            ]
+            .map(|p| workspace_root.join(p))
+            .to_vec(),
             ..Self::default()
         }
     }
@@ -412,6 +422,23 @@ fn canon_lossy(p: &Path) -> PathBuf {
     }
 }
 
+/// Nemo's own state under `nemo_home` that a sandboxed command must neither read nor write:
+/// credentials, settings, the session database (prompts, tool output), the memory store and
+/// `projects/` (transcripts, imported notes).
+pub fn nemo_state_paths(nemo_home: &Path) -> Vec<PathBuf> {
+    [
+        "auth.json",
+        "settings.json",
+        "nemo.db",
+        "nemo.db-wal",
+        "nemo.db-shm",
+        "memory",
+        "projects",
+    ]
+    .map(|n| nemo_home.join(n))
+    .to_vec()
+}
+
 /// Credential / secret stores under a user profile that the standard policy hides.
 fn credential_paths(home: &Path, appdata: Option<&Path>, local: Option<&Path>) -> Vec<PathBuf> {
     let mut v: Vec<PathBuf> = [
@@ -440,8 +467,6 @@ fn credential_paths(home: &Path, appdata: Option<&Path>, local: Option<&Path>) -
         "Library/Keychains",
         ".bash_history",
         ".zsh_history",
-        ".nemo/auth.json",
-        ".nemo/settings.json",
         ".cargo/credentials",
         ".cargo/credentials.toml",
         ".config/rclone",
@@ -453,6 +478,7 @@ fn credential_paths(home: &Path, appdata: Option<&Path>, local: Option<&Path>) -
     .iter()
     .map(|d| home.join(d))
     .collect();
+    v.extend(nemo_state_paths(&home.join(".nemo")));
     v.extend(
         appdata
             .into_iter()
@@ -628,6 +654,15 @@ mod tests {
         assert_eq!(pol.tmp_dir.as_deref(), Some(p("/ws-tmp").as_path()));
         assert!(pol.readonly_paths.contains(&ws.join(".git/hooks")));
         assert!(pol.readonly_paths.contains(&ws.join(".git/config")));
+        for p in [
+            ".git/modules",
+            ".gitmodules",
+            ".nemo",
+            "NEMO.md",
+            "AGENTS.md",
+        ] {
+            assert!(pol.readonly_paths.contains(&ws.join(p)), "{p}");
+        }
         assert_eq!(
             pol.deny_paths.contains(&"/run/docker.sock".into()),
             cfg!(unix)
@@ -648,6 +683,9 @@ mod tests {
             ".config/gcloud",
             ".azure",
             ".nemo/auth.json",
+            ".nemo/nemo.db",
+            ".nemo/nemo.db-wal",
+            ".nemo/memory",
             ".zsh_history",
             ".mozilla",
         ] {

@@ -12,6 +12,7 @@
 | 1.1 | 2026-10-26 | Core engine mandated in Rust; existing Node.js CLI becomes the frozen reference implementation; roadmap, risks, ADRs and appendices updated |
 | 1.2 | 2026-10-29 | Inter-agent messaging: in-session sub-agents and cross-session peers (§5.13, FR-14, ADR-012, roadmap R10, acceptance tests, risk); spec `docs/specs/messaging.md` |
 | 1.3 | 2026-10-29 | Long-term memory, draft (§5.5.1, FR-15, ADR-013, Phase 7, roadmap R11, acceptance tests, risk, open decision 13); spec `docs/specs/memory.md` |
+| 1.4 | 2026-10-29 | ADR-012 and ADR-013 accepted with all recommendations of the owner (messaging D9–D16, memory D1–D8); memory phase M0 (audit findings F1–F7) implemented |
 
 ---
 
@@ -259,7 +260,7 @@ Provider selection changes generation; it does not change the meaning or authori
 
 **Initial memory implementation:** structured local session store + project instruction files + task summaries. A vector index is optional, not required for MVP.
 
-#### 5.5.1 Long-term memory (draft, ADR-013)
+#### 5.5.1 Long-term memory (ADR-013, accepted)
 
 Normative spec: `docs/specs/memory.md` (it includes the audit of today's memory). Today Nemo has only session memory (history, compaction summary, `TaskState`) and static instruction files (`$NEMO_HOME/NEMO.md`, per-directory `NEMO.md`/`AGENTS.md`/`CLAUDE.md`). It learns nothing across sessions. Long-term memory adds learning in the spirit of Hermes Agent, Claude Code auto memory and Codex memories.
 
@@ -623,8 +624,8 @@ The Session Manager can route a session to a remote worker running the same tool
 | ADR-009 | Defer complex multi-agent orchestration (amended by ADR-012) | Single-agent success and safety are foundational |
 | ADR-010 | Core engine is implemented in Rust; Node CLI is a frozen reference until cutover | Native cross-OS binary without Node runtime, access to OS sandbox primitives, crates shareable with GPUI. Cost: rewrite effort, unverified crate maturity, a dual-maintenance window while both implementations exist |
 | ADR-011 | Model access uses API keys only; no subscription/OAuth login flows | Anthropic and OpenAI do not permit third-party coding agents to authenticate through consumer subscriptions; API keys are the supported path (the Node CLI already works this way). Users manage their own keys through `NEMO_*` environment variables (no other env prefix is ever read) or provider config substitution; Nemo does not store credentials in a keychain and does not write them to disk. Bearer-style keys for Anthropic-compatible gateways remain API keys. Cost: users need billed API access and handle key hygiene themselves; no subscription-priced usage |
-| ADR-012 | Inter-agent messaging without an orchestrator: in-session via an in-process per-session hub (named/background/resumable sub-agents, `SendMessage`, `@agent`); cross-session via a per-session local endpoint (Unix socket / Windows named pipe, NDJSON, mutual HMAC, same OS user only) answered by a read-only responder forked from the addressed agent's context; fully qualified `ws/sess/agent` addresses that never resolve by guessing. Amends ADR-009: messaging is allowed; planners and orchestrators stay deferred | Reuses tokio `net` and the session lock, with no TCP/HTTP server and no polling; the receiver's own policy decides what leaves it. Cost: per-OS endpoint code and a Windows ACL assumption to verify; same-user processes can impersonate a peer (sandbox R7 mitigates); queued in-session messages are lost on a crash; responder runs cost the receiver's tokens. Peers are off by default |
-| ADR-013 | Long-term memory is a separate local SQLite store (`$NEMO_HOME/memory/memory.db`) of typed, scoped records with provenance and evidence-derived trust. Retrieval is FTS5/BM25 into a budgeted, frozen `<memory>` data block, with an on-demand `MemorySearch`. A bounded reflection loop runs on a small model, after deterministic episodes are written. Memory is data, never instructions or permission grants; skills and instruction files change only through owner-applied proposals (draft, specs/memory.md) | Own lifecycle, migrations, export and deletion, apart from sessions; no new dependency (the bundled SQLite has FTS5/JSON1). Cost: one store shared by all repos (mitigated by scope filters, quarantine and backups); trust heuristics can misclassify; reflection spends tokens; the benefit is unproven until the R11 evaluation, and injection stays default-on only if that evaluation passes |
+| ADR-012 | **Status: Accepted (2026-10-29).** Inter-agent messaging without an orchestrator: in-session via an in-process per-session hub (named/background/resumable sub-agents, `SendMessage`, `@agent`); cross-session via a per-session local endpoint (Unix socket / Windows named pipe, NDJSON, mutual HMAC, same OS user only) answered by a read-only responder forked from the addressed agent's context; fully qualified `ws/sess/agent` addresses that never resolve by guessing. Amends ADR-009: messaging is allowed; planners and orchestrators stay deferred | Reuses tokio `net` and the session lock, with no TCP/HTTP server and no polling; the receiver's own policy decides what leaves it. Cost: per-OS endpoint code and a Windows ACL assumption to verify; same-user processes can impersonate a peer (sandbox R7 mitigates); queued in-session messages are lost on a crash; responder runs cost the receiver's tokens. Peers are off by default |
+| ADR-013 | **Status: Accepted (2026-10-29).** Long-term memory is a separate local SQLite store (`$NEMO_HOME/memory/memory.db`) of typed, scoped records with provenance and evidence-derived trust. Retrieval is FTS5/BM25 into a budgeted, frozen `<memory>` data block, with an on-demand `MemorySearch`. A bounded reflection loop runs on a small model, after deterministic episodes are written. Memory is data, never instructions or permission grants; skills and instruction files change only through owner-applied proposals (specs/memory.md) | Own lifecycle, migrations, export and deletion, apart from sessions; no new dependency (the bundled SQLite has FTS5/JSON1). Cost: one store shared by all repos (mitigated by scope filters, quarantine and backups); trust heuristics can misclassify; reflection spends tokens; the benefit is unproven until the R11 evaluation, and injection stays default-on only if that evaluation passes |
 
 ---
 
@@ -768,8 +769,8 @@ These decisions should be validated against the existing Nemo implementation rat
 9. **Browser backend under Rust:** Playwright sidecar vs direct CDP (time-boxed spike).
 10. **Windows sandbox level:** what guarantees are achievable with Job Objects/AppContainer?
 11. **Daemon vs in-process:** shared crates make both feasible; decide by session-durability needs.
-12. **Peer messaging defaults:** open decisions D9–D16 in `docs/specs/messaging.md` §D (peers default off, responder model, reply confirmation, offline resume, responder cost, `hmac` dependency, worktree keying).
-13. **Long-term memory defaults:** open decisions D1–D8 in `docs/specs/memory.md` §15 (default on/off, approval of learned skills, repository vs worktree key, separate DB, reflection model and cap, raw history search, project opt-out, retention).
+12. **Peer messaging defaults (accepted 2026-10-29, all recommendations; `docs/specs/messaging.md` §D):** D9–D16 (peers default off, responder model, reply confirmation, offline resume, responder cost, `hmac` dependency, worktree keying).
+13. **Long-term memory defaults (accepted 2026-10-29, all recommendations; `docs/specs/memory.md` §15):** D1–D8 (default on/off, approval of learned skills, repository vs worktree key, separate DB, reflection model and cap, raw history search, project opt-out, retention).
 
 ---
 

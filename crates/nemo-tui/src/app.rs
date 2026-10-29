@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use nemo_events::{Budget, Envelope, Event};
-use nemo_harness::{Approval, DENY_MESSAGE, TaskOutcome, UserReply};
+use nemo_harness::{Approval, DENY_MESSAGE, TaskAgent, TaskOutcome, UserReply};
 use nemo_permissions::{Mode, Suggestion};
 use nemo_tools::NeedsUser;
 use nemo_tui_base::complete::{self, Command as CmdDef, StdFs};
@@ -40,6 +40,7 @@ use tokio_util::sync::CancellationToken;
 use crate::chat::Chat;
 use crate::link::{ApprovalAsk, InputAsk};
 use crate::links::{OpenTarget, existing_path, path_at, url_at};
+use crate::route::{self, Known, Route};
 use crate::sanitize::{clean_input, clean_input_lines, clean_line, clean_text};
 use crate::status::{SandboxStatus, StatusExtra, status_line_with};
 use crate::{ExitReason, SavedSession};
@@ -85,6 +86,8 @@ pub(crate) struct AppConfig {
     pub saved: Vec<SavedSession>,
     pub home: Option<PathBuf>,
     pub tz_offset_min: i32,
+    /// Agent definitions `@agent:<name>` can start.
+    pub agent_defs: Vec<String>,
 }
 
 /// Effects for the runtime.
@@ -95,7 +98,17 @@ pub(crate) enum Cmd {
         /// What the pane shows instead of `text` (`Some("")`: nothing, a note to the model).
         display_text: Option<String>,
         cancel: CancellationToken,
+        /// A sub-agent answers instead of the main agent.
+        agent: Option<TaskAgent>,
     },
+    /// A line for a running agent (`main` or an instance): the harness delivers it at the
+    /// agent's next safe point, and wakes an idle sub-agent.
+    SendTo {
+        to: String,
+        text: String,
+    },
+    /// Esc on a background sub-agent: cancel that agent only.
+    CancelAgent(String),
     /// `!cmd` / `!!cmd`: run a shell command the user typed (explicit intent) and add it with
     /// its output to the conversation; `record_only` (`!!`) gives the model no turn for it.
     UserCommand {
@@ -122,6 +135,11 @@ pub(crate) enum Cmd {
     PasteClipboard,
     /// `/mcp`, `/agents`, `/permissions`: the host answers with text for the pane.
     Info(Info),
+    /// The person confirmed saving a `#` note to the user (`true`) or project instruction file.
+    Remember {
+        user: bool,
+        text: String,
+    },
     /// `/compact [instructions]`: the host asks the harness to compact the conversation.
     Compact {
         instructions: Option<String>,
@@ -131,6 +149,7 @@ pub(crate) enum Cmd {
 #[derive(Debug)]
 pub(crate) enum Info {
     Mcp,
+    Memory,
     Agents,
     Permissions(PermAction),
 }
@@ -183,6 +202,8 @@ enum PickerKind {
     Resume,
     /// "Bypass permissions?" yes/no.
     BypassConfirm,
+    /// Where a `#` note goes: project file, user file, or nowhere.
+    Remember,
 }
 
 struct PickerState {
@@ -227,7 +248,12 @@ struct Toast {
 struct TaskState {
     cancel: CancellationToken,
     cancelling: bool,
+    /// The sub-agent this task runs as (`None`: the main agent).
+    agent: Option<String>,
 }
+
+/// Host rendering of a `#` note as it will be saved.
+pub(crate) type NotePreview = std::rc::Rc<dyn Fn(&str) -> String>;
 
 pub(crate) struct App {
     pub cfg: AppConfig,
@@ -246,6 +272,13 @@ pub(crate) struct App {
     picker: Option<PickerState>,
     /// Set only by the bypass confirmation; cleared when the mode leaves bypass.
     bypass_confirmed: bool,
+    /// Display paths of the (user, project) instruction files `#` notes can go to; `None` = the
+    /// host cannot save notes.
+    memory_files: Option<(String, String)>,
+    /// The `#` note waiting for the person's choice of file.
+    pending_note: Option<String>,
+    /// The host's rendering of a note as it will be saved (secrets masked, `@` defanged).
+    note_preview: Option<NotePreview>,
     /// Mode changes made while handling one key, sent to the host as `Cmd::SetMode`.
     mode_changes: Vec<(Mode, bool)>,
     search: Option<HistSearch>,
@@ -254,6 +287,8 @@ pub(crate) struct App {
     sug_selected: usize,
     sug_dismissed: Option<String>,
     task: Option<TaskState>,
+    /// Where lines go when they carry no address: `None` = main.
+    target: Option<String>,
     /// Messages entered while a task runs, sent one per finished task (oldest first).
     queue: Vec<String>,
     /// Big pastes live in the prompt as a chip and are expanded when the prompt is sent.
@@ -302,7 +337,16 @@ fn local_commands() -> Vec<CmdDef> {
             "[auto|low|medium|high]",
         ),
         c("mcp", "MCP servers: state, tools, errors", ""),
-        c("agents", "agent types the Task tool can start", ""),
+        c(
+            "memory",
+            "loaded instruction files, and where # notes are saved",
+            "",
+        ),
+        c(
+            "agents",
+            "agents of this session and the types you can start",
+            "",
+        ),
         c(
             "permissions",
             "mode and rules; allow / remove a rule",
@@ -397,6 +441,9 @@ impl App {
             chat.apply(e, parse_ts(&e.ts).unwrap_or(now));
         }
         chat.agent.status = "idle".into();
+        // agents of an earlier run are gone with its process
+        chat.agents.clear();
+        chat.inflight.clear();
         let ran_task = replay
             .iter()
             .any(|e| matches!(e.event, Event::TaskEnded { .. }));
@@ -412,6 +459,9 @@ impl App {
             expanded: false,
             dialogs: vec![],
             bypass_confirmed: false,
+            memory_files: None,
+            pending_note: None,
+            note_preview: None,
             mode_changes: vec![],
             armed: None,
             paste_quiet_until: 0,
@@ -422,6 +472,7 @@ impl App {
             sug_selected: 0,
             sug_dismissed: None,
             task: None,
+            target: None,
             queue: vec![],
             pastes: vec![],
             esc_at: None,
@@ -445,6 +496,13 @@ impl App {
     pub fn on_event(&mut self, env: &Envelope, now: i64) {
         apply_event(&mut self.activity, env);
         self.chat.apply(env, now);
+        if self
+            .target
+            .as_ref()
+            .is_some_and(|t| self.chat.agents.iter().all(|r| r.name != *t))
+        {
+            self.target = None;
+        }
         if matches!(
             env.event,
             Event::UserMessage { .. } | Event::TaskEnded { .. }
@@ -656,6 +714,18 @@ impl App {
         if let Err(e) = result {
             self.chat.note(format!("task failed to run: {e}"), "error");
         }
+        // lines the agent never read come back to the prompt
+        let lines = std::mem::take(&mut self.chat.dropped_lines);
+        self.chat.inflight.clear();
+        if !lines.is_empty() {
+            if self.editor.chars.is_empty() {
+                self.editor.set(&lines.join("\n"));
+            }
+            self.chat.note(
+                "a line was not delivered before the task ended · it is back in the prompt",
+                "warn",
+            );
+        }
         let _ = now;
     }
 
@@ -794,6 +864,19 @@ impl App {
         self.editor.chars.first() == Some(&'!')
     }
 
+    /// Memory prompt: the text starts with a typed `#`; the note is saved only after a confirmation.
+    fn memory(&self) -> bool {
+        self.editor.chars.first() == Some(&'#')
+    }
+
+    pub fn set_note_preview(&mut self, f: NotePreview) {
+        self.note_preview = Some(f);
+    }
+
+    pub fn set_memory_files(&mut self, user: String, project: String) {
+        self.memory_files = Some((user, project));
+    }
+
     /// A user command finished. `err` = the harness could not run it at all.
     pub fn command_done(&mut self, err: Option<&str>) {
         self.task = None;
@@ -812,6 +895,7 @@ impl App {
         self.task = Some(TaskState {
             cancel: cancel.clone(),
             cancelling: false,
+            agent: None,
         });
         self.chat.agent.status = "running".into();
         self.chat.agent.turn_start = now;
@@ -841,16 +925,21 @@ impl App {
                 self.scroll = 0; // typing brings the view back to the prompt
                 if t == "?" && self.editor.chars.is_empty() {
                     self.run_slash("help", "", now, out);
-                } else if t.starts_with('!') && t != "!" && self.editor.cur == 0 {
-                    // only a typed `!` starts a shell command, never a burst of characters
+                } else if t.starts_with(['!', '#', '@'])
+                    && !matches!(t.as_str(), "!" | "#" | "@")
+                    && self.editor.cur == 0
+                {
+                    // only a typed `!` / `#` / `@` starts a shell command / note / agent message,
+                    // never a burst of characters
                     self.editor.insert(&format!(" {t}"));
                 } else {
                     self.editor.insert(t);
                 }
             }
             Key::Paste(t) => {
-                // pasted text never becomes a shell command by itself: type the `!` yourself
-                let t = if self.editor.cur == 0 && t.starts_with('!') {
+                // pasted text never becomes a shell command (or an agent message) by itself: type
+                // the `!` / `@` yourself
+                let t = if self.editor.cur == 0 && t.starts_with(['!', '#', '@']) {
                     format!(" {t}")
                 } else {
                     t.clone()
@@ -875,6 +964,7 @@ impl App {
     fn named(&mut self, n: Named, now: i64, out: &mut Vec<Cmd>) {
         use Named::*;
         let recall_queue = self.editor.chars.is_empty() && !self.queue.is_empty();
+        let tab_cycles = self.editor.chars.is_empty() && self.dialogs.is_empty();
         let e = &mut self.editor;
         match n {
             Enter => {
@@ -919,9 +1009,12 @@ impl App {
                 // or (twice in a row on an empty prompt) edit the last prompt
                 if !self.queue.is_empty() {
                     self.cancel_queue(now);
+                } else if let Some(t) = self.esc_agent() {
+                    // the current target only; ctrl+c cancels the whole task
+                    out.push(Cmd::CancelAgent(t));
                 } else if self.interrupt() {
                     self.esc_at = None;
-                } else if self.bash() {
+                } else if self.bash() || self.memory() {
                     self.editor.clear();
                 } else if !self.editor.chars.is_empty() {
                     self.esc_at = None;
@@ -934,6 +1027,7 @@ impl App {
                     self.esc_at = Some(now);
                 }
             }
+            Tab if tab_cycles => self.cycle_target(),
             CtrlR => {
                 let from = e.history.len() as i64 - 1;
                 let (matched, at) = self.search_history("", from);
@@ -1038,6 +1132,14 @@ impl App {
         if text.trim().is_empty() {
             return;
         }
+        if self.memory() {
+            let note = text.trim_start_matches('#').trim().to_string();
+            if !note.is_empty() {
+                self.editor.submit();
+                self.ask_where_to_remember(note);
+            }
+            return;
+        }
         if self.bash() {
             if bang_command(&text).1.is_empty() {
                 return;
@@ -1063,10 +1165,152 @@ impl App {
         for (chip, full) in self.pastes.drain(..) {
             text = text.replace(&chip, &full);
         }
+        self.route_submit(text, now, out);
+    }
+
+    // ------------------------------------------------------------------ agents
+
+    fn row(&self, name: &str) -> Option<&crate::chat::AgentRow> {
+        self.chat.agents.iter().find(|r| r.name == name)
+    }
+
+    fn set_target(&mut self, name: &str) {
+        self.target = (name != "main").then(|| name.to_string());
+        self.chat.note(format!("now talking to @{name}"), "");
+    }
+
+    /// Tab on an empty prompt: main, then the agents of this session, then main again.
+    fn cycle_target(&mut self) {
+        let mut order = vec!["main".to_string()];
+        order.extend(self.chat.agents.iter().map(|r| r.name.clone()));
+        let cur = self.target.clone().unwrap_or_else(|| "main".into());
+        let i = order.iter().position(|n| *n == cur).map_or(0, |i| i + 1);
+        let next = order[i % order.len()].clone();
+        self.set_target(&next);
+    }
+
+    /// Esc while the target is a background agent that is running next to the task.
+    fn esc_agent(&self) -> Option<String> {
+        let t = self.target.as_ref()?;
+        let driving = self.task.as_ref()?.agent.as_deref() == Some(t.as_str());
+        let live = self
+            .row(t)
+            .is_some_and(|r| r.status == "running" || r.status == "waiting_approval");
+        (!driving && live).then(|| t.clone())
+    }
+
+    /// Reads the first word of a submitted line (messaging.md A5) and sends the rest where it says.
+    fn route_submit(&mut self, text: String, now: i64, out: &mut Vec<Cmd>) {
+        let names: Vec<String> = self.chat.agents.iter().map(|r| r.name.clone()).collect();
+        let cwd = PathBuf::from(&self.cfg.cwd);
+        let known = Known {
+            names: &names,
+            defs: &self.cfg.agent_defs,
+        };
+        match route::parse(&text, &known, |n| cwd.join(n).exists()) {
+            Route::None => match self.target.clone() {
+                Some(t) if !text.starts_with('!') => self.send_to(&t, text, now, out),
+                _ => self.send_to("main", text, now, out),
+            },
+            Route::To { name, rest, hint } => {
+                if let Some(h) = hint {
+                    self.chat.note(h, "");
+                }
+                if rest.is_empty() {
+                    self.set_target(&name);
+                } else {
+                    self.send_to(&name, rest, now, out);
+                }
+            }
+            Route::Start { def, rest } if rest.is_empty() => self.chat.note(
+                format!("write a message after @agent:{def} to start it"),
+                "warn",
+            ),
+            // one task at a time: the start waits like any queued line and is read again then
+            Route::Start { .. } if self.running() => self.queue.push(text),
+            Route::Start { def, rest } => self.dispatch_agent(TaskAgent::New(def), rest, now, out),
+            Route::Unknown(n) => self.chat.note(
+                format!("@agent:{n}: no such agent or agent type · /agents lists them"),
+                "error",
+            ),
+            Route::Later(w) => self.chat.note(
+                format!("@{w}: addressing another session is not available yet"),
+                "warn",
+            ),
+        }
+    }
+
+    fn send_to(&mut self, name: &str, text: String, now: i64, out: &mut Vec<Cmd>) {
         if self.running() {
-            self.queue.push(text);
-        } else {
+            let own_task = self.task.as_ref().and_then(|t| t.agent.as_deref());
+            let main_busy_elsewhere = name == "main" && own_task.is_some();
+            // `!cmd` and a main line during a sub-agent's task wait for the task to end
+            if text.starts_with('!') || main_busy_elsewhere {
+                self.queue.push(text);
+            } else {
+                out.push(Cmd::SendTo {
+                    to: name.to_string(),
+                    text,
+                });
+            }
+        } else if name == "main" {
             self.dispatch(text, now, out);
+        } else {
+            match self.row(name).map(|r| r.status.as_str()) {
+                Some("idle" | "cancelled") => {
+                    self.dispatch_agent(TaskAgent::Existing(name.to_string()), text, now, out);
+                }
+                Some(s) => self.chat.note(format!("@{name} is {s}"), "warn"),
+                None => self.chat.note(format!("@{name}: no such agent"), "error"),
+            }
+        }
+    }
+
+    fn dispatch_agent(&mut self, agent: TaskAgent, text: String, now: i64, out: &mut Vec<Cmd>) {
+        let cancel = self.begin_followup(now);
+        self.clear_selection();
+        if let TaskAgent::Existing(n) = &agent {
+            if let Some(r) = self.chat.agents.iter_mut().find(|r| r.name == *n) {
+                r.show = true;
+            }
+            if let Some(t) = self.task.as_mut() {
+                t.agent = Some(n.clone());
+            }
+        }
+        out.push(Cmd::StartTask {
+            text,
+            display_text: None,
+            cancel,
+            agent: Some(agent),
+        });
+    }
+
+    fn agent_rows(&self) -> Vec<String> {
+        let mut rows: Vec<&crate::chat::AgentRow> = self.chat.agents.iter().collect();
+        rows.sort_by_key(|r| r.status == "idle");
+        rows.into_iter()
+            .map(|r| {
+                format!(
+                    "{} ({}) {} · {} tools{}",
+                    r.name,
+                    r.kind,
+                    r.status,
+                    r.tools,
+                    if r.queued > 0 {
+                        format!(" · {} queued", r.queued)
+                    } else {
+                        String::new()
+                    }
+                )
+            })
+            .collect()
+    }
+
+    /// The host could not hand a line to its agent: it goes back to the prompt.
+    pub fn send_failed(&mut self, text: &str, why: &str) {
+        self.chat.note(format!("not sent: {why}"), "error");
+        if self.editor.chars.is_empty() {
+            self.editor.set(text);
         }
     }
 
@@ -1089,6 +1333,7 @@ impl App {
             text,
             display_text: None,
             cancel,
+            agent: None,
         });
     }
 
@@ -1098,7 +1343,7 @@ impl App {
         if self.task.is_none() && !self.compacting && self.quit.is_none() && !self.queue.is_empty()
         {
             let t = self.queue.remove(0);
-            self.dispatch(t, now, &mut out);
+            self.route_submit(t, now, &mut out);
         }
         out
     }
@@ -1172,6 +1417,7 @@ impl App {
             }
             "effort" => self.set_effort(arg, out),
             "mcp" => out.push(Cmd::Info(Info::Mcp)),
+            "memory" => out.push(Cmd::Info(Info::Memory)),
             "agents" => out.push(Cmd::Info(Info::Agents)),
             "permissions" | "perms" => {
                 let (sub, rule) = arg.split_once(char::is_whitespace).unwrap_or((arg, ""));
@@ -1195,6 +1441,46 @@ impl App {
             other => self.out_item(format!("unknown command: /{other} (try /help)"), true),
         }
         let _ = now;
+    }
+
+    /// `# note`: nothing is written until the person picks a file here (Esc saves nothing). The
+    /// host redacts secrets from the note before it is written.
+    fn ask_where_to_remember(&mut self, note: String) {
+        let Some((user, project)) = self.memory_files.clone() else {
+            self.out_item("# notes are not available in this session", true);
+            return;
+        };
+        let item = |label: &str, detail: String, current| PickerItem {
+            label: label.into(),
+            detail,
+            current,
+        };
+        let items = vec![
+            (
+                item("No, do not save", "esc also cancels".into(), true),
+                "no".to_string(),
+            ),
+            (
+                item("Save to the project file", project, false),
+                "project".into(),
+            ),
+            (item("Save to the user file", user, false), "user".into()),
+        ];
+        let shown = self
+            .note_preview
+            .as_ref()
+            .map_or_else(|| note.clone(), |f| f(&note));
+        self.pending_note = Some(note);
+        self.open_picker(
+            PickerKind::Remember,
+            "Remember this note?",
+            &format!(
+                "will be saved as: - {} (part of the instructions of later sessions)",
+                crate::sanitize::clean_line(&shown)
+            ),
+            items,
+            PathBuf::new(),
+        );
     }
 
     /// Esc, "No" (the first item) or anything but "Yes" keeps the current mode.
@@ -1340,7 +1626,7 @@ impl App {
     ) {
         let (pi, values): (Vec<_>, Vec<_>) = items.into_iter().unzip();
         let mut picker = Picker::new(title, title, sub, pi);
-        picker.no_filter = kind == PickerKind::BypassConfirm;
+        picker.no_filter = matches!(kind, PickerKind::BypassConfirm | PickerKind::Remember);
         self.picker = Some(PickerState {
             kind,
             picker,
@@ -1524,7 +1810,10 @@ impl App {
         };
         let p = &mut ps.picker;
         match k {
-            Key::Named(Named::Escape | Named::CtrlC) => self.picker = None,
+            Key::Named(Named::Escape | Named::CtrlC) => {
+                self.picker = None;
+                self.pending_note = None;
+            }
             // the ring goes on past bypass: one press = one step, never swallowed by the dialog
             Key::Named(Named::ShiftTab) if ps.kind == PickerKind::BypassConfirm => {
                 self.picker = None;
@@ -1591,6 +1880,16 @@ impl App {
                     self.mode = Mode::BypassPermissions;
                     self.bypass_confirmed = true;
                     self.mode_changed();
+                }
+            }
+            PickerKind::Remember => {
+                self.picker = None;
+                let note = self.pending_note.take();
+                if let (Some(text), "user" | "project") = (note, value) {
+                    out.push(Cmd::Remember {
+                        user: value == "user",
+                        text,
+                    });
                 }
             }
             PickerKind::Command => {
@@ -1666,7 +1965,11 @@ impl App {
     // ------------------------------------------------------------------ suggestions
 
     fn refresh_suggestions(&mut self, now: i64) {
-        if !self.dialogs.is_empty() || self.picker.is_some() || self.search.is_some() || self.bash()
+        if !self.dialogs.is_empty()
+            || self.picker.is_some()
+            || self.search.is_some()
+            || self.bash()
+            || self.memory()
         {
             self.sug = None;
             self.sug_view.clear();
@@ -1682,6 +1985,26 @@ impl App {
         let mut opts = complete::Options::new(&cwd);
         opts.commands = &self.commands;
         opts.limit = 50;
+        // agents are offered at the start of the message only (the picker checks the position)
+        let mut refs = vec![complete::AgentRef {
+            id: "main".into(),
+            kind: Some("main".into()),
+            status: Some("this session".into()),
+            ..complete::AgentRef::default()
+        }];
+        refs.extend(self.chat.agents.iter().map(|r| complete::AgentRef {
+            id: r.name.clone(),
+            kind: Some(r.kind.clone()),
+            status: Some(r.status.clone()),
+            queued: r.queued as usize,
+            start_new: false,
+        }));
+        refs.extend(self.cfg.agent_defs.iter().map(|d| complete::AgentRef {
+            id: d.clone(),
+            start_new: true,
+            ..complete::AgentRef::default()
+        }));
+        opts.agents = &refs;
         let next = complete::suggest(&self.editor, &opts, &StdFs);
         let same = match (&next, &self.sug) {
             (Some(a), Some(b)) => a.token == b.token,
@@ -2535,13 +2858,36 @@ impl App {
             waiting: !self.dialogs.is_empty(),
             busy: self.chat.agent.status != "idle",
         }];
-        let bash = self.bash();
+        let lead = self.bash() || self.memory();
         let mut opts = AgentOpts {
-            input_mode: bash.then(|| "bash".to_string()),
+            input_mode: if self.bash() {
+                Some("bash".to_string())
+            } else {
+                self.memory().then(|| "memory".to_string())
+            },
             scroll: self.scroll,
             expanded: self.expanded,
             selected: self.sug_selected,
-            queued: self.queue.clone(),
+            queued: self
+                .queue
+                .iter()
+                .cloned()
+                .chain(self.chat.inflight.iter().map(|(_, t)| t.clone()))
+                .collect(),
+            agent_rows: self.agent_rows(),
+            route: self.target.as_ref().map(|t| {
+                let (st, q) = self
+                    .row(t)
+                    .map_or(("gone", 0), |r| (r.status.as_str(), r.queued));
+                format!(
+                    "@{t} · {st}{}",
+                    if q > 0 {
+                        format!(" · {q} queued")
+                    } else {
+                        String::new()
+                    }
+                )
+            }),
             suggestions: (!self.sug_view.is_empty()).then(|| RSug {
                 items: self.sug_view.clone(),
             }),
@@ -2578,8 +2924,8 @@ impl App {
                 agent: Some(&self.chat.agent),
                 chat_agent: None,
                 editor: Some(EditorView {
-                    chars: &self.editor.chars[usize::from(bash)..],
-                    cur: self.editor.cur.saturating_sub(usize::from(bash)),
+                    chars: &self.editor.chars[usize::from(lead)..],
+                    cur: self.editor.cur.saturating_sub(usize::from(lead)),
                 }),
                 focus: Focus::Agent,
                 view: &view,

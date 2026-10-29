@@ -126,6 +126,13 @@ fn check_stream(ev: &[Value]) {
     }
     let t = types(ev);
     assert_eq!(t[0], "session.started");
+    let key = ev[0]["payload"]["workspace"]["workspace_key"]
+        .as_str()
+        .unwrap();
+    assert!(
+        key.len() == 24 && key.bytes().all(|b| b.is_ascii_hexdigit()),
+        "{key}"
+    );
     assert!(
         t[t.len() - 1].starts_with("session."),
         "last event is the session end: {t:?}"
@@ -307,6 +314,19 @@ fn turn_budget_stops_the_task_with_exit_1() {
             .starts_with("budget_exceeded")
     );
     assert_eq!(o.status.code(), Some(1));
+}
+
+#[test]
+fn headless_run_has_a_default_wall_clock_budget_that_a_flag_overrides() {
+    let rig = Rig::new();
+    let wall = |ev: &[Value]| {
+        ev.iter().find(|e| e["type"] == "task.started").unwrap()["payload"]["budget"]["max_wall_ms"]
+            .as_u64()
+    };
+    let (_, ev) = rig.run(json!([{"text": "ok"}]), &[]);
+    assert_eq!(wall(&ev), Some(3_600_000));
+    let (_, ev) = rig.run(json!([{"text": "ok"}]), &["--max-wall-secs", "90"]);
+    assert_eq!(wall(&ev), Some(90_000));
 }
 
 #[cfg(unix)]

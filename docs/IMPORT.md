@@ -32,7 +32,7 @@ nemo import claude [--scope user|project|all] [--project-dir DIR] [--from DIR]
 | `~/.claude.json` `mcpServers` | `$NEMO_HOME/nemo.json` `mcpServers` (file gets `$schema` if new) | see MCP below |
 | `~/.claude.json` `projects.<dir>.mcpServers` | `nemo.json` `projects.<dir>.mcpServers` | |
 | project `.mcp.json` | untouched | Nemo reads it itself; the plan prints `--approve-mcp NAME@HASH` |
-| `~/.claude/projects/<dir>/memory/*.md` (`--only memory`) | `$NEMO_HOME/projects/<dir>/memory/` | staged; Nemo does not load auto-memory yet |
+| `~/.claude/projects/<dir>/memory/*.md` (`--only memory`) | `$NEMO_HOME/projects/<dir>-<hash of the real path>/memory/` (the hash keeps `/a/b` and `/a-b` apart) | loaded at start as low-priority, size-capped (8 KiB per file, 16 KiB total) untrusted notes, `MEMORY.md` first |
 
 Tool names: `Agent->Task`, `MultiEdit->Edit`, `LS->Glob`, `KillBash->KillShell`; `Bash`, `Read`,
 `Edit`, `Write`, `Glob`, `Grep`, `WebFetch`, `WebSearch`, `Task`, `Skill`, `mcp__*` and

@@ -214,6 +214,8 @@ mod tests {
             agent_type: "t".into(),
             tool_call_id: None,
             reason: Some("r".into()),
+            name: Some("n".into()),
+            background: true,
         }
     }
     fn end() -> SessionEnd {
@@ -231,6 +233,7 @@ mod tests {
             Event::SessionStarted {
                 workspace: WorkspaceInfo {
                     workspace_id: s("w"),
+                    workspace_key: Some(s("k0123456789a")),
                     root: s("/r"),
                     cwd: s("/r"),
                     additional_dirs: vec![s("/x")],
@@ -422,6 +425,32 @@ mod tests {
             },
             Event::SubagentStarted(sub()),
             Event::SubagentStopped(sub()),
+            Event::SubagentStatusChanged {
+                agent_id: s("a"),
+                name: s("n"),
+                from: s("running"),
+                to: s("idle"),
+                reason: None,
+            },
+            Event::MessageSent {
+                message_id: s("m"),
+                from: s("main"),
+                to: s("w"),
+                origin: s("agent"),
+                kind: s("message"),
+                summary: Some(s("hi")),
+                text: s("hello"),
+                bytes: 5,
+                notify_when_idle: true,
+            },
+            Event::MessageDelivered {
+                message_id: s("m"),
+                at: s("tool_round"),
+            },
+            Event::MessageDropped {
+                message_id: s("m"),
+                reason: s("cancelled"),
+            },
             Event::SessionModeChanged {
                 from: s("default"),
                 to: s("plan"),

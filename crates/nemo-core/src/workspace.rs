@@ -21,6 +21,15 @@ impl PathPolicy {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkspaceContext {
     pub workspace_id: String,
+    /// Stable across sessions (hash of the root); `workspace_id` is per session. Empty in data
+    /// written before it existed.
+    #[serde(default)]
+    pub workspace_key: String,
+    #[serde(default)]
+    pub workspace_label: String,
+    /// Shared by all git worktrees of one repository.
+    #[serde(default)]
+    pub repo_key: String,
     pub root: PathBuf,
     pub cwd: PathBuf,
     pub additional_dirs: Vec<PathBuf>,
@@ -83,6 +92,9 @@ impl WorkspaceContext {
         }
         Ok(Self {
             workspace_id: workspace_id.into(),
+            workspace_key: crate::workspace_key(&root, path_policy),
+            workspace_label: crate::workspace_label(&root),
+            repo_key: crate::repo_key(&root, path_policy),
             root,
             cwd,
             additional_dirs,
@@ -263,6 +275,19 @@ mod tests {
             Err(ResolveError::Network(_)) => "network",
             Err(ResolveError::Io(_)) => "io",
         }
+    }
+
+    #[test]
+    fn open_sets_the_stable_keys_from_the_root() {
+        let f = fx();
+        let root = f.base.join("p");
+        assert_eq!(
+            f.ws.workspace_key,
+            crate::workspace_key(&root, f.ws.path_policy)
+        );
+        assert_eq!(f.ws.workspace_key.len(), 24);
+        assert_eq!(f.ws.workspace_label, "p");
+        assert_eq!(f.ws.repo_key, f.ws.workspace_key, "not a git repository");
     }
 
     #[test]

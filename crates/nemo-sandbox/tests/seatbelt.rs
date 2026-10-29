@@ -395,3 +395,79 @@ fn deny_still_blocks_loopback_and_allow_works() {
     );
     assert!(nc(NetworkPolicy::Allow));
 }
+
+#[test]
+fn nemo_state_db_and_memory_are_unreadable() {
+    let a = tmp();
+    let home = a.path().join("nemo-home");
+    std::fs::create_dir_all(home.join("memory")).unwrap();
+    std::fs::create_dir_all(home.join("projects/p")).unwrap();
+    std::fs::write(home.join("projects/p/s.jsonl"), "TRANSCRIPT").unwrap();
+    std::fs::write(home.join("nemo.db"), "SESSIONS").unwrap();
+    std::fs::write(home.join("memory/memory.db"), "MEMORIES").unwrap();
+    std::fs::write(home.join("other.txt"), "fine").unwrap();
+    let mut p = pol(a.path());
+    // control first: nothing denied, everything under the workspace root is readable
+    for f in [
+        "nemo.db",
+        "memory/memory.db",
+        "projects/p/s.jsonl",
+        "other.txt",
+    ] {
+        let r = sh(&p, a.path(), &format!("cat nemo-home/{f}"));
+        assert!(r.status.success(), "control {f}");
+    }
+    p.deny_paths = nemo_sandbox::nemo_state_paths(&home);
+    assert!(sh(&p, a.path(), "cat nemo-home/other.txt").status.success());
+    for f in ["nemo.db", "memory/memory.db", "projects/p/s.jsonl"] {
+        let r = sh(&p, a.path(), &format!("cat nemo-home/{f}"));
+        let out = String::from_utf8_lossy(&r.stdout);
+        assert!(
+            !r.status.success()
+                && !out.contains("SESSIONS")
+                && !out.contains("MEMORIES")
+                && !out.contains("TRANSCRIPT"),
+            "{f} must be unreadable"
+        );
+    }
+}
+
+/// The standard policy: the repository is writable, but the project settings (hooks, MCP,
+/// agents) and instruction files are not, whether or not they exist yet.
+#[test]
+fn standard_policy_blocks_planting_nemo_settings_and_instruction_files() {
+    let w = tmp();
+    let root = w.path().canonicalize().unwrap();
+    std::fs::create_dir_all(root.join(".git/hooks")).unwrap();
+    std::fs::create_dir_all(root.join(".git/modules/sub")).unwrap();
+    std::fs::write(root.join(".git/config"), "[core]\n").unwrap();
+    std::fs::write(root.join("AGENTS.md"), "rules\n").unwrap();
+    let mut p = SandboxPolicy::standard(&root, &root.join("private-tmp"));
+    p.network = NetworkPolicy::Deny;
+    p.readable_roots.clear();
+    p.deny_paths.clear();
+    p.allow_exec = true;
+    let ok = |s: &str| sh(&p, &root, s).status.success();
+    assert!(
+        ok("echo hi > ordinary.txt"),
+        "the rest of the repo stays writable"
+    );
+    for bad in [
+        "mkdir .nemo",
+        "mkdir -p .nemo/agents && echo x > .nemo/agents/a.md",
+        "echo '{}' > .nemo/settings.json",
+        "echo x > NEMO.md",
+        "echo x >> AGENTS.md",
+        "echo x > .gitmodules",
+        "echo x > .git/modules/sub/config",
+        "echo x > .git/hooks/pre-commit",
+    ] {
+        assert!(!ok(bad), "{bad}");
+    }
+    assert!(!root.join(".nemo").exists() && !root.join("NEMO.md").exists());
+    assert!(!root.join(".gitmodules").exists());
+    assert_eq!(
+        std::fs::read_to_string(root.join("AGENTS.md")).unwrap(),
+        "rules\n"
+    );
+}

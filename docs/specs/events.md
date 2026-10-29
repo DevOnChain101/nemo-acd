@@ -29,7 +29,7 @@ Doc §5.12 types are kept verbatim; additions are marked. Payload field types: `
 
 | Type | Payload | Source |
 |---|---|---|
-| `session.started` | `workspace:{workspace_id:str, root:str, cwd:str, additional_dirs:[str], git_worktree:str?}, model:str, provider:str? (additive: id of the provider serving the model; absent in older logs), permission_mode:str, source:"startup"\|"resume"\|"clear", resumed_from_seq:u64?` | doc §5.12; `source` [from-node agent.js:1229 SessionStart] |
+| `session.started` | `workspace:{workspace_id:str, workspace_key:str? (additive: stable 12-hex id of the root, shared by all sessions of that workspace; absent in older logs), root:str, cwd:str, additional_dirs:[str], git_worktree:str?}, model:str, provider:str? (additive: id of the provider serving the model; absent in older logs), permission_mode:str, source:"startup"\|"resume"\|"clear", resumed_from_seq:u64?` | doc §5.12; `source` [from-node agent.js:1229 SessionStart] |
 | `session.status_changed` | `from:SessionStatus, to:SessionStatus, reason:str?` | [new] (state machine, workspace-context.md §3) |
 | `session.completed` / `session.failed` / `session.cancelled` | `reason:str, error:str?` — exactly one per session, last event of the stream | doc §5.12 |
 | `task.started` | `request:str, acceptance_criteria:[{id:str,text:str,check:str?}], budget:Budget` | [new] |
@@ -56,7 +56,11 @@ Doc §5.12 types are kept verbatim; additions are marked. Payload field types: `
 | `artifact.created` | `ArtifactRef + kind:str, retention:str` | doc §5.12 |
 | `verification.completed` | `report_id:str, status:VerificationStatus, attempt:int, summary:str` | doc §5.12; see verification.md |
 | `todo.updated` | `todos:[{id:str?, content:str, status:"pending"\|"in_progress"\|"completed", active_form:str}]` | [from-node agent.js:3646, taskcreate.js] |
-| `subagent.started` / `subagent.stopped` | `agent_id:str, agent_type:str, tool_call_id:str?, reason:str?` | [from-node agent.js:3913 'subagent-start', 874 'subagent-evicted', 3017 SubagentStop] |
+| `subagent.started` / `subagent.stopped` | `agent_id:str, agent_type:str, tool_call_id:str?, reason:str?, name:str?, background:bool?` | [from-node agent.js:3913 'subagent-start', 874 'subagent-evicted', 3017 SubagentStop] |
+| `subagent.status_changed` | `agent_id:str, name:str, from:str, to:str, reason:str?` | [new] `running\|waiting_approval\|idle\|cancelled\|evicted` (messaging.md A2); `agent_id` in the scope too |
+| `message.sent` | `message_id:str, from:str, to:str, origin:"user"\|"agent"\|"system", kind:"message"\|"result"\|"notice", summary:str?, text:str (redacted, <= 4 KiB), bytes:u64, notify_when_idle:bool?` | [new] a message entered an inbox; `from`/`to` are instance names (`main`, `user`, `system`). Messaging.md calls the sub-agent name `instance`; the event field is `name` |
+| `message.delivered` | `message_id:str, at:"tool_round"\|"turn_end"\|"wake"` | [new] the text reached the recipient's history; scope `agent_id` = recipient |
+| `message.dropped` | `message_id:str, reason:str` | [new] recipient cancelled or the task ended before delivery; an agent sender gets a notice, a user line returns to the prompt |
 | `session.mode_changed` | `from:str, to:str, reason:str?` | [new] permission mode switched while the session runs (TUI Shift+Tab, a future GUI via `Harness::set_mode`); not emitted for the starting mode. Entering `bypassPermissions` also emits a `notice` |
 | `permission.auto_verdict` | `tool_call_id:str, name:str, verdict:"allow"\|"deny"\|"ask", reason:str, source:"model"\|"cache"\|"fail_closed"` | [new] auto mode: the judge's decision on one call before it runs (audit trail; `fail_closed` = judge unavailable, unparseable, timed out or over the per-task cap, so the call is an ask) |
 | `model.changed` | `model:str, effort:str?` | [from-node agent.js:1539 'model-changed'] |

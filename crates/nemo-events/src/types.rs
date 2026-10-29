@@ -107,6 +107,9 @@ pub enum TaskStatus {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkspaceInfo {
     pub workspace_id: String,
+    /// Stable across sessions (additive; absent in older logs).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_key: Option<String>,
     pub root: String,
     pub cwd: String,
     pub additional_dirs: Vec<String>,
@@ -153,6 +156,12 @@ pub struct SubagentInfo {
     pub tool_call_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    /// Instance name (unique within the session); absent in older logs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Started with `run_in_background`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub background: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -438,6 +447,36 @@ pub enum Event {
     SubagentStarted(SubagentInfo),
     #[serde(rename = "subagent.stopped")]
     SubagentStopped(SubagentInfo),
+    /// `running | waiting_approval | idle | cancelled | evicted`.
+    #[serde(rename = "subagent.status_changed")]
+    SubagentStatusChanged {
+        agent_id: String,
+        name: String,
+        from: String,
+        to: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
+    /// A message was accepted into an inbox. `from` / `to` are instance names (`main`, `user`).
+    #[serde(rename = "message.sent")]
+    MessageSent {
+        message_id: String,
+        from: String,
+        to: String,
+        origin: String,
+        kind: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        summary: Option<String>,
+        text: String,
+        bytes: u64,
+        #[serde(default, skip_serializing_if = "is_false")]
+        notify_when_idle: bool,
+    },
+    /// `at` = `tool_round | turn_end | wake`.
+    #[serde(rename = "message.delivered")]
+    MessageDelivered { message_id: String, at: String },
+    #[serde(rename = "message.dropped")]
+    MessageDropped { message_id: String, reason: String },
     /// The permission mode changed (TUI/GUI switch). Never emitted for the mode a session starts in.
     #[serde(rename = "session.mode_changed")]
     SessionModeChanged {

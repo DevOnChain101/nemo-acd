@@ -699,6 +699,25 @@ fn instructions_load_root_to_cwd_with_imports() {
 }
 
 #[test]
+fn every_ancestor_between_root_and_cwd_loads_root_first_and_dot_nemo_notes_sit_beside() {
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path().join("repo");
+    let (mid, leaf) = (root.join("a"), root.join("a/b"));
+    fs::create_dir_all(&leaf).unwrap();
+    fs::create_dir_all(root.join(".nemo")).unwrap();
+    fs::write(root.join("AGENTS.md"), "root").unwrap();
+    fs::write(root.join(".nemo/NEMO.md"), "note").unwrap(); // beside AGENTS.md, not instead
+    fs::write(mid.join("CLAUDE.md"), "mid").unwrap();
+    fs::write(leaf.join("NEMO.md"), "leaf").unwrap();
+    fs::write(leaf.join("CLAUDE.md"), "loses to NEMO.md").unwrap();
+    // the workspace root is the repo; the launch dir is the leaf
+    let w = WorkspaceContext::open("w", &root, &leaf, &[], root.join(".a"), "p").unwrap();
+    let f = load_instructions(&w, &[], None, &names(), &InstructionLimits::default());
+    let got: Vec<_> = f.iter().map(|x| x.content.as_str()).collect();
+    assert_eq!(got, ["root", "note", "mid", "leaf"]);
+}
+
+#[test]
 fn import_cycles_and_depth_are_bounded() {
     let d = tempfile::tempdir().unwrap();
     let root = d.path();
@@ -778,6 +797,27 @@ fn project_imports_cannot_escape_or_use_home_but_user_files_may() {
     assert_eq!(f[0].content, "HOMEPREF\nHOMEPREF");
     let c = &f[1].content;
     assert!(!c.contains("HOMEPREF") && !c.contains("OUTSIDE"), "{c}");
+}
+
+#[test]
+fn a_user_file_cannot_import_a_secret_by_name_either() {
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path().join("proj");
+    let home = d.path().join("home");
+    fs::create_dir_all(&root).unwrap();
+    fs::create_dir_all(&home).unwrap();
+    fs::write(home.join(".env"), "API_KEY=TOPSECRET").unwrap();
+    fs::write(home.join("pref.md"), "HOMEPREF").unwrap();
+    fs::write(home.join("NEMO.md"), "@~/.env\n@~/pref.md").unwrap();
+    let f = load_instructions(
+        &ws(&root),
+        &[home.join("NEMO.md")],
+        Some(&home),
+        &names(),
+        &InstructionLimits::default(),
+    );
+    assert!(!f[0].content.contains("TOPSECRET"), "{}", f[0].content);
+    assert!(f[0].content.contains("HOMEPREF"));
 }
 
 #[cfg(unix)]

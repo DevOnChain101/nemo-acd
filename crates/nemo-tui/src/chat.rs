@@ -29,9 +29,30 @@ pub struct Verification {
     pub summary: String,
 }
 
+/// A sub-agent as the events describe it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AgentRow {
+    pub id: String,
+    pub name: String,
+    pub kind: String,
+    /// `running | waiting_approval | idle | cancelled`
+    pub status: String,
+    pub tools: u32,
+    pub queued: u32,
+    /// Its replies are drawn in the transcript (background agents and agents that run a task).
+    pub show: bool,
+}
+
 #[derive(Default)]
 pub struct Chat {
     pub agent: Agent,
+    pub agents: Vec<AgentRow>,
+    /// `message_id -> recipient` of messages that are queued and not delivered yet.
+    queued: HashMap<String, String>,
+    /// Lines the person sent to a running agent that it has not read yet: `(message_id, text)`.
+    pub inflight: Vec<(String, String)>,
+    /// Lines that were dropped undelivered (the prompt takes them back).
+    pub dropped_lines: Vec<String>,
     tools: HashMap<String, usize>,
     text: Option<usize>,
     think: Option<usize>,
@@ -58,6 +79,16 @@ const MAX_LIVE: usize = 256 * 1024;
 /// The 6-character id the tool rows of a sub-agent carry.
 fn short_id(id: &str) -> String {
     clean_line(&id.chars().take(6).collect::<String>())
+}
+
+/// First line of a message, short enough for one transcript row.
+fn head(text: &str) -> String {
+    let line = text.lines().next().unwrap_or_default();
+    let mut s: String = line.chars().take(100).collect();
+    if line.chars().count() > 100 || text.lines().count() > 1 {
+        s.push('…');
+    }
+    clean_line(&s)
 }
 
 fn tok_k(n: u64) -> String {
@@ -123,6 +154,25 @@ fn note(text: impl Into<String>, tone: &str) -> Item {
 }
 
 impl Chat {
+    fn row_mut(&mut self, id: &str) -> Option<&mut AgentRow> {
+        self.agents.iter_mut().find(|r| r.id == id)
+    }
+
+    fn name_of(&self, id: &str) -> String {
+        self.agents
+            .iter()
+            .find(|r| r.id == id)
+            .map_or_else(|| short_id(id), |r| r.name.clone())
+    }
+
+    fn unqueue(&mut self, message_id: &str) {
+        if let Some(to) = self.queued.remove(message_id)
+            && let Some(r) = self.agents.iter_mut().find(|r| r.name == to)
+        {
+            r.queued = r.queued.saturating_sub(1);
+        }
+    }
+
     pub fn push(&mut self, it: Item) -> usize {
         self.agent.items.push(it);
         self.agent.items.len() - 1
@@ -182,9 +232,14 @@ impl Chat {
                 let t = display_text.as_deref().unwrap_or(text);
                 // `Some("")`: a note from the harness to the model, not something typed
                 if !t.is_empty() {
+                    // a line to a sub-agent reads as typed with its address
+                    let t = match &sub {
+                        Some(a) => format!("@{} {t}", self.name_of(a)),
+                        None => t.to_string(),
+                    };
                     self.push(item! {
                         kind: "user".into(),
-                        text: clean_text(t),
+                        text: clean_text(&t),
                     });
                 }
             }
@@ -234,6 +289,24 @@ impl Chat {
                 }
                 _ => {}
             },
+            Event::AssistantMessage { content, .. }
+                if sub
+                    .as_deref()
+                    .is_some_and(|a| self.agents.iter().any(|r| r.id == a && r.show)) =>
+            {
+                let name = self.name_of(sub.as_deref().unwrap_or_default());
+                for b in content {
+                    if b.get("type").and_then(Value::as_str) == Some("text")
+                        && let Some(t) = b.get("text").and_then(Value::as_str)
+                        && !t.trim().is_empty()
+                    {
+                        self.push(item! {
+                            kind: "text".into(),
+                            text: format!("**@{name}** {}", clean_text(t)),
+                        });
+                    }
+                }
+            }
             Event::AssistantMessage { content, .. } if sub.is_none() => {
                 self.finish_streams(now);
                 if !self.turn_text {
@@ -347,10 +420,12 @@ impl Chat {
                     return;
                 }
                 let name = match &sub {
-                    Some(a) => format!(
-                        "@{}:{name}",
-                        clean_line(&a.chars().take(6).collect::<String>())
-                    ),
+                    Some(a) => {
+                        if let Some(r) = self.row_mut(a) {
+                            r.tools += 1;
+                        }
+                        format!("@{}:{name}", self.name_of(a))
+                    }
                     None => name,
                 };
                 let name_is_todo = name == "TodoWrite";
@@ -454,14 +529,79 @@ impl Chat {
                 format!("budget exceeded: {budget} {used} / {limit}"),
                 "warn",
             ),
-            Event::SubagentStarted(i) => self.note(
-                format!("agent {} started ({})", short_id(&i.agent_id), i.agent_type),
-                "",
-            ),
-            Event::SubagentStopped(i) => self.note(
-                format!("agent {} stopped ({})", short_id(&i.agent_id), i.agent_type),
-                "",
-            ),
+            Event::SubagentStarted(i) => {
+                let name = i
+                    .name
+                    .clone()
+                    .map_or_else(|| short_id(&i.agent_id), |n| clean_line(&n));
+                self.agents.retain(|r| r.id != i.agent_id);
+                self.agents.push(AgentRow {
+                    id: i.agent_id.clone(),
+                    name: name.clone(),
+                    kind: clean_line(&i.agent_type),
+                    status: "running".into(),
+                    show: i.background || i.tool_call_id.is_none(),
+                    ..AgentRow::default()
+                });
+                self.note(
+                    format!(
+                        "agent @{name} started ({}){}",
+                        i.agent_type,
+                        if i.background { " · background" } else { "" }
+                    ),
+                    "",
+                );
+            }
+            Event::SubagentStopped(i) => {
+                let name = self.name_of(&i.agent_id);
+                self.note(format!("agent @{name} stopped ({})", i.agent_type), "");
+            }
+            Event::SubagentStatusChanged { agent_id, to, .. } => {
+                if to == "evicted" {
+                    self.agents.retain(|r| r.id != *agent_id);
+                } else if let Some(r) = self.row_mut(agent_id) {
+                    r.status.clone_from(to);
+                }
+            }
+            Event::MessageSent {
+                message_id,
+                from,
+                to,
+                origin,
+                kind,
+                summary,
+                text,
+                ..
+            } => {
+                if let Some(r) = self.agents.iter_mut().find(|r| r.name == *to) {
+                    r.queued += 1;
+                    self.queued.insert(message_id.clone(), to.clone());
+                }
+                let what = summary.clone().unwrap_or_else(|| head(text));
+                if origin == "user" {
+                    self.inflight.push((message_id.clone(), text.clone()));
+                } else if origin == "system" {
+                    self.note(format!("⚠ {what}"), "warn");
+                } else if from == "main" {
+                    self.note(format!("→ @{to} {what}"), "");
+                } else if to == "main" {
+                    let label = if kind == "result" { " result:" } else { ":" };
+                    self.note(format!("← @{from}{label} {what}"), "");
+                } else {
+                    self.note(format!("@{from} → @{to}: {what}"), "");
+                }
+            }
+            Event::MessageDelivered { message_id, .. } => {
+                self.unqueue(message_id);
+                self.inflight.retain(|(id, _)| id != message_id);
+            }
+            Event::MessageDropped { message_id, reason } => {
+                self.unqueue(message_id);
+                if let Some(i) = self.inflight.iter().position(|(id, _)| id == message_id) {
+                    self.dropped_lines.push(self.inflight.remove(i).1);
+                }
+                self.note(format!("⚠ message dropped: {reason}"), "warn");
+            }
             Event::AutoVerdict {
                 name,
                 verdict,
@@ -564,6 +704,40 @@ impl Chat {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// Harness notices are told by `origin`; an agent that is merely called "system" is a peer.
+    #[test]
+    fn system_notices_are_rendered_by_origin_not_by_sender_name() {
+        let mut chat = Chat::default();
+        let mut sent = |from: &str, origin: &str| {
+            chat.apply(
+                &Envelope {
+                    v: 1,
+                    seq: 1,
+                    ts: "2026-01-01T00:00:00.000Z".into(),
+                    session_id: "s".into(),
+                    task_id: None,
+                    turn_id: None,
+                    agent_id: None,
+                    event: Event::MessageSent {
+                        message_id: "m".into(),
+                        from: from.into(),
+                        to: "main".into(),
+                        origin: origin.into(),
+                        kind: "message".into(),
+                        summary: None,
+                        text: "hi".into(),
+                        bytes: 2,
+                        notify_when_idle: false,
+                    },
+                },
+                0,
+            );
+            chat.agent.items.last().unwrap().text.clone()
+        };
+        assert!(sent("x", "system").starts_with('⚠'));
+        assert!(!sent("system", "agent").starts_with('⚠'));
+    }
 
     #[test]
     fn tool_name_and_input_are_stored_without_escape_bytes() {

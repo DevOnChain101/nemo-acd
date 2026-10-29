@@ -50,7 +50,9 @@ fn side_effect(name: &str) -> SideEffectClass {
 
 fn runtime(name: &str) -> ToolRuntime {
     match name {
-        "Task" | "AskUserQuestion" | "ExitPlanMode" => ToolRuntime::Harness,
+        "Task" | "AskUserQuestion" | "ExitPlanMode" | "SendMessage" | "ListAgents" => {
+            ToolRuntime::Harness
+        }
         _ => ToolRuntime::Builtin,
     }
 }
@@ -193,8 +195,18 @@ impl Registry {
         let shared = self.shared.clone();
         for src in [TERMINAL_SCHEMAS, EXTRA_SCHEMAS] {
             let raw: Vec<Value> = serde_json::from_str(src).expect("valid");
-            self.entries
-                .extend(raw.into_iter().map(|v| entry(v, &shared)));
+            for v in raw {
+                // Same name = a newer schema of a ported tool (Task gained name/run_in_background).
+                let e = entry(v, &shared);
+                match self
+                    .entries
+                    .iter()
+                    .position(|x| x.tool.spec().name == e.tool.spec().name)
+                {
+                    Some(i) => self.entries[i] = e,
+                    None => self.entries.push(e),
+                }
+            }
         }
         self
     }

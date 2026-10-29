@@ -452,6 +452,20 @@ fn protected_path_decision_per_mode() {
 }
 
 #[test]
+fn extra_protected_paths_ask_for_writes_even_in_accept_edits() {
+    let f = fx();
+    let state = f.cwd.join("nemo-state");
+    let env = Env::new(&f.cwd, &f.home, Mode::AcceptEdits)
+        .interactive(true)
+        .protect([state.join("memory"), state.join("nemo.db")]);
+    let p = Permissions::new(PermissionRules::default(), env);
+    let w = |rel: &str| d(&p, "Write", json!({ "file_path": f.path(rel) }));
+    assert_eq!(w("nemo-state/memory/memory.db"), Q);
+    assert_eq!(w("nemo-state/nemo.db"), Q);
+    assert_eq!(w("nemo-state/notes.txt"), A, "only the named paths");
+}
+
+#[test]
 fn protected_path_segments_are_relative_to_the_workspace_root() {
     let f = fx();
     // a project that lives under a protected-looking directory is not entirely protected
@@ -2702,4 +2716,74 @@ fn echo_and_read_only_filters_follow_an_allowed_command() {
     }
     // the read-only part alone grants nothing
     assert!(!ok(&[], Mode::Default, "node --test | tail"));
+}
+
+#[test]
+fn send_message_is_not_read_only_and_list_agents_is() {
+    let f = fx();
+    let p = f.perms(Mode::Default);
+    let got: Vec<Decision> = Mode::ALL
+        .into_iter()
+        .map(|m| {
+            p.check("SendMessage", &json!({"to": "a", "message": "x"}), m)
+                .decision
+        })
+        .collect();
+    // default, acceptEdits, plan, auto, dontAsk, bypassPermissions
+    assert_eq!(got, [Q, A, D, A, D, A]);
+    assert_eq!(d(&p, "ListAgents", json!({})), A);
+}
+
+#[test]
+fn instruction_files_are_protected_paths() {
+    let f = fx();
+    let p = f.perms(Mode::AcceptEdits);
+    for n in ["NEMO.md", "AGENTS.md", ".nemo/NEMO.md"] {
+        assert_eq!(d(&p, "Write", json!({ "file_path": f.path(n) })), Q, "{n}");
+    }
+}
+
+/// Launched from `<root>/sub`: `/x` and `./x` rules written for the repository root still hit the
+/// root's files, and the root counts as the workspace. Bare patterns keep the launch directory.
+#[test]
+fn slash_and_dot_slash_rules_are_anchored_at_the_project_root() {
+    let f = fx();
+    let sub = f.cwd.join("sub");
+    let env = |mode| {
+        Env::new(&sub, &f.home, mode)
+            .with_project_root(&f.cwd)
+            .interactive(true)
+    };
+    let p = Permissions::new(
+        rules(
+            &[],
+            &["Read(./.env)", "Read(/AGENTS.md)", "Read(notes.txt)"],
+            &[],
+        ),
+        env(Mode::Default),
+    );
+    let read = |path: &Path| d(&p, "Read", json!({ "file_path": path }));
+    assert_eq!(read(&f.cwd.join(".env")), D);
+    assert_eq!(read(&f.cwd.join("AGENTS.md")), D);
+    assert_eq!(read(&sub.join("AGENTS.md")), A, "only the root file");
+    // a relative path given to the tool is resolved against the launch dir, then matched
+    assert_eq!(d(&p, "Read", json!({ "file_path": "../.env" })), D);
+    assert_eq!(
+        d(&p, "Read", json!({ "file_path": "notes.txt" })),
+        D,
+        "bare = anywhere"
+    );
+    // the project root is inside the workspace: acceptEdits writes there without a prompt
+    let p = Permissions::new(PermissionRules::default(), env(Mode::AcceptEdits));
+    let w = d(&p, "Write", json!({ "file_path": f.cwd.join("src.txt") }));
+    assert_eq!(w, A);
+    // without a project root the same write is outside the workspace
+    let p = Permissions::new(
+        PermissionRules::default(),
+        Env::new(&sub, &f.home, Mode::AcceptEdits).interactive(true),
+    );
+    assert_ne!(
+        d(&p, "Write", json!({ "file_path": f.cwd.join("src.txt") })),
+        A
+    );
 }

@@ -1626,6 +1626,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "futures-util",
+ "libc",
  "nemo-browser",
  "nemo-config",
  "nemo-context",
@@ -1686,6 +1687,7 @@ dependencies = [
  "nemo-events",
  "nemo-platform",
  "serde",
+ "sha2",
  "tempfile",
  "tokio-util",
 ]
@@ -1826,6 +1828,7 @@ version = "0.1.0"
 dependencies = [
  "nemo-config",
  "nemo-hooks",
+ "rustix",
  "serde_json",
  "tempfile",
 ]

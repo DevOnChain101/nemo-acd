@@ -128,6 +128,8 @@ pub struct Opts {
     pub fail_sink_after: Option<usize>,
     /// Model context window in tokens (`None` = unknown).
     pub context_window: Option<u64>,
+    /// Picks the provider's answer from the request before the script is consulted.
+    pub responder: Option<nemo_harness::testing::Responder>,
 }
 
 /// Writes into `buf` until `left` writes are used up, then fails every write.
@@ -163,6 +165,7 @@ impl Default for Opts {
             parallel_tools: true,
             fail_sink_after: None,
             context_window: None,
+            responder: None,
         }
     }
 }
@@ -226,7 +229,11 @@ impl Rig {
             c.context_window = o.context_window;
             c
         };
-        let provider = Arc::new(FakeProvider::new(turns).with_caps(caps));
+        let mut fake = FakeProvider::new(turns).with_caps(caps);
+        if let Some(r) = o.responder.clone() {
+            fake = fake.with_responder(r);
+        }
+        let provider = Arc::new(fake);
         let buf = SharedBuf::default();
         let sink = match o.fail_sink_after {
             Some(left) => EventSink::new(

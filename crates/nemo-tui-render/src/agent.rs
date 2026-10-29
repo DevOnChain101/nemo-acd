@@ -493,6 +493,10 @@ pub struct AgentOpts {
     pub docked: bool,
     /// Messages typed while a task runs; sent in order when it ends (drawn above the prompt).
     pub queued: Vec<String>,
+    /// Sub-agents of the session, one row each: `developer-2 (developer) running · 3 tools · 2 queued`.
+    pub agent_rows: Vec<String>,
+    /// Where the next line goes when it is not the main agent: `@worker · running · 2 queued`.
+    pub route: Option<String>,
     #[serde(skip)]
     pub config: Option<ModelConfig>,
 }
@@ -3425,6 +3429,18 @@ pub fn render_agent(
     }
     if opts.preview.is_none() && todos.iter().any(|t| t.status != "completed") {
         working.extend(todo_rows(todos, content_w, opts.expanded));
+    }
+    for row in opts.agent_rows.iter().take(6) {
+        working.push(vec![
+            rb("◆ ", C_ACCENT),
+            r(clip_to(row, content_w.saturating_sub(4)), C_DIM),
+        ]);
+    }
+    if let Some(t) = &opts.route {
+        working.push(vec![
+            r("to ", C_SUBTLE),
+            rb(clip_to(t, content_w.saturating_sub(4)), C_ACCENT),
+        ]);
     }
     for q in opts.queued.iter().take(3) {
         let one_line = q.replace('\n', " ");

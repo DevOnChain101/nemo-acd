@@ -46,16 +46,21 @@ impl Default for InstructionLimits {
 /// File names looked up in every directory from the workspace root down to the cwd. Per
 /// directory only the first non-empty one wins (NEMO.md > AGENTS.md > CLAUDE.md, owner decision
 /// D2, the Codex one-file-per-directory rule); [`LOCAL_NAME`] is the private extra on top.
-pub const DEFAULT_NAMES: [&str; 5] = [
+pub const DEFAULT_NAMES: [&str; 6] = [
     "NEMO.md",
     "AGENTS.md",
     "CLAUDE.md",
     ".claude/CLAUDE.md",
+    NOTES_NAME,
     LOCAL_NAME,
 ];
 
 /// Gitignored personal notes: loaded next to the winning file, not instead of it.
 pub const LOCAL_NAME: &str = "CLAUDE.local.md";
+
+/// Where `#` notes go when the repository has no NEMO.md / AGENTS.md: loaded next to the winning
+/// file, never instead of it.
+pub const NOTES_NAME: &str = ".nemo/NEMO.md";
 
 struct Ctx<'a> {
     ws: &'a WorkspaceContext,
@@ -66,10 +71,10 @@ struct Ctx<'a> {
     deny: Option<&'a dyn Fn(&Path) -> bool>,
 }
 
-/// Project files may not pull secret files (or anything the permission layer denies) into the
-/// prompt; the built-in name denylist is not applied to the user's own files.
-fn read_denied(real: &Path, scope: Scope, ctx: &Ctx) -> bool {
-    (scope == Scope::Project && is_secret_path(real)) || ctx.deny.is_some_and(|d| d(real))
+/// No instruction file or `@import`, user-scope included (a `#` note can plant an import), may
+/// pull secret files (or anything the permission layer denies) into the prompt.
+fn read_denied(real: &Path, ctx: &Ctx) -> bool {
+    is_secret_path(real) || ctx.deny.is_some_and(|d| d(real))
 }
 
 fn inside_workspace(ws: &WorkspaceContext, real: &Path) -> bool {
@@ -109,7 +114,7 @@ fn resolve_import(token: &str, base: &Path, scope: Scope, ctx: &Ctx) -> Option<P
     let real = realpath_lenient(&p)?;
     (scope == Scope::User || inside_workspace(ctx.ws, &real))
         .then_some(real)
-        .filter(|r| !read_denied(r, scope, ctx))
+        .filter(|r| !read_denied(r, ctx))
 }
 
 fn expand_imports(
@@ -187,8 +192,7 @@ fn import_one(
 
 fn load_one(path: &Path, scope: Scope, ctx: &mut Ctx) -> Option<String> {
     let real = realpath_lenient(path)?;
-    if scope == Scope::Project && !inside_workspace(ctx.ws, &real) || read_denied(&real, scope, ctx)
-    {
+    if scope == Scope::Project && !inside_workspace(ctx.ws, &real) || read_denied(&real, ctx) {
         return None; // e.g. a CLAUDE.md symlinked to a secret
     }
     let text = read_capped(&real, ctx.limits.file_cap.min(ctx.remaining))?;
@@ -252,10 +256,11 @@ pub fn load_instructions_with(
             let Some(raw) = read_capped(&path, limits.file_cap) else {
                 continue;
             };
-            if raw.trim().is_empty() || (won && *name != LOCAL_NAME) {
+            let extra = *name == LOCAL_NAME || *name == NOTES_NAME;
+            if raw.trim().is_empty() || (won && !extra) {
                 continue;
             }
-            won |= *name != LOCAL_NAME;
+            won |= !extra;
             if let Some(content) = load_one(&path, Scope::Project, &mut ctx) {
                 out.push(InstructionFile {
                     path,

@@ -1723,13 +1723,13 @@ impl Imp {
                 continue;
             };
             let notes = if std::mem::take(&mut first) {
-                vec!["staged for reference: Nemo does not load auto-memory yet".into()]
+                vec!["loaded at start as low-priority, size-capped, untrusted notes".into()]
             } else {
                 vec![]
             };
             let dst = nemo_home
                 .join("projects")
-                .join(&key)
+                .join(crate::ctx::auto_memory_key(project_dir))
                 .join("memory")
                 .join(&f);
             self.put_file(Kind::Memory, &src.join(&f), &dst, nemo_home, b, notes);

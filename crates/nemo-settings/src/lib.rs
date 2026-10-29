@@ -126,14 +126,43 @@ pub struct Settings {
     pub errors: Vec<String>,
 }
 
-/// Nearest ancestor of `cwd` (inclusive) holding `.nemo` or `.git`, else `cwd`. Pure lexical walk
-/// from the given path; no process cwd, no canonicalisation.
+/// Nearest ancestor of `cwd` (inclusive) holding `.nemo` or `.git`, else `cwd`. Lexical walk from
+/// the given path; no process cwd, no canonicalisation. The project root decides which settings
+/// (hooks, MCP, agents) and which writable sandbox root apply, so a marker only counts when the
+/// directory and the marker are owned by the current user (unix) and not world-writable, and the
+/// directory is not a filesystem root or the temp dir or one of its ancestors (a planted
+/// `/tmp/.git` must not capture every project below it). Otherwise the walk goes on.
 pub fn find_project_root(cwd: &Path) -> PathBuf {
+    let tmp = std::env::temp_dir();
+    let tmp = std::fs::canonicalize(&tmp).unwrap_or(tmp);
     cwd.ancestors()
         .filter(|d| !d.as_os_str().is_empty())
-        .find(|d| d.join(".nemo").exists() || d.join(".git").exists())
+        .find(|d| {
+            [".nemo", ".git"]
+                .iter()
+                .any(|m| d.join(m).exists() && marker_trusted(d, &d.join(m), &tmp))
+        })
         .unwrap_or(cwd)
         .to_path_buf()
+}
+
+fn marker_trusted(dir: &Path, marker: &Path, tmp: &Path) -> bool {
+    if dir.parent().is_none() || tmp.starts_with(dir) {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let me = rustix::process::geteuid().as_raw();
+        [dir, marker].iter().all(|p| {
+            std::fs::symlink_metadata(p).is_ok_and(|m| m.uid() == me && m.mode() & 0o002 == 0)
+        })
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = marker;
+        true
+    }
 }
 
 /// Node `isSecretEnvKey`: secret-looking substring or provider-ish prefix.
@@ -193,7 +222,10 @@ pub fn load_settings_with_managed(
     trust: ProjectTrust,
     managed: &Path,
 ) -> Settings {
-    let project_root = find_project_root(ctx.cwd);
+    let mut project_root = find_project_root(ctx.cwd);
+    if ctx.user_home.starts_with(&project_root) {
+        project_root = ctx.cwd.to_path_buf(); // home (or an ancestor) is never a project
+    }
     let mut s = Settings {
         project_root: project_root.clone(),
         ..Settings::default()

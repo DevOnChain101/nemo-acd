@@ -160,7 +160,7 @@ impl Harness {
         turn: &str,
         req: &Request,
     ) -> Result<Streamed, StreamFail> {
-        let mut stream = self.provider.stream(req, task.cancel.clone());
+        let mut stream = self.provider.stream(req, agent.cancel.clone());
         let mut builder = MessageBuilder::new();
         let mut open: BTreeMap<usize, Option<String>> = BTreeMap::new();
         // Tool-call blocks whose streamed arguments must not be emitted (they may hold secrets
@@ -169,7 +169,7 @@ impl Harness {
         loop {
             let next = tokio::select! {
                 biased;
-                () = task.cancel.cancelled() => return Err(StreamFail::Cancelled),
+                () = agent.cancel.cancelled() => return Err(StreamFail::Cancelled),
                 n = stream.next() => n,
             };
             let Some(item) = next else { break };
@@ -366,7 +366,7 @@ impl Harness {
         );
         let result = tokio::select! {
             biased;
-            () = task.cancel.cancelled() => Err("cancelled".to_string()),
+            () = agent.cancel.cancelled() => Err("cancelled".to_string()),
             r = self.context.compact(&st.messages, instr.trim()) => r,
         };
         let c = match result {
@@ -420,7 +420,7 @@ impl Harness {
         let mut iteration = 0i64;
         let mut recoveries = 0u32;
         loop {
-            if task.cancel.is_cancelled() {
+            if agent.cancel.is_cancelled() {
                 return AgentEnd::Cancelled;
             }
             if self.sink.is_broken() {
@@ -476,13 +476,20 @@ impl Harness {
                             Err(e) => return AgentEnd::Internal(format!("context_error: {e}")),
                         };
                     }
-                    Err(_) if task.cancel.is_cancelled() => return AgentEnd::Cancelled,
+                    Err(_) if agent.cancel.is_cancelled() => return AgentEnd::Cancelled,
                     Err(_) if reason == "auto" => {
                         st.auto_failures += 1;
                         st.auto_pause_until = st.requests + (1u64 << st.auto_failures.min(4));
                     }
                     Err(_) => {}
                 }
+            }
+            // Drain point: the round's results are in history (and no compaction is running).
+            if self.deliver(task, agent, st) {
+                req = match self.make_request(task, agent, st) {
+                    Ok(r) => r,
+                    Err(e) => return AgentEnd::Internal(format!("context_error: {e}")),
+                };
             }
             let raw = st.fixed_raw + self.messages_raw(st);
             let turn = uuid();
@@ -503,7 +510,7 @@ impl Harness {
                 Ok(s) => s,
                 Err(StreamFail::Cancelled) => return AgentEnd::Cancelled,
                 Err(StreamFail::Provider(e)) => {
-                    if task.cancel.is_cancelled() || e.kind == ErrorKind::Cancelled {
+                    if agent.cancel.is_cancelled() || e.kind == ErrorKind::Cancelled {
                         return AgentEnd::Cancelled;
                     }
                     self.emit(
@@ -555,7 +562,7 @@ impl Harness {
                         );
                         tokio::select! {
                             () = tokio::time::sleep(delay) => {}
-                            () = task.cancel.cancelled() => return AgentEnd::Cancelled,
+                            () = agent.cancel.cancelled() => return AgentEnd::Cancelled,
                         }
                         continue;
                     }
@@ -669,7 +676,7 @@ impl Harness {
                 role: Role::User,
                 content: Content::Blocks(outcome.blocks),
             });
-            if task.cancel.is_cancelled() {
+            if agent.cancel.is_cancelled() {
                 return AgentEnd::Cancelled;
             }
             if let Some(kind) = *lock(&task.hit) {

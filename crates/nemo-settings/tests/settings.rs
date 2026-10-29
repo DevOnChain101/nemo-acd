@@ -314,6 +314,29 @@ fn project_root_discovery_is_lexical_from_explicit_cwd() {
     assert_eq!(find_project_root(&deep), root.join("a"), "nearest wins");
 }
 
+#[cfg(unix)]
+#[test]
+fn project_root_ignores_untrusted_marker_directories() {
+    use std::os::unix::fs::PermissionsExt;
+    let t = tempfile::tempdir().unwrap();
+    let root = t.path().join("r");
+    let deep = root.join("a/b");
+    fs::create_dir_all(&deep).unwrap();
+    fs::create_dir(root.join(".nemo")).unwrap();
+    assert_eq!(find_project_root(&deep), root);
+    let mode = |p: &Path, m| fs::set_permissions(p, fs::Permissions::from_mode(m)).unwrap();
+    mode(&root.join(".nemo"), 0o777);
+    assert_eq!(find_project_root(&deep), deep, "world-writable marker");
+    mode(&root.join(".nemo"), 0o755);
+    mode(&root, 0o777);
+    assert_eq!(find_project_root(&deep), deep, "world-writable directory");
+    mode(&root, 0o755);
+    // the temp dir (and anything above it) can never be a project root
+    let tmp = std::env::temp_dir().join("x");
+    assert_ne!(find_project_root(&tmp), std::env::temp_dir());
+    assert_eq!(find_project_root(Path::new("/")), Path::new("/"));
+}
+
 #[test]
 fn settings_are_read_from_project_root_not_cwd() {
     let f = fx();

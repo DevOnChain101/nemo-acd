@@ -192,6 +192,7 @@ pub fn launch(a: TuiArgs, env: Env) -> Result<u8, String> {
             sandbox,
             notices,
             homes: ph,
+            notes,
             ..
         } = p;
         let mut o = Options::new(
@@ -207,6 +208,7 @@ pub fn launch(a: TuiArgs, env: Env) -> Result<u8, String> {
         o.effort_tiers = effort_tiers;
         o.sandbox = sandbox;
         o.startup_notes = notices;
+        o.memory = Some(notes.hook());
         o.startup_notes.extend(switch_note.take());
         switch_from = None;
         if let Some(m) = &mcp {

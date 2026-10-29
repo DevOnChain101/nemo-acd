@@ -28,6 +28,7 @@ mod fake;
 mod import;
 mod info;
 mod mcp;
+mod memory;
 mod run;
 mod taskdb;
 mod transcript;

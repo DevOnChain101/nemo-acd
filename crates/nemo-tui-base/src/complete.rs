@@ -88,12 +88,16 @@ pub struct Command {
     pub local: bool,
 }
 
-/// A running sub-agent that `@name` can address.
+/// An agent that `@name` can address (offered only at the start of a message), or, with
+/// `start_new`, a definition that `@agent:<id>` starts.
 #[derive(Clone, Debug, Default)]
 pub struct AgentRef {
+    /// Instance name (or definition name when `start_new`).
     pub id: String,
     pub kind: Option<String>,
     pub status: Option<String>,
+    pub queued: usize,
+    pub start_new: bool,
 }
 
 pub struct Options<'a> {
@@ -278,18 +282,34 @@ fn file_items(
     let mut o = 0;
     if dir_part.is_empty() {
         for a in agents {
-            let label = a.kind.as_deref().unwrap_or(&a.id);
-            if starts(label) {
+            let (label, detail) = if a.start_new {
+                // definitions are offered once the person typed `agent:`
+                (format!("agent:{}", a.id), "start a new agent".to_string())
+            } else {
+                let queued = if a.queued > 0 {
+                    format!(" · {} queued", a.queued)
+                } else {
+                    String::new()
+                };
+                (
+                    a.id.clone(),
+                    format!(
+                        "{} · {}{queued} · agent",
+                        a.kind.as_deref().unwrap_or("agent"),
+                        a.status.as_deref().unwrap_or("idle")
+                    ),
+                )
+            };
+            if label.to_lowercase().starts_with(&lower)
+                && (!a.start_new || lower.starts_with("agent:"))
+            {
                 items.push(Item {
                     score: 2.0,
                     order: o,
                     label: format!("@{label}"),
                     insert: format!("@{label} "),
                     more: false,
-                    detail: Detail::Fixed(format!(
-                        "{} sub-agent",
-                        a.status.as_deref().unwrap_or("idle")
-                    )),
+                    detail: Detail::Fixed(detail),
                 });
                 o += 1;
             }
@@ -432,7 +452,9 @@ pub fn suggest(editor: &LineEditor, opts: &Options, fs: &dyn CompletionFs) -> Op
         let roots: Vec<PathBuf> = std::iter::once(opts.cwd.to_path_buf())
             .chain(opts.dirs.iter().cloned())
             .collect();
-        (items, capped) = file_items(&token.query, &roots, opts.agents, fs);
+        // Agents only at the start of the message: a mention further in is always a file.
+        let agents = if token.start == 0 { opts.agents } else { &[] };
+        (items, capped) = file_items(&token.query, &roots, agents, fs);
     }
     items.sort_by(|a, b| {
         b.score
@@ -535,9 +557,10 @@ mod tests {
     fn sub_agent_names_come_before_files() {
         let cwd = tree(&["worker.txt", "other.txt"]);
         let agents = [AgentRef {
-            id: "id-1".into(),
-            kind: Some("worker".into()),
+            id: "worker".into(),
+            kind: Some("developer".into()),
             status: Some("running".into()),
+            ..AgentRef::default()
         }];
         let mut o = Options::new(cwd.path());
         o.agents = &agents;
@@ -548,7 +571,46 @@ mod tests {
             s.items.iter().map(|i| i.label.as_str()).collect::<Vec<_>>(),
             ["@worker", "@worker.txt"]
         );
-        assert!(s.items[0].detail(&StdFs, 0).contains("running sub-agent"));
+        assert!(s.items[0].detail(&StdFs, 0).contains("developer · running"));
+        // mid-text the same token is only a file
+        let mut mid = LineEditor::new();
+        mid.insert("look at @wor");
+        let s = suggest(&mid, &o, &StdFs).unwrap();
+        assert_eq!(
+            s.items.iter().map(|i| i.label.as_str()).collect::<Vec<_>>(),
+            ["@worker.txt"]
+        );
+    }
+
+    #[test]
+    fn definitions_are_offered_after_agent_colon() {
+        let cwd = tree(&["other.txt"]);
+        let agents = [
+            AgentRef {
+                id: "worker".into(),
+                ..AgentRef::default()
+            },
+            AgentRef {
+                id: "reviewer".into(),
+                start_new: true,
+                ..AgentRef::default()
+            },
+        ];
+        let mut o = Options::new(cwd.path());
+        o.agents = &agents;
+        let labels = |text: &str| {
+            let mut e = LineEditor::new();
+            e.insert(text);
+            suggest(&e, &o, &StdFs)
+                .map(|s| s.items.iter().map(|i| i.label.clone()).collect::<Vec<_>>())
+                .unwrap_or_default()
+        };
+        assert_eq!(labels("@agent:rev"), ["@agent:reviewer"]);
+        assert_eq!(labels("@w"), ["@worker"]);
+        assert!(
+            labels("@rev").is_empty(),
+            "definitions need the agent: prefix"
+        );
     }
 
     // --- translated from Node test/complete-dir.test.js ---
