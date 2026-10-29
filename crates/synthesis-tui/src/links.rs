@@ -209,12 +209,7 @@ pub fn mouse_debug(k: &Key) -> Option<String> {
             "mouse {action:?} button={button} ctrl={} alt={} shift={} @{x},{y}",
             mods.ctrl, mods.alt, mods.shift
         ),
-        Key::MouseDrag {
-            x,
-            y,
-            button,
-            mods,
-        } => format!(
+        Key::MouseDrag { x, y, button, mods } => format!(
             "motion button={button} ctrl={} alt={} shift={} @{x},{y}",
             mods.ctrl, mods.alt, mods.shift
         ),
@@ -320,7 +315,12 @@ pub fn hyperlinks_enabled(env: &Env) -> bool {
 
 /// `line` (already encoded: only SGR escapes) with OSC 8 around its urls and existing paths. Width
 /// is untouched (OSC 8 has none) and the plain line, which the row cache compares, is not changed.
-pub fn hyperlink_line(line: &str, base: Option<&Path>, home: Option<&Path>, windows: bool) -> String {
+pub fn hyperlink_line(
+    line: &str,
+    base: Option<&Path>,
+    home: Option<&Path>,
+    windows: bool,
+) -> String {
     let chars: Vec<char> = strip_ansi(line).chars().collect();
     let mut spans: Vec<(usize, usize, String)> = url_spans(&chars)
         .into_iter()
@@ -344,14 +344,14 @@ pub fn hyperlink_line(line: &str, base: Option<&Path>, home: Option<&Path>, wind
     let (mut k, mut next, mut open) = (0, 0, false);
     let mut i = 0;
     while i < line.len() {
+        if open && spans[next - 1].1 == k {
+            out.push_str("\x1b]8;;\x1b\\");
+            open = false;
+        }
         if let Some(n) = csi_len(line, i) {
             out.push_str(&line[i..i + n]);
             i += n;
             continue;
-        }
-        if open && spans[next - 1].1 == k {
-            out.push_str("\x1b]8;;\x1b\\");
-            open = false;
         }
         if !open && next < spans.len() && spans[next].0 == k {
             out.push_str(&format!("\x1b]8;;{}\x1b\\", spans[next].2));
@@ -407,7 +407,9 @@ pub fn existing_path(raw: &str, home: Option<&Path>, base: Option<&Path>) -> Opt
     // "name(12)" / "name(12,3)"
     if p.ends_with(')')
         && let Some(open) = p.rfind('(')
-        && p[open + 1..cut - 1].bytes().all(|b| b.is_ascii_digit() || b == b',')
+        && p[open + 1..cut - 1]
+            .bytes()
+            .all(|b| b.is_ascii_digit() || b == b',')
         && cut - 1 > open + 1
     {
         cut = open;
@@ -594,7 +596,10 @@ mod tests {
             path_at("at src/lib.rs(12,3) now", 16).as_deref(),
             Some("src/lib.rs(12,3)")
         );
-        assert_eq!(path_at("open Cargo.toml.", 6).as_deref(), Some("Cargo.toml"));
+        assert_eq!(
+            path_at("open Cargo.toml.", 6).as_deref(),
+            Some("Cargo.toml")
+        );
         assert_eq!(
             path_at(r"\\srv\share\a b", 3).as_deref(),
             Some(r"\\srv\share\a")
@@ -617,15 +622,29 @@ mod tests {
         );
         // a url wrapped over two rows is found from either row
         let rows = |y: i64| match y {
-            0 => Some(SelRow { text: "  see https://exam".into(), soft: true, lead: 2 }),
-            1 => Some(SelRow { text: "  ple.com/x tail".into(), soft: false, lead: 2 }),
+            0 => Some(SelRow {
+                text: "  see https://exam".into(),
+                soft: true,
+                lead: 2,
+            }),
+            1 => Some(SelRow {
+                text: "  ple.com/x tail".into(),
+                soft: false,
+                lead: 2,
+            }),
             _ => None,
         };
         let (text, col) = join_wrapped(&rows, 1, 4).unwrap();
         assert_eq!(text, "see https://example.com/x tail");
-        assert_eq!(link_at(&text, col), Some(Link::Url("https://example.com/x".into())));
+        assert_eq!(
+            link_at(&text, col),
+            Some(Link::Url("https://example.com/x".into()))
+        );
         let (text, col) = join_wrapped(&rows, 0, 6).unwrap();
-        assert_eq!(link_at(&text, col), Some(Link::Url("https://example.com/x".into())));
+        assert_eq!(
+            link_at(&text, col),
+            Some(Link::Url("https://example.com/x".into()))
+        );
         assert_eq!(join_wrapped(&rows, 1, 0), None, "the gutter is not text");
     }
 
@@ -650,7 +669,10 @@ mod tests {
         assert_eq!(ep("-probe.rs"), None);
         assert_eq!(existing_path("relative/p.rs", None, None), None);
         assert_eq!(existing_path("~/x/y", None, None), None, "no home known");
-        let url = format!("file://{}", file_uri(&f, false).trim_start_matches("file://"));
+        let url = format!(
+            "file://{}",
+            file_uri(&f, false).trim_start_matches("file://")
+        );
         assert_eq!(ep(&url).unwrap().path, f, "file url, percent-decoded");
         assert_eq!(ep("file://elsewhere/etc/passwd"), None, "remote host");
         #[cfg(unix)]
@@ -790,14 +812,26 @@ mod tests {
     }
 
     fn m_ctrl() -> Mods {
-        Mods { ctrl: true, ..Mods::default() }
+        Mods {
+            ctrl: true,
+            ..Mods::default()
+        }
     }
 
     #[test]
     fn file_uris_are_percent_encoded_per_platform() {
-        assert_eq!(file_uri(Path::new("/a b/é#.txt"), false), "file:///a%20b/%C3%A9%23.txt");
-        assert_eq!(file_uri(Path::new(r"C:\Users\me\a b.txt"), true), "file:///C:/Users/me/a%20b.txt");
-        assert_eq!(file_uri(Path::new(r"\\srv\share\x.txt"), true), "file://srv/share/x.txt");
+        assert_eq!(
+            file_uri(Path::new("/a b/é#.txt"), false),
+            "file:///a%20b/%C3%A9%23.txt"
+        );
+        assert_eq!(
+            file_uri(Path::new(r"C:\Users\me\a b.txt"), true),
+            "file:///C:/Users/me/a%20b.txt"
+        );
+        assert_eq!(
+            file_uri(Path::new(r"\\srv\share\x.txt"), true),
+            "file://srv/share/x.txt"
+        );
     }
 
     #[test]
@@ -811,8 +845,15 @@ mod tests {
         assert!(on(&[("WT_SESSION", "x")]) && on(&[("KITTY_WINDOW_ID", "1")]));
         assert!(on(&[("VTE_VERSION", "5000")]) && !on(&[("VTE_VERSION", "4999")]));
         assert!(on(&[("SYNTHESIS_HYPERLINKS", "1")]));
-        assert!(!on(&[("SYNTHESIS_HYPERLINKS", "0"), ("WT_SESSION", "x"), ("NO_COLOR", "1")]));
-        assert!(on(&[("NO_COLOR", "1"), ("WT_SESSION", "x")]), "NO_COLOR does not matter");
+        assert!(!on(&[
+            ("SYNTHESIS_HYPERLINKS", "0"),
+            ("WT_SESSION", "x"),
+            ("NO_COLOR", "1")
+        ]));
+        assert!(
+            on(&[("NO_COLOR", "1"), ("WT_SESSION", "x")]),
+            "NO_COLOR does not matter"
+        );
     }
 
     #[test]
@@ -825,13 +866,19 @@ mod tests {
         let out = hyperlink_line(line, Some(base), None, false);
         // nothing there for a.rs (the file is "a b.rs"), the url is wrapped, sgr is untouched
         assert_eq!(strip_osc8(&out), line);
-        assert!(out.contains("\x1b]8;;https://e.x/a?b=1\x1b\\https://e.x/a?b=1\x1b]8;;\x1b\\."), "{out:?}");
-        assert!(!out.contains("nope"), "{out:?}");
+        assert!(
+            out.contains("\x1b]8;;https://e.x/a?b=1\x1b\\https://e.x/a?b=1\x1b]8;;\x1b\\."),
+            "{out:?}"
+        );
+        assert!(!out.contains("file://"), "{out:?}");
         assert_eq!(out.matches("\x1b]8;;\x1b\\").count(), 1);
         std::fs::write(base.join("a.rs"), "x").unwrap();
         let out = hyperlink_line(line, Some(base), None, false);
         let uri = file_uri(&base.join("a.rs"), false);
-        assert!(out.contains(&format!("\x1b]8;;{uri}\x1b\\a.rs:3\x1b]8;;\x1b\\")), "{out:?}");
+        assert!(
+            out.contains(&format!("\x1b]8;;{uri}\x1b\\a.rs:3\x1b]8;;\x1b\\")),
+            "{out:?}"
+        );
         assert_eq!(strip_osc8(&out), line);
         assert_eq!(width(&strip_osc8(&out)), width(&strip_ansi(line)));
         // a link at the very end of the line is closed

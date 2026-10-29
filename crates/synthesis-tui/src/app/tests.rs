@@ -2071,3 +2071,129 @@ fn agent_start_and_unknown_addresses() {
     assert!(typed_at(&mut a, "agent:zzz hi\r").is_empty());
     assert!(screen(&mut a).contains("no such agent"));
 }
+
+fn press(a: &mut App, (x, y): (u32, u32), button: u32, ctrl: bool, alt: bool) -> Vec<Cmd> {
+    a.on_key(
+        Key::Mouse {
+            x: x + 1,
+            y: y + 1,
+            button,
+            action: MouseAction::Down,
+            mods: Mods {
+                ctrl,
+                alt,
+                shift: false,
+            },
+        },
+        T0,
+    )
+}
+
+fn notice(a: &mut App, text: &str) {
+    a.on_event(
+        &env(
+            40,
+            Ev::ModelDelta {
+                block_index: 1,
+                kind: "text".into(),
+                text: text.into(),
+            },
+        ),
+        T0,
+    );
+}
+
+#[test]
+fn click_gestures_open_links_relative_paths_and_report_missing_ones() {
+    let d = tempfile::tempdir().unwrap();
+    let root = synthesis_core::canonicalize(d.path()).unwrap();
+    std::fs::write(root.join("notes.txt"), "x").unwrap();
+    let mut a = App::new(cfg(&root.to_string_lossy()), &[], T0);
+    streamed(&mut a);
+    notice(
+        &mut a,
+        "see https://example.com/x then Update(notes.txt:3) or gone/away.rs ok",
+    );
+    let url = find_cell(&mut a, "https://example.com/x", 3);
+    let rel = find_cell(&mut a, "notes.txt:3", 2);
+    let gone = find_cell(&mut a, "gone/away.rs", 2);
+    let is_url =
+        |c: &[Cmd]| matches!(c, [Cmd::Open(OpenTarget::Url(u))] if u == "https://example.com/x");
+    let is_file = |c: &[Cmd]| matches!(c, [Cmd::Open(OpenTarget::RevealFile(p))] if *p == root.join("notes.txt"));
+    // (button, ctrl, alt) that open: ctrl+left, alt+left, any right click (macOS ctrl+click)
+    for (button, ctrl, alt) in [
+        (0, true, false),
+        (0, false, true),
+        (2, false, false),
+        (2, true, false),
+    ] {
+        assert!(
+            is_url(&press(&mut a, url, button, ctrl, alt)),
+            "{button} {ctrl} {alt}"
+        );
+        assert!(
+            is_file(&press(&mut a, rel, button, ctrl, alt)),
+            "{button} {ctrl} {alt}"
+        );
+    }
+    // a plain left click and a middle click never open
+    assert!(press(&mut a, url, 0, false, false).is_empty());
+    assert!(press(&mut a, url, 1, true, false).is_empty());
+    // a path that does not exist: a notice with ctrl / right click, nothing opened
+    assert!(press(&mut a, gone, 0, true, false).is_empty());
+    assert!(
+        screen(&mut a).contains("✗ not found gone/away.rs"),
+        "{}",
+        screen(&mut a)
+    );
+    // alt+click on such text stays a selection click (no notice, no open)
+    a.toast("", T0, false);
+    assert!(press(&mut a, gone, 0, false, true).is_empty());
+    assert!(!screen(&mut a).contains("not found"));
+}
+
+#[test]
+fn a_url_wrapped_over_rows_opens_from_any_row_and_hover_hints() {
+    let mut a = app();
+    streamed(&mut a);
+    let url = format!("https://example.com/{}", "a".repeat(150));
+    notice(&mut a, &format!("see {url} end"));
+    let (x, y) = find_cell(&mut a, "https://example.com/", 3);
+    for dy in [0, 1] {
+        let c = press(&mut a, (x, y + dy), 0, true, false);
+        assert!(
+            matches!(&c[..], [Cmd::Open(OpenTarget::Url(u))] if *u == url),
+            "row +{dy}: {c:?}"
+        );
+    }
+    // motion without a button over the link hints, over plain text does not
+    let motion = |a: &mut App, x: u32, y: u32| {
+        a.on_key(
+            Key::MouseDrag {
+                x: x + 1,
+                y: y + 1,
+                button: 3,
+                mods: Mods::default(),
+            },
+            T0,
+        )
+    };
+    motion(&mut a, x, 0);
+    assert!(!screen(&mut a).contains("ctrl+click to open"));
+    motion(&mut a, x, y);
+    assert!(screen(&mut a).contains("ctrl+click to open"));
+}
+
+#[test]
+fn mouse_debug_shows_what_the_terminal_sent() {
+    let mut c = cfg("/tmp/proj");
+    c.mouse_debug = true;
+    let mut a = App::new(c, &[], T0);
+    streamed(&mut a);
+    press(&mut a, (5, 5), 2, false, false);
+    assert!(
+        screen(&mut a).contains("mouse Down button=2 ctrl=false alt=false shift=false @6,6"),
+        "{}",
+        screen(&mut a)
+    );
+}

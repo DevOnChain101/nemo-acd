@@ -39,7 +39,9 @@ use tokio_util::sync::CancellationToken;
 
 use crate::chat::Chat;
 use crate::link::{ApprovalAsk, InputAsk};
-use crate::links::{Link, OpenTarget, existing_path, join_wrapped, link_at, mouse_debug, open_gesture};
+use crate::links::{
+    Link, OpenTarget, existing_path, join_wrapped, link_at, mouse_debug, open_gesture,
+};
 use crate::route::{self, Known, Route};
 use crate::sanitize::{clean_input, clean_input_lines, clean_line, clean_text};
 use crate::status::{SandboxStatus, StatusExtra, status_line_with};
@@ -2425,7 +2427,9 @@ impl App {
                 }
             }
             // motion with no button (terminals that report it): hint when over a link
-            Key::MouseDrag { x, y, button: 3, .. } if self.sel.mode() != SelMode::Dragging => {
+            Key::MouseDrag {
+                x, y, button: 3, ..
+            } if self.sel.mode() != SelMode::Dragging => {
                 let p = Point {
                     x: i64::from(x) - 1,
                     y: i64::from(y) - 1,
@@ -2573,7 +2577,9 @@ impl App {
             x: i64::from(x) - 1,
             y: i64::from(y) - 1,
         };
-        if !self.in_chat(p) || (button == 2 && self.in_input(p)) {
+        // right click on the prompt line stays paste (the streaming tail above it is chat too)
+        let on_prompt = self.caret.is_some_and(|(_, cy)| i64::from(cy) == p.y);
+        if !self.in_chat(p) || (button == 2 && on_prompt) {
             return false;
         }
         let Some(link) = self.link_under(p) else {
@@ -2582,8 +2588,11 @@ impl App {
         match link {
             Link::Url(u) => out.push(Cmd::Open(OpenTarget::Url(u))),
             Link::Path(raw) => {
-                let found =
-                    existing_path(&raw, self.cfg.home.as_deref(), Some(Path::new(&self.cfg.cwd)));
+                let found = existing_path(
+                    &raw,
+                    self.cfg.home.as_deref(),
+                    Some(Path::new(&self.cfg.cwd)),
+                );
                 match found {
                     Some(t) => out.push(Cmd::Open(OpenTarget::from_path(&t))),
                     // alt+click is also "extend selection": only a real path takes it over

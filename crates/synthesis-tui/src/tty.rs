@@ -174,7 +174,8 @@ impl ScriptedTty {
 pub fn replay(raw: &str) -> Vec<String> {
     let mut rows: Vec<String> = Vec::new();
     let mut row = 0usize;
-    let cs: Vec<char> = raw.chars().collect();
+    // OSC 8 hyperlinks carry no cells: text snapshots do not see them
+    let cs: Vec<char> = synthesis_tui_base::text::strip_osc8(raw).chars().collect();
     let mut i = 0;
     while i < cs.len() {
         if cs[i] == '\x1b' && cs.get(i + 1) == Some(&'[') {
