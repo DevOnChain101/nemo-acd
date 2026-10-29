@@ -3,8 +3,8 @@
 
 
 ╭───────────────────────────────────╮
-│ ✻ Hello there! I'm Synthesis.  · 1.0.0 │
-│                                   │
+│ ✻ Good afternoon.  · 1.0.0        │
+│ What shall we build?              │
 │ /help for commands · alt+v pastes │
 │ cwd: /work/proj                   │
 ╰───────────────────────────────────╯

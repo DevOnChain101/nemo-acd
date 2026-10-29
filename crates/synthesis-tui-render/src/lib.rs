@@ -7,6 +7,7 @@ pub mod dash;
 pub mod dialogs;
 pub mod flow;
 pub mod folders;
+pub mod greeting;
 pub mod highlight;
 pub mod logo;
 mod logo_art;

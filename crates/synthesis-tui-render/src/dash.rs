@@ -206,13 +206,13 @@ fn col_tool() -> Rgb {
     t().info
 }
 fn col_agent() -> Rgb {
-    t().pearl
+    t().purple()
 }
 fn col_skill() -> Rgb {
     t().ok
 }
 fn col_track() -> Rgb {
-    t().border
+    t().track()
 }
 const SPARK: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
 
@@ -1639,6 +1639,7 @@ fn agent_panel(
     opts.focused = Some(focused);
     opts.docked = docked;
     opts.config = main.config.clone();
+    opts.tz_offset_min = s.tz_offset_min;
     let empty: [char; 0] = [];
     let editor = s.editor.as_ref().map_or(
         EditorView {
@@ -2633,7 +2634,7 @@ fn topology_panel(s: &DashState, w: i64, h: i64, frame: usize, now: i64) -> Line
     let rows = render_flow(s.session, u(w - 3), u(h - 2), frame, now, opts);
     let (active, total) = node_counts(s.session, now);
     let count = if active > 0 {
-        paint(t().pearl, &format!("{active} active"))
+        paint(t().purple(), &format!("{active} active"))
     } else {
         paint(col_muted(), &format!("{total} nodes"))
     };

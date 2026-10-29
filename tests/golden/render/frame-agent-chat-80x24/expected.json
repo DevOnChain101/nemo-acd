@@ -1,7 +1,7 @@
 {
   "cols": 80,
   "lines": [
-    "▐ ✻ Synthesis  ·  MISSION CONTROL ▌ │ ● 2 live               ctx ▱▱▱▱▱▱ 3% │ 12:00:00",
+    " ⢎⡱  S Y N T H E S I S   proj                                ● 2 live  │  12:00 ",
     "┏━ ◆ Running 2 ━━━━┓┏━ ◆ Status ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓",
     "┃ ►● proj-0     10%┃┃                                                          ┃",
     "│ project-0        ││ · RUNNING TOOL  last activity 9m54s ago                  │",

@@ -19,7 +19,11 @@ const fn hex(v: u32) -> Rgb {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ThemeId {
+    /// The palette of the Node prototype and of every release before P1, value for value.
+    Classic,
     Graphite,
+    /// The owner's reference mockups (design/tui-reference): Classic's colours on deep navy; the default.
+    Synthesis,
     Midnight,
     HighContrast,
     Mono,
@@ -30,7 +34,9 @@ pub enum ThemeId {
 
 impl ThemeId {
     /// The values `synthesis.tui.theme` accepts.
-    pub const CHOICES: [(&'static str, ThemeId); 5] = [
+    pub const CHOICES: [(&'static str, ThemeId); 7] = [
+        ("synthesis", ThemeId::Synthesis),
+        ("classic", ThemeId::Classic),
         ("graphite", ThemeId::Graphite),
         ("midnight", ThemeId::Midnight),
         ("high-contrast", ThemeId::HighContrast),
@@ -101,6 +107,27 @@ pub struct Theme {
     pub bg_attrs: &'static [(Rgb, &'static str)],
     /// Start and end sequences of a selected cell (`synthesis_tui_base::selection`).
     pub select: (&'static str, &'static str),
+    /// Colours Classic keeps apart that the other themes merge into the tokens above.
+    pub extra: Option<&'static Extra>,
+}
+
+/// The old palette's finer distinctions (tokens in the other themes: track = border, slate = label,
+/// cream = accent_light, blue = info, teal = ok, purple = pearl, pink = sand, orange = warn,
+/// code = info). See [`Theme::track`] and friends.
+pub struct Extra {
+    pub track: Rgb,
+    pub slate: Rgb,
+    pub cream: Rgb,
+    pub blue: Rgb,
+    pub teal: Rgb,
+    pub purple: Rgb,
+    pub pink: Rgb,
+    pub orange: Rgb,
+    pub code: Rgb,
+    /// Context-usage categories.
+    pub ctx: [Rgb; 8],
+    /// Agent tints, picked by a hash of the agent kind.
+    pub agents: [Rgb; 8],
 }
 
 const BOLD_SGR: &str = "\x1b[1m";
@@ -157,9 +184,108 @@ const BASE: Theme = Theme {
         "\x1b[38;2;229;231;235m\x1b[48;2;36;40;48m",
         "\x1b[39m\x1b[49m",
     ),
+    extra: None,
 };
 
-pub static GRAPHITE: Theme = BASE;
+// ---- Classic: the palette before P1, value for value (owner preference 2026-10-30)
+const PURPLE: Rgb = [192, 132, 252];
+const BLUE: Rgb = [96, 165, 250];
+const GREEN: Rgb = [74, 222, 128];
+const YELLOW: Rgb = [250, 204, 21];
+const ORANGE: Rgb = [251, 146, 60];
+const PINK: Rgb = [244, 114, 182];
+const CYAN: Rgb = [34, 211, 238];
+const TEAL: Rgb = [45, 212, 191];
+const RED: Rgb = [248, 113, 113];
+const ACCENT_CORE: Rgb = [129, 140, 248];
+const ACCENT_LIGHT: Rgb = [165, 180, 252];
+const ACCENT_INK: Rgb = [17, 19, 38];
+const WARM_DIM: Rgb = [98, 98, 106];
+const SELECT_BG: Rgb = [60, 72, 105];
+
+static CLASSIC_EXTRA: Extra = Extra {
+    track: [58, 58, 64],
+    slate: [176, 190, 210],
+    cream: [250, 250, 250],
+    blue: BLUE,
+    teal: TEAL,
+    purple: PURPLE,
+    pink: PINK,
+    orange: ORANGE,
+    code: [125, 211, 252],
+    ctx: [BLUE, PURPLE, TEAL, YELLOW, PINK, CYAN, GREEN, RED],
+    agents: [PURPLE, BLUE, GREEN, YELLOW, TEAL, PINK, CYAN, RED],
+};
+
+const CLASSIC_T: Theme = Theme {
+    id: ThemeId::Classic,
+    surface: ACCENT_INK,
+    elevated: SELECT_BG,
+    border: WARM_DIM,
+    label: [165, 165, 172],
+    muted: [112, 112, 120],
+    body: [215, 215, 220],
+    strong: [245, 245, 245],
+    accent: ACCENT_CORE,
+    accent_light: ACCENT_LIGHT,
+    // spinner and header mark: the old shimmer ran from the core to the light accent
+    pearl: ACCENT_LIGHT,
+    ok: GREEN,
+    warn: YELLOW,
+    err: RED,
+    info: CYAN,
+    sand: PINK,
+    ink: ACCENT_INK,
+    diff_add_bg: hex(0x14281C),
+    diff_del_bg: hex(0x2E181B),
+    heat: [
+        [22, 27, 34],
+        [14, 68, 41],
+        [0, 109, 50],
+        [38, 166, 65],
+        [57, 211, 83],
+    ],
+    tints: [PURPLE, BLUE, GREEN, TEAL],
+    select: (
+        "\x1b[38;2;245;245;245m\x1b[48;2;60;72;105m",
+        "\x1b[39m\x1b[49m",
+    ),
+    extra: Some(&CLASSIC_EXTRA),
+    ..BASE
+};
+pub static CLASSIC: Theme = CLASSIC_T;
+
+/// The owner's reference mockups (design/tui-reference): Classic's foreground colours, which agree
+/// with the colours sampled from the mockups (`tools/sample-mockup-palette.py`: blue, teal, green,
+/// amber, red and purple fall in the same hue families), on the mockups' deep navy surfaces
+/// (sampled: page `#080E12`, header band `#0E141A`, selected row `#161E26`, diff-added row `#122220`).
+pub static SYNTHESIS: Theme = Theme {
+    id: ThemeId::Synthesis,
+    bg_ref: hex(0x080E12),
+    surface: hex(0x0E141A),
+    elevated: hex(0x1A2433),
+    diff_add_bg: hex(0x122220),
+    select: (
+        "\x1b[38;2;245;245;245m\x1b[48;2;26;36;51m",
+        "\x1b[39m\x1b[49m",
+    ),
+    ..CLASSIC_T
+};
+
+/// Silver and pearl surfaces with the kit's blue (hue 219, the hue of the kit's Muted Blue `#0B1322`)
+/// where the eye goes (focus, selection, chips, links), and brighter text than the kit's grey so it
+/// does not read pale. The kit itself has no saturated accent token.
+pub static GRAPHITE: Theme = Theme {
+    body: hex(0xDADDE3),
+    strong: hex(0xF5F6F8),
+    accent: hex(0x4D8BFF),
+    accent_light: hex(0xA3C3FF),
+    select: (
+        "\x1b[38;2;245;246;248m\x1b[48;2;38;65;115m",
+        "\x1b[39m\x1b[49m",
+    ),
+    ..BASE
+};
 
 pub static MIDNIGHT: Theme = Theme {
     id: ThemeId::Midnight,
@@ -258,6 +384,7 @@ pub static MONO: Theme = Theme {
     fg_attrs: &[(M_BOLD, BOLD_SGR), (M_DIM, DIM_SGR)],
     bg_attrs: &[],
     select: (REVERSE_SGR, "\x1b[27m"),
+    extra: None,
 };
 
 pub static PEARL: Theme = Theme {
@@ -307,6 +434,7 @@ pub static PEARL: Theme = Theme {
         "\x1b[38;2;21;23;27m\x1b[48;2;225;228;234m",
         "\x1b[39m\x1b[49m",
     ),
+    extra: None,
 };
 
 /// 16-colour terminals: every value is exactly one of the ANSI colours that
@@ -357,11 +485,14 @@ pub static ANSI16: Theme = Theme {
     fg_attrs: &[],
     bg_attrs: &[],
     select: (REVERSE_SGR, "\x1b[27m"),
+    extra: None,
 };
 
 pub fn theme_for(id: ThemeId) -> &'static Theme {
     match id {
+        ThemeId::Classic => &CLASSIC,
         ThemeId::Graphite => &GRAPHITE,
+        ThemeId::Synthesis => &SYNTHESIS,
         ThemeId::Midnight => &MIDNIGHT,
         ThemeId::HighContrast => &HIGH_CONTRAST,
         ThemeId::Mono => &MONO,
@@ -376,7 +507,7 @@ pub fn select_theme(mode: ColorMode, user: ThemeId) -> ThemeId {
         ColorMode::Mono => ThemeId::Mono,
         ColorMode::Ansi16 => ThemeId::Ansi16,
         ColorMode::TrueColor | ColorMode::Ansi256 => match user {
-            ThemeId::Ansi16 => ThemeId::Graphite,
+            ThemeId::Ansi16 => ThemeId::Synthesis,
             u => u,
         },
     }
@@ -469,7 +600,7 @@ impl Glyphs {
 // ---------------------------------------------------------------- scope
 
 /// What a render call needs besides its arguments. Set once per call by the entry point
-/// (`ConfigScope`), so no signature carries it; the default is Graphite with Unicode glyphs.
+/// (`ConfigScope`), so no signature carries it; the default is Synthesis with Unicode glyphs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RenderConfig {
     pub theme: ThemeId,
@@ -479,7 +610,7 @@ pub struct RenderConfig {
 impl Default for RenderConfig {
     fn default() -> Self {
         Self {
-            theme: ThemeId::Graphite,
+            theme: ThemeId::Synthesis,
             ascii: false,
         }
     }
@@ -521,19 +652,45 @@ pub fn glyphs() -> &'static Glyphs {
     if config().ascii { &ASCII } else { &UNICODE }
 }
 
+macro_rules! extra_colour {
+    ($($(#[$d:meta])* $name:ident => $fallback:ident),*) => {
+        impl Theme {$(
+            $(#[$d])*
+            pub fn $name(&self) -> Rgb {
+                self.extra.map_or(self.$fallback, |x| x.$name)
+            }
+        )*}
+    };
+}
+extra_colour! {
+    /// Empty part of a bar.
+    track => border,
+    slate => label,
+    cream => accent_light,
+    blue => info,
+    teal => ok,
+    purple => pearl,
+    pink => sand,
+    orange => warn,
+    code => info
+}
+
 impl Theme {
     fn attr(&self, table: &'static [(Rgb, &'static str)], c: Rgb) -> &'static str {
         table.iter().find(|(k, _)| *k == c).map_or("", |(_, a)| a)
     }
 }
 
-/// One of the four agent tints, by a hash of the agent kind.
+/// One of the agent tints (eight in Classic and Synthesis, four elsewhere), by a hash of the agent kind.
 pub fn agent_color(kind: &str) -> Rgb {
     let mut h: u32 = 0;
     for ch in kind.chars() {
         h = h.wrapping_mul(31).wrapping_add(ch as u32);
     }
-    t().tints[(h as usize) % 4]
+    match t().extra {
+        Some(x) => x.agents[(h as usize) % 8],
+        None => t().tints[(h as usize) % 4],
+    }
 }
 
 pub const RESET: &str = "\x1b[0m";
@@ -735,7 +892,9 @@ mod theme_tests {
     use super::*;
     use synthesis_tui_base::sgr::encode;
 
-    const ALL: [ThemeId; 6] = [
+    const ALL: [ThemeId; 8] = [
+        ThemeId::Synthesis,
+        ThemeId::Classic,
         ThemeId::Graphite,
         ThemeId::Midnight,
         ThemeId::HighContrast,
@@ -772,6 +931,14 @@ mod theme_tests {
                     continue; // not painted in 16 colours
                 }
                 let floor = |name: &str, c: Rgb, min: f64| {
+                    // Exception: Classic and Synthesis keep the old T_SUBTLE (112,112,120) for muted
+                    // text (3.98:1 on Classic's bg, lower on its header band; floor 3.5).
+                    let min =
+                        if matches!(id, ThemeId::Classic | ThemeId::Synthesis) && name == "muted" {
+                            3.5
+                        } else {
+                            min
+                        };
                     let r = contrast(c, bg);
                     assert!(r >= min, "{id:?} {name} on {bgname}: {r:.2} < {min}");
                     r
@@ -782,6 +949,7 @@ mod theme_tests {
                 for (n, c) in [
                     ("label", t.label),
                     ("muted", t.muted),
+                    ("accent", t.accent),
                     ("ok", t.ok),
                     ("warn", t.warn),
                     ("err", t.err),
@@ -838,10 +1006,10 @@ mod theme_tests {
             ("border", 238),
             ("label", 246),
             ("muted", 244),
-            ("body", 252),
-            ("strong", 254),
-            ("accent", 253),
-            ("accent_light", 231),
+            ("body", 253),
+            ("strong", 255),
+            ("accent", 69),
+            ("accent_light", 153),
             ("pearl", 252),
             ("ok", 151),
             ("warn", 179),
@@ -941,6 +1109,8 @@ mod theme_tests {
         }
         // and the four status colours are four different colours in every colour theme
         for id in [
+            ThemeId::Synthesis,
+            ThemeId::Classic,
             ThemeId::Graphite,
             ThemeId::Midnight,
             ThemeId::HighContrast,

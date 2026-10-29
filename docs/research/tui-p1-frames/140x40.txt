@@ -1,30 +1,30 @@
-===== 140x40 welcome (offline, scripted dummy model) [140x40] cursor=(26,34) hidden=False modes={7: False, 25: True, 1000: True, 1002: True, 1006: True, 1049: True, 2004: True, 2026: False}
-00| ⢎⡱  S Y N T H E S I S   qa-repo                                                                                         ● 1 live  │  14:48
+===== 140x40 welcome (synth --once, default theme) [140x40]
+00| ⢎⡱  S Y N T H E S I S   qa-repo                                                                                         ● 1 live  │  17:44 
 01|────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 02|┏━ ◆ Workspace 1 ━━┓┏━ ◆ Status ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓┏━ ◆ TOPOLOGY 0 nodes ━━━━━━━━━━━━━━━━━━━━━━━┓
-03|┃ ▌● qa-repo      3┃┃                                                                        ┃┃ · 1›○ 2›○ 3›○ 4›○ 5›○ 6                    ┃
-04|┗━━━━━━━━━━━━━━━━━━┛│ · THINKING  last activity 0s ago                                       ││ ▸ Plan: understand & plan                  │
-05|┏━ ◆ Running · qa… ┓│   ▁▂▃▅▇███▇▆▄▂▁▁▁▂▃▅▇███▇▅▄▂▁▁▁▂▄▅                                     ││                                            │
+03|┃ ▌● qa-repo      1┃┃                                                                        ┃┃ ○ 1›○ 2›○ 3›○ 4›○ 5›○ 6                    ┃
+04|┗━━━━━━━━━━━━━━━━━━┛│ ● IDLE  last activity 0s ago                                           ││ idle · waiting for a prompt                │
+05|┏━ ◆ Running · qa… ┓│   waiting for the next prompt…                                         ││                                            │
 06|┃ ▌● synthesis ⌘   ┃│ Context  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   0% 0/200.0k      ││                                            │
-07|│ qa-repo (…pad)   │┃                                                                        ┃│                                            │
+07|│ qa-repo (…49z)   │┃                                                                        ┃│                                            │
 08|┃                  ┃┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛│                                            │
-09|┗━━━━━━━━━━━━━━━━━━┛┏━ ◆ SYNTHESIS · …/scratchpad/qa-repo  ready ━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓│                                            │
+09|┗━━━━━━━━━━━━━━━━━━┛┏━ ◆ SYNTHESIS · …/T/tmptc0t_49z/qa-repo  ready ━━━━━━━━━━━━━━━━━━━━━━━━━┓│                                            │
 10|┏━ ◆ Session ━━━━━━┓┃                                                                        ┃│                                            │
 11|┃                  ┃│                                                                        ││                                            │
-12|│ model  fake/fake…││                                                                        ││ ┏━━━ SYNTHESIS CORE  fake/model ━━━━━━━━━━┓│
-13|│ mode   manual    ││                                                                        ││ ┃ · Intent       parse request   reading… ┃│
-14|│ effort auto      ││                                                                        ││ ┃ · Plan         decompose                ┃│
-15|│ cwd    qa-repo   ││                                                                        ││ ┃ · Orchestrator route work          idle ┃│
-16|│ uptime 0s        ││                                                                        ││ ┃ ctx 0% · 0 tok                          ┃│
-17|│ turns  0 prompts…││                                                                        ││ ┗┳┳┳┳┳┳┳▲━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛│
+12|│                  ││                                                                        ││ ╭─── SYNTHESIS CORE ──────────────────────╮│
+13|│ model  loading m…││                                                                        ││ │ · Intent       parse request            ││
+14|│ mode   manual    ││                                                                        ││ │ · Plan         decompose                ││
+15|│ effort auto      ││                                                                        ││ │ · Orchestrator route work          idle ││
+16|│ cwd    qa-repo   ││                                                                        ││ │ ctx 0% · 0 tok                          ││
+17|│ turns  0 prompts…││                                                                        ││ ╰┳┳┳┳┳┳┳▲─────────────────────────────────╯│
 18|│                  ││                                                                        ││  │││││││└ USER  ❯ waiting for a prompt…    │
 19|┃                  ┃│                                                                        ││  ││││││└─►GUARDS  0 guards                 │
 20|┗━━━━━━━━━━━━━━━━━━┛│                                                                        ││  │││││└──►SUB-AGENTS  no sub-agents yet    │
 21|┏━ ◆ Tools & Skil… ┓│ ╭─────────────────────────────────────────────────────────────────────╮││  ││││└───►SKILLS  no skills used yet       │
-22|┃ no tool calls yet┃│ │ ✻ Hello there! I'm Synthesis.  · 0.1.0                              │││  │││└────►HOOKS  no event hooks fired      │
-23|┃                  ┃│ │                                                                     │││  ││└─────►EXECUTION  0 calls      no errors│
+22|┃ no tool calls yet┃│ │ ✻ Good evening.  · 0.1.0                                            │││  │││└────►HOOKS  no event hooks fired      │
+23|┃                  ┃│ │ What shall we build?                                                │││  ││└─────►EXECUTION  0 calls      no errors│
 24|┗━━━━━━━━━━━━━━━━━━┛│ │ /help for commands · alt+v pastes an image                          │││  │└──────►MCP  no MCP servers called       │
-25|┏━ ◆ Activity ━━━━━┓│ │ cwd: …o-ACD/267e4f0e-f43b-4ec2-89e8-488a8602f780/scratchpad/qa-repo │││  └───────►MEMORY  context ▱▱▱▱▱▱▱▱▱▱     0%│
+25|┏━ ◆ Activity ━━━━━┓│ │ cwd: …lders/32/1lfmnp3n2r73w3qj02l26w5c0000gn/T/tmptc0t_49z/qa-repo │││  └───────►MEMORY  context ▱▱▱▱▱▱▱▱▱▱     0%│
 26|┃                  ┃│ ╰─────────────────────────────────────────────────────────────────────╯││                                            │
 27|│                  ││                                                                        ││                                            │
 28|│                  ││  Tips for getting started:                                             ││                                            │
@@ -35,50 +35,7 @@
 33|│                  ││ ╭─────────────────────────────────────────────────────────────────────╮│┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 34|│                  ││ │ >  Enter send · Shift+Enter newline · / commands · @ files          ││┏━ ◆ Usage ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 35|│                  ││ ╰─────────────────────────────────────────────────────────────────────╯│┃ collecting history…                        ┃
-36|┃                  ┃┃ ⏸ manual mode on (shift+tab to cycle)         fake/model · effort: auto┃┃                                            ┃
+36|┃                  ┃┃ ⏸ manual mode on (shift+tab to cycle)                      effort: auto┃┃                                            ┃
 37|┗━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-38|tab workspace selector (when multiple) → sessions → prompt   enter send   esc interrupt   ⇧tab mode   alt+v paste image   ! shell
-39| sandbox: enforce [seatbelt fs:weak net:weak] · turns 0/50 · tools 0/200 · tok 0↑ 0↓ · verify n/a · ctrl+o: expand
-
-===== 140x40 after one scripted turn [140x40] cursor=(26,34) hidden=False modes={7: False, 25: True, 1000: True, 1002: True, 1006: True, 1049: True, 2004: True, 2026: False}
-00| ⢎⡱  S Y N T H E S I S   qa-repo                                                                                         ● 1 live  │  14:48
-01|────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-02|┏━ ◆ Workspace 1 ━━┓┏━ ◆ Status ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓┏━ ◆ TOPOLOGY 1 nodes ━━━━━━━━━━━━━━━━━━━━━━━┓
-03|┃ ▌● qa-repo      3┃┃                                                                        ┃┃ ✓ 1›○ 2›○ 3›○ 4›○ 5›○ 6                    ┃
-04|┗━━━━━━━━━━━━━━━━━━┛│ ● IDLE  last activity 0s ago                                           ││ ✓ turn complete · waiting for the next pro…│
-05|┏━ ◆ Running · qa… ┓│   waiting for the next prompt…                                         ││                                            │
-06|┃ ▌● synthesis ⌘   ┃│ Context  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   0% 10/200.0k     ││                                            │
-07|│ qa-repo (…pad)   │┃                                                                        ┃│                                            │
-08|┃                  ┃┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛│                                            │
-09|┗━━━━━━━━━━━━━━━━━━┛┏━ ◆ SYNTHESIS · …/scratchpad/qa-repo  ready ━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓│                                            │
-10|┏━ ◆ Session ━━━━━━┓┃                                                                        ┃│                                            │
-11|┃                  ┃│                                                                        ││                                            │
-12|│ model  fake/fake…││                                                                        ││ ╭─── SYNTHESIS CORE  fake/model ──────────╮│
-13|│ mode   manual    ││                                                                        ││ │ · Intent       parse request understood ││
-14|│ effort auto      ││                                                                        ││ │ · Plan         decompose                ││
-15|│ window 200.0k to…││                                                                        ││ │ · Orchestrator route work          idle ││
-16|│ cwd    qa-repo   ││ > fix the flaky login test                                             ││ │ ctx 0% · 15 tok                         ││
-17|│ uptime 1s        ││                                                                        ││ ╰┳┳┳┳┳┳┳▲─────────────────────────────────╯│
-18|│ turns  1 prompts…││ ● I will check login.ts and retry():                                   ││  ││┃││││● USER  ❯ fix the flaky login test │
-19|┃                  ┃│   • first                                                              ││  ││┃│││└─►GUARDS  0 guards                 │
-20|┗━━━━━━━━━━━━━━━━━━┛│   • second                                                             ││  ││┃││└──►SUB-AGENTS  no sub-agents yet    │
-21|┏━ ◆ Tools & Skil… ┓│                                                                        ││  ││┃│└───►SKILLS  no skills used yet       │
-22|┃                  ┃│ ● Read(main.rs)                                                        ││  ││●└────►HOOKS  no event hooks fired      │
-23|│ Read    ▇▇▇▇ 1   ││   ⎿  Read: cannot access                                               ││  ││┗━━━━●►EXECUTION 1  1 calls    no errors│
-24|┃                  ┃│      /private/tmp/claude-501/-Users-hunghq-Vibe-Nemo-ACD/267e4f0e-f43b-││  │└──────►MCP  no MCP servers called       │
-25|┗━━━━━━━━━━━━━━━━━━┛│      4ec2-89e8-488a8602f780/scratchpad/qa-repo/src/main.rs: ENOENT: no ││  └───────►MEMORY  context ▱▱▱▱▱▱▱▱▱▱     0%│
-26|┏━ ◆ Activity ━━━━━┓│      such file or directory, stat                                      ││                                            │
-27|┃ 14:48:45 ❯ fix t…┃│      '/private/tmp/claude-501/-Users-hunghq-Vibe-Nemo-ACD/267e4f0e-f43b││                                            │
-28|│ 14:48:45 ✎ I wil…││      -4ec2-89e8-488a8602f780/scratchpad/qa-repo/src/main.rs'           ││                                            │
-29|│                  ││                                                                        ││                                            │
-30|│                  ││ ▌ Done: the retry now waits 50 ms.                                     ││                                            │
-31|│                  ││                                                                        ││                                            │
-32|│                  ││ ✓ Done · 2 turns                                                       │┃                                            ┃
-33|│                  ││ ╭─────────────────────────────────────────────────────────────────────╮│┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-34|│                  ││ │ >  Enter send · Shift+Enter newline · / commands · @ files          ││┏━ ◆ Usage ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-35|│                  ││ ╰─────────────────────────────────────────────────────────────────────╯│┃ collecting history…                        ┃
-36|┃                  ┃┃ ⏸ manual mode on (shift+tab to cycle)         fake/model · effort: auto┃┃                                            ┃
-37|┗━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-38|tab workspace selector (when multiple) → sessions → prompt   enter send   esc interrupt   ⇧tab mode   alt+v paste image   ! shell
-39| sandbox: enforce [seatbelt fs:weak net:weak] · ctx 0% 10/200k · verify unverified: no verification result
-
+38|tab workspace selector (when multiple) → sessions → prompt   enter send   esc interrupt   ⇧tab mode   alt+v paste image   ! shell           
+39| sandbox: enforce [seatbelt fs:weak net:weak] · turns 0/50 · tools 0/200 · tok 0↑ 0↓ · verify n/a · ctrl+o: expand                          

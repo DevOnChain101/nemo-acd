@@ -25,7 +25,7 @@ pub struct TuiSettings {
 impl Default for TuiSettings {
     fn default() -> Self {
         Self {
-            theme: ThemeId::Graphite,
+            theme: ThemeId::Synthesis,
             glyphs: GlyphChoice::Auto,
         }
     }
@@ -46,11 +46,19 @@ impl TuiSettings {
         };
         match tui
             .get("theme")
-            .map(|t| t.as_str().and_then(ThemeId::parse))
-        {
+            // auto: the default colour theme; 16 colours and NO_COLOR pick theirs in `render_config`
+            .map(|t| {
+                t.as_str().and_then(|n| {
+                    if n == "auto" {
+                        Some(s.theme)
+                    } else {
+                        ThemeId::parse(n)
+                    }
+                })
+            }) {
             Some(Some(t)) => s.theme = t,
             Some(None) => {
-                diags.push("synthesis.tui.theme is not a known theme, using graphite".into())
+                diags.push("synthesis.tui.theme is not a known theme, using synthesis".into())
             }
             None => {}
         }
@@ -128,6 +136,18 @@ mod tests {
         assert_eq!(d.len(), 2);
         assert!(d.iter().all(|m| !m.contains("neon")), "{d:?}");
         assert_eq!(TuiSettings::from_settings(&json!({})).1.len(), 0);
+        // the default is synthesis; every named theme and `auto` are accepted
+        assert_eq!(TuiSettings::default().theme, ThemeId::Synthesis);
+        for (name, want) in [
+            ("classic", ThemeId::Classic),
+            ("graphite", ThemeId::Graphite),
+            ("synthesis", ThemeId::Synthesis),
+            ("auto", ThemeId::Synthesis),
+        ] {
+            let (s, d) =
+                TuiSettings::from_settings(&json!({"synthesis": {"tui": {"theme": name}}}));
+            assert_eq!((s.theme, d.len()), (want, 0), "{name}");
+        }
     }
 
     #[test]

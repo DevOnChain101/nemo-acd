@@ -1,6 +1,6 @@
 # Spec: TUI redesign (brand theme, panel registry, /config) — draft 0.1
 
-Date 2026-10-29. Status: **accepted: the owner took all recommendations D1–D11 on 2026-10-30** (see §13). P1 is implemented; P2–P4 are not started. Tags: `[fact file:line]` = read in the repo, `[assumption]` = not verified, `[derived]` = a value this spec adds that is not in the kit.
+Date 2026-10-29. Status: **accepted: the owner took all recommendations D1–D11 on 2026-10-30** (see §13). P1 is implemented; P2–P4 are not started. **Later the same day the owner supplied two reference mockups; §14 is authoritative and overrides this document where they disagree** (default theme, default panel visibility, the title, the greeting). Tags: `[fact file:line]` = read in the repo, `[assumption]` = not verified, `[derived]` = a value this spec adds that is not in the kit.
 
 **Inputs:** `design/02-design-tokens/tokens.css`, the desktop and landing previews, and `design/01-brand/logo/png/synthesis-symbol-transparent-256.png`. The brand boards (`04`) were never copied into the repo (`design/README.md` "Not included"), so they were not used.
 
@@ -10,7 +10,7 @@ Date 2026-10-29. Status: **accepted: the owner took all recommendations D1–D11
 
 ## 0. Problem and non-negotiables
 
-**Problem.** The TUI does not look like the Synthesis brand. It has heavy `┏━┓` boxes, an indigo/cyan gradient "MISSION CONTROL" pill, eight saturated hues and shimmer animations (`theme.rs:10-65`, `dash.rs:301-345`, `dash.rs:2398-2423`). The layout cannot be configured.
+**Problem.** The TUI does not look like the Synthesis brand. It has heavy `┏━┓` boxes, an indigo/cyan gradient title pill, eight saturated hues and shimmer animations (`theme.rs:10-65`, `dash.rs:301-345`, `dash.rs:2398-2423`). The layout cannot be configured.
 
 **Current structure** `[fact dash.rs:1462-3307]`:
 - **Left column** (`side_column`): Workspace, Running, Session, MCP, Tools & Skills, Activity.
@@ -43,7 +43,7 @@ Date 2026-10-29. Status: **accepted: the owner took all recommendations D1–D11
 
 **Strongest reason against this choice.** It moves Status, Tokens and Tasks out of the centre column, which is a visible change for current users. It also rebaselines nearly every render golden while another developer is editing `terminal.rs`, `e2e.rs` and `app.rs`. The `app.rs` line numbers moved while this spec was being written. The phase gates in §8.4 contain this risk.
 
-**Reason against A2 specifically.** It adds hidden per-thread state to a crate that is documented as pure. Each entry point sets the scope explicitly, tests set it explicitly, and the default is Graphite.
+**Reason against A2 specifically.** It adds hidden per-thread state to a crate that is documented as pure. Each entry point sets the scope explicitly, tests set it explicitly, and the default is Synthesis (§14.7).
 
 ## 2. Design principles
 
@@ -81,7 +81,7 @@ Contrast is the WCAG ratio against `#0B0C0F` (the kit background). Each 256-colo
 Text on painted surfaces: `strong` on `elevated` is 11.93, `body` on `surface` is 11.1 (computed), and the kit's own `text` `#9CA3AF` on `elevated` is 5.82.
 
 **Theme variants.** `/config` offers the first four. `ansi16` is chosen automatically.
-- **Graphite** (default): the table above.
+- **Graphite**: the table above, with the accent, body and strong values revised on 2026-10-30 (§14.7); no longer the default.
 - **Midnight:** the header band and overlays use kit muted-blue `#0B1322` and elevated `#16213A`. Border `#2C3A55`, body `#C3CBD9`, muted `#7E8AA3` (5.60), accent unchanged, pearl becomes ice `#BFD3F2`. In 256-colour mode the blue collapses to grey 233, so Midnight looks almost like Graphite there.
 - **High contrast:** body `#F2F3F5`, muted `#B8BDC6`, border `#8C929B` (6.2, so it meets the 3:1 rule for UI components), ok `#9BE7B0`, warn `#FFD479`, err `#FF9C9C`. `strong` is bold and selection is bold on `elevated`.
 - **Mono:** no colour at all. Strong is bold, muted and label are dim (SGR 2), selection is reverse, and focus is `▍` plus bold. `sgr` Mono mode already keeps attributes `[fact sgr.rs:17]`.
@@ -99,7 +99,7 @@ Automatic detection would need an OSC 11 query at startup in `terminal.rs`. That
 mode  = ColorMode::detect(env)                 // existing, sgr.rs:28
 theme = Mono            if mode == Mono        // NO_COLOR always wins; /config shows "NO_COLOR is set"
         ansi16          if mode == Ansi16
-        user.theme      otherwise              // default graphite
+        user.theme      otherwise              // default synthesis
 glyphs = user.glyphs, else ascii when TERM in {linux, vt100, vt220, cons25}, else unicode
 ```
 
@@ -634,7 +634,7 @@ P2 and P3 change `app.rs`. Start them after the current `terminal.rs`, `e2e.rs` 
 | Golden churn hides real regressions | Phase allow-lists (P1 may change colour only), the contact sheet, and the `reviewed_by` gate |
 | Ambiguous-width glyphs misalign in CJK locales | Glyph-width test, ASCII set, the `auto` rule |
 | A light terminal makes Graphite unreadable | Mono or Pearl (D5); OSC 11 detection later |
-| Thread-local theme state | Set only by the entry points; tests set it explicitly; Graphite is the default |
+| Thread-local theme state | Set only by the entry points; tests set it explicitly; Synthesis is the default |
 | A user edits `settings.json` while the TUI is open | Re-read before writing, never overwrite an unparsable file, atomic rename, write only on close |
 | 256 and 16 colours flatten the palette (Midnight's blue, the pearl's warmth, the diff tints) | Meaning also rides on glyphs; this loss is accepted |
 | Moving the Mission-Control panels changes muscle memory | Defaults keep Status, Context and Tasks visible on the right |
@@ -690,8 +690,169 @@ The owner accepted every recommendation of §11. Recorded as decided:
 ### P1 notes (2026-10-30)
 
 Choices made while implementing P1 that the spec left open:
-- Themes: Graphite (default), Midnight, High contrast, Mono, Pearl, plus the automatic `ansi16`. Selection follows the rule of §3 (Mono and Ansi16 colour modes override the user's theme).
-- Attributes (bold, dim, reverse) ride on the token colour: a theme lists the attribute of each token colour that needs one (Mono, High contrast), looked up when a colour is painted. Graphite, Midnight and Pearl use none.
+- Themes: see §14.7 (Synthesis is the default; Classic, Graphite, Midnight, High contrast, Pearl, Mono, plus the automatic `ansi16`). Selection follows the rule of §3 (Mono and Ansi16 colour modes override the user's theme).
+- Attributes (bold, dim, reverse) ride on the token colour: a theme lists the attribute of each token colour that needs one (Mono, High contrast), looked up when a colour is painted. Synthesis, Classic, Graphite, Midnight and Pearl use none.
 - P1 changes only colours and the header rows (mark, spaced wordmark, chips). Layout, panel chrome and chat text are P2 and P3. The welcome art shows only when the pane has the spare rows, so goldens with a small pane keep their text.
 - The theme comes from `synthesis.tui.theme` and `synthesis.tui.glyphs` in the USER settings file (read by the CLI), `NO_COLOR` and the colour mode always win.
 - Golden rebaseline: `SYNTHESIS_UPDATE_GOLDEN=redesign-p1` rewrites only `expected.ansi.json` and header rows, refuses anything else, and marks the case `reviewed_by = "pending-owner-review (P1 2026-10-30)"`. `node tools/golden-review-status.mjs` lists pending cases. Unlike §8.4 CI does not fail on pending cases; it only prints them.
+
+### D12 to D16 (owner, 2026-10-30, after seeing the P1 result and the two mockups)
+
+| | Decision |
+|---|---|
+| **D12** | The P1 palette looked pale and washed out; the owner prefers the pre-P1 colours. The pre-P1 palette is kept value for value as the `classic` theme, and the default theme (`synthesis`) reproduces the look of the two reference mockups (§14.7). This reverses D4 (kit palette as the default look). |
+| **D13** | `graphite` (kit silver) stays as an optional theme, with a more saturated accent and brighter body and strong text. |
+| **D14** | The old second title of the header (the two words after "Synthesis") is removed everywhere: header, terminal title, tests, goldens, docs. The title is "Synthesis" only. |
+| **D15** | The welcome greeting "Hello there! I'm Synthesis." is replaced: a time-of-day line ("Good evening.") over "What shall we build?", without first person. The strings live in one constant (`greeting.rs`, `GREETING`), so a translation is one more constant of the same type. |
+| **D16** | The two mockups in `design/tui-reference/` are the authoritative visual target for P2 and P3 (§14). |
+
+### Theme setting (P1 rework, 2026-10-30)
+
+`synthesis.tui.theme` takes `synthesis` (default), `classic`, `graphite`, `midnight`, `high-contrast`, `pearl`, `mono` or `auto`. `auto` is the default theme on 256-colour and truecolor terminals; 16 colours and `NO_COLOR` always pick `ansi16` and `mono` whatever the value (the same rule as before), and there is no light-background detection yet. The goldens run in the default theme; the other themes have their own small fixtures in `tests/golden/render-themes/` (`<theme>__<case>`), rewritten with `SYNTHESIS_UPDATE_GOLDEN=themes`.
+
+## 14. Owner reference mockups (authoritative)
+
+**Files.** `design/tui-reference/mockup-A-chat.png` (A, chat-centred) and `mockup-B-dashboard.png` (B, dashboard-centred), 1672x941 each, supplied by the owner on 2026-10-30. They are the owner-approved visual reference for the TUI. Both still show the old second title after "Synthesis" in the header; the owner removed it (D14), everything else is the target. P2 and P3 acceptance means **matches mockups A/B within terminal limits** (§14.8).
+
+### 14.1 What is in mockup A (chat-centred)
+
+| Area | Elements |
+|---|---|
+| Header | Logo mark, "Synthesis". Chips: workspace (`nemo-cli`), session (`1`), model (`claude-3.5-sonnet`), tokens (`42.1k / 200k`), health (green dot, "healthy"), clock (`23:07:05`). |
+| Left sidebar | **Workspace**: current folder with its path and a collapsible tree (`src/ tests/ docs/ package.json tsconfig.json .env`). **Session**: `nemo-cli #1`, a green live dot, rows mode, effort, model, cwd, tokens, tools ("8 enabled"). **Tools & Skills**: filesystem, shell, search, edit, browser, mcp with a green dot and a check (browser shows a hollow circle). **Activity**: read, search, run, edit, run, verify with target and "2m ago". |
+| Centre top | Strip "Synthesis · ready | planning · coding · verifying" and, on the right, "Context: nemo-cli | 12 files | 3.2k LOC". |
+| Centre, chat | User card (avatar, name, time, text). Synthesis card (avatar, name, time, intro text). Rich tool cards inside the answer, each with a glyph, a title, an argument and a right-hand meta: **Reading file** (path, line range `1-240`, numbered code), **Searching** (query, `12 results`, path / line / match rows), **Running** (command, elapsed `18.4s`, output lines, `14 passed`, `0 failed`), **Applying patch** (path, `+12 -8`, numbered diff with red and green rows), **Verifying** (title, `6.1s`, three check rows with per-file results `5 passed`). Then closing prose and "Next steps" list. |
+| Centre bottom | Tab strip: chat, diff, terminal, browser, tests, files (active one underlined and boxed). Prompt `> explain the fix and open the diff` with caret and `Cmd+Enter send`. |
+| Right sidebar | **Capability Topology** with an "online" status: coloured cards in two columns joined by arrows: User/Project (teal; active session, project, goal), Guards (red/orange; safety, policy, sandbox on; approvals auto), Skills (green; code, search, edit, test, browser, analyze with ticks), Sub-agents (purple; "no sub-agents, single agent mode", planner, coder, reviewer), Synthesis Core (grey; "plan > act > verify > learn", "reasoning, tool use, code, evaluation"), Execution (teal; tool calls 8, running 0, errors 0, success 100%), Hooks (amber; pre-tool, post-tool, on-error, on-done), External/MCP (blue; context, github, supabase, filesystem with state), Memory/Feedback (red; session tokens, project indexed, learned items, feedback positive). **Usage**: tokens bar `42.1k / 200k (21%)`, sessions `1 today / 7 this week`, runtime, cost `$0.12 (est)`. |
+| Footer | Key hints: Tab switch panel, up/down navigate, Cmd/Ctrl+K clear, Alt+V paste image, Ctrl+L history, /shell /memory /files /browser, Shift+Enter newline. Right side: `nemo-cli | main | 3 files changed`. |
+
+### 14.2 What is in mockup B (dashboard-centred)
+
+| Area | Elements |
+|---|---|
+| Header | Mark, "SYNTHESIS" (spaced). Chips separated by thin rules: `1 live`, `workspace: synthesis`, `session: feature/auth-flow`, `model: claude-3.5-sonnet`, `context: 128k`; right: green "system healthy", date and clock (`Mon Oct 27 23:07:05`). |
+| Left sidebar | **Workspace** with count: `synthesis` (selected row), `platform`, `web-app`, `infra`, `+ new workspace...`. **Session** with "running": mode agent, model, context `128,000 tokens`, tools `12 enabled`, cwd, uptime. **Tools & Skills** with count: file system, shell, browser, search, git, mcp (`2 servers`, each `on`), memory, "+ 5 more...". **Recent activity**: Edited auth.ts, Ran tests, Searched codebase, Read architecture.md, Updated plan, Used browser, Committed changes, Checked diagnostics, each with age. **Session stats** (`42m`): files read 28, files edited 6, commands run 14, tokens used 48.2k, tool calls 37, success rate 100%. |
+| Centre top | **Agent Status** card: "Working on: Implementing secure authentication flow with session management", "Next: Run tests and verify edge cases"; beside it a checklist (Plan updated 2m ago, Implementing changes..., Running tests..., Verifying results...). **Context** card: tokens `48.2k / 128k 38%`, input `42.1k` with a bar, output `6.1k`, cache `12.3k (hit 92%)`. |
+| Centre tabs | Strip: TERMINAL (active), agent, workspace, diff (underlined), `+`, and a close button. |
+| Centre body | Terminal view: prompt line `synthesis ~/dev/synthesis git:(feature/auth-flow) >`, the user request, then "Synthesis" with a step list (circle, text, duration: 3.2s, 2.1s, 1.8s, 24.3s, 18.7s, 4.1s). Below, a split: **Project** tree (`src/ app/ api/ auth/ route.ts session.ts middleware.ts lib/ ... tests/ README.md package.json` with `M` and `A` markers) beside a **diff** view (`src/lib/auth.ts`, hunk header, numbered lines, green added rows), and under both a **Terminal** pane with a `test` tab (pnpm test output, green ticks, `Test Files 3 passed (3)`, `Tests 18 passed (18)`, `Duration 101ms`). |
+| Prompt | Box with `>` and placeholder "Ask Synthesis anything... (Ctrl+L for history)", a model chip (`claude-3.5-sonnet`) and a send button; under it a slash-command bar: `/tools access tools | /memory manage memory | /shell run commands | /browser web research | /diff view changes`. |
+| Right sidebar | **Synthesis Topology**: a hub diagram with the core in the middle (logo, "SYNTHESIS CORE", "Reason, Act, Verify") and cards around it joined by lines: User/Project (goals and context, requirements, feedback), Guards (safety checks, policy enforcement, risk analysis), Sub-agents (task specialists, domain experts, on-demand), Skills (tasks and capabilities, code, search, web, custom skills), External/MCP (MCP servers, external APIs, data sources), Execution (tool execution, code changes, environment access), Memory/Feedback (context storage, learn from outcomes, improve over time). **Usage and Metrics** with a "7 days" selector: bars for Tokens `48.2k / 128k`, Tool calls 37, Files modified 6, Commands run 14, Browser requests 3, MCP calls 12. **System Health**: "All systems operational"; Core agent, Tool runtime, MCP servers (`2/2 online`), Memory store, Browser sandbox, each with a status and a latency (`42ms`, `28ms`, `36ms`, `31ms`, `47ms`). |
+
+### 14.3 How the two merge (where they differ)
+
+| Point | A | B | Merged target |
+|---|---|---|---|
+| Header chips | workspace, session, model, tokens, health, clock | live, workspace, session, model, context, health, date + clock | live, workspace, session, model, context (`used / limit`), health, clock; the date only from 140 columns. Drop order from the right of the list: date, health text (dot stays), context, session, live, model, workspace; the clock stays. |
+| Left | Workspace as a folder tree, Session, Tools & Skills, Activity | Workspace as a list of workspaces, Session, Tools & Skills, Recent activity, Session stats | Workspace stays the **list of workspaces** (owner rule: it is locked and splits the column with Running). The folder tree is its own optional panel (`project_tree`). Running sessions (not drawn in either mockup, locked by the owner) sit under Workspace. |
+| Centre top | A thin "ready | planning · coding · verifying" strip with project facts | Two cards: Agent Status (+ plan checklist) and Context | The two cards of B, with A's phase words as the Agent Status headline (`ready`, `planning`, `coding`, `verifying`) and A's `files | LOC` facts in the Context card. |
+| Centre tabs | chat, diff, terminal, browser, tests, files | TERMINAL, agent, workspace, diff, + | One strip: `chat` (default, B's `agent`), `diff`, `terminal`, `browser`, `tests`, `files` (B's `workspace`), `+` for more; active tab boxed and underlined. |
+| Centre body | Chat with rich tool cards | Terminal log, project tree + diff + terminal split | The default tab is **chat with A's tool cards**. B's split is the layout of the `files` and `diff` tabs from 160 columns (tree left, diff right, terminal underneath); narrower, one pane at a time. |
+| Prompt | `> text` with `Cmd+Enter send` | box, model chip, send button, slash-command bar | B's box (rounded frame) with the model chip and `Enter send` on the right, and B's slash-command bar below it when the height allows. |
+| Right | Topology as a two-column grid with arrows, Usage | Topology as a hub around the core, Usage and Metrics, System Health | Topology as a **two-column card grid with the core row in the middle** (a terminal cannot draw the hub), cards with coloured thin borders as in A and B; Usage and Metrics bars (B) with A's cost and runtime lines; System Health (B). The sub-agent transcript is always in the right sidebar (owner rule), under the Sub-agents card of the topology or in the Sub-agents panel. |
+| Footer | key hints, plus `project | branch | files changed` | none visible (the slash bar instead) | Key hints on the left, `project | branch | n files changed` on the right (A), the slash bar above it (B). |
+
+### 14.4 Mockup element to panel id
+
+New ids are in bold. **Default** is the visibility before the user changes it in `/config`; panels that do not fit are dropped by the planner (lowest drop number first), so on a small terminal the defaults shrink to the locked panels. Locked panels (Workspace, Running sessions, Chat) are never hidden.
+
+| Mockup element | Panel id | Side | Default | Drop | Content source | Phase |
+|---|---|---|---|---|---|---|
+| Header chips, health, clock | (header, not a panel) | top | on | n/a | `header` | P2 |
+| Workspace list | `workspace` | L | on, locked | never | `workspace_panel` | P2 |
+| Running sessions | `running` | L | on, locked | never | `sessions_panel` | P2 |
+| Session | `session` | L | on | 4 | `session_info_panel` | P2 |
+| Tools & Skills (with `mcp  2 servers`) | **`tools_skills`** (replaces `tools` and absorbs `mcp`) | L | on | 3 | `tools_panel` + `mcp_summary_line` | P2 |
+| Recent activity / Activity | **`recent_activity`** (replaces `activity`, moves to the left) | L | on | 2 | `feed_panel`, one row per event with an age | P2 |
+| Session stats | **`session_stats`** | L | on | 1 | counters of the model (files read and edited, commands, tokens, tool calls, success rate) | P2 |
+| Folder tree (A) / Project (B) | **`project_tree`** | C tab `files` | off | n/a | `folders.rs` plus the git status letters | P3 |
+| Chat with tool cards | `chat` | C | on, locked | never | `agent_panel` (tool cards: P3) | P3 |
+| Agent Status card | **`agent_status`** (replaces `status`) | C top | on | 6 | `status_panel` plus the todo list (replaces `tasks`) | P2 |
+| Context card | `context` | C top | on | 5 | context bar and `token_panel`, with input, output, cache hit | P2 |
+| Diff view | **`diff`** | C tab `diff` | off | n/a | `agent/diffview.rs` over the stored file changes | P3 |
+| Terminal view and test pane | **`terminal`** | C tab `terminal` | off | n/a | the bash tool outputs of the session (read only) | P3 |
+| browser, tests tabs | (tabs of the same strip; content is the Browser and verification results) | C | off | n/a | later phases (browser: R6, tests: Verification engine) | after P3 |
+| Prompt, model chip, slash bar | part of `chat` | C | on | n/a | `agent_panel` input rows, `suggestions` | P3 |
+| Synthesis Topology | **`topology`** | R | on | 1 | `topology_panel`, two-column card grid (needs inner width 46; hidden on a narrower sidebar) | P2 |
+| Usage and Metrics | **`usage_metrics`** (replaces `usage`) | R | on | 2 | bars from the session counters, a "7 days" switch reading the usage history | P2 |
+| System Health | **`system_health`** | R | on | 3 | core agent, tool runtime, MCP servers, memory store, browser sandbox: state from the runtime, latency only where measured | P2 |
+| Sub-agent transcript | `subagents` | R | on, locked | never | sub-agent list and `transcript_rows` | P2 |
+| Footer key hints, branch, files changed | (bottom bar) | bottom | on | n/a | `status.rs` | P2 |
+
+Removed ids (merged): `status` into `agent_status`, `tasks` into `agent_status`, `tools` and `mcp` into `tools_skills`, `activity` into `recent_activity`, `usage` into `usage_metrics`. The registry of §6.1 is updated accordingly in P2; the invariants of §6.3 are unchanged. The default visibilities of D2 (Tools, Activity, Usage, Topology off) are superseded: the mockups show them all, so they are on, and the planner drops them when there is no room.
+
+### 14.5 Merged target layout
+
+Sketches are not to scale; a letter is the panel (W workspace, R running, S session, T tools & skills, A recent activity, X session stats; AS agent status, C context; TP topology, U usage and metrics, H system health, SA sub-agents, CH chat). The owner's rules hold in every size: Workspace, Running and Chat locked; left column splits equally between Workspace and Running when no optional left panel is visible; the sub-agent transcript is in the right sidebar; remaining panels reflow into freed space.
+
+**200x50** (Columns, left 32, right 56, centre 112; body 47):
+
+```
+ mark SYNTHESIS  1 live | workspace | session | model | context 128k        healthy | Mon Oct 27 23:07
+ WORKSPACE (locked)   | AGENT STATUS + plan checklist        | CONTEXT   | TOPOLOGY (card grid, 2 columns)
+ RUNNING (locked)     |--------------------------------------+-----------| User/Project | Guards
+ SESSION              | chat | diff | terminal | browser | ... | Skills       | Sub-agents
+ TOOLS & SKILLS       |                                      | Synthesis Core (full width)
+ RECENT ACTIVITY      |   CHAT: user card, answer, tool      | Execution    | Hooks
+ SESSION STATS        |   cards (Reading, Searching,         | External/MCP | Memory/Feedback
+                      |   Running, Applying patch,           |-------------------------------
+                      |   Verifying), closing prose          | USAGE AND METRICS (bars)
+                      |                                      | SYSTEM HEALTH
+                      |  > prompt box [model chip] Enter send| SUB-AGENT TRANSCRIPT (when viewing)
+                      |  /tools /memory /shell /browser /diff|
+ key hints ........................................  project | branch | n files changed
+```
+
+On the `files` and `diff` tabs at this size the centre splits as in B: project tree left, diff right, terminal underneath.
+
+**120x36** (Columns, left 22 to 34, right 30 to 56; body 33): left W, R, S, T and as many of A and X as fit (X goes first, then A, then T); centre: agent status and context as one row of two cards (3 to 4 rows), the tab strip, chat, the prompt box, the slash bar only when 4 spare rows exist; right: topology (compact: cards without their detail rows), usage and metrics, system health; sub-agents when a sub-agent is being viewed (it then takes the topology's place: drop order 1 is the topology). Header chips: live, workspace, session, model, context, health dot, clock.
+
+**80x24** (Tabs mode; below 100 columns the sidebars are a switcher): tab strip `Chat | Sessions n | Agents n | Panels n`. Chat view: one header row (live, model, context, clock), the compact agent status line, the chat with tool cards in one-line form, the prompt, key hints. Sessions view: Workspace and Running split 50/50. Panels view: the visible optional panels stacked (session, tools & skills, recent activity, session stats, then the right ones). Agents view: the sub-agent transcript.
+
+### 14.6 Out of scope for a terminal
+
+- Images and avatars: the logo is braille art (D3), the user and agent avatars are the glyphs `›` and `✻`.
+- Shadows, glow, blur, gradients on card edges, rounded 12 to 24 px corners: cards are 1-cell borders (`─ │` with square or `╭ ╮` corners), coloured by token. The hub diagram's radial lines are replaced by the two-column card grid with `│ ▾` connectors.
+- Font choice, letter-spacing outside the wordmark, per-pixel sparkline bars (bars are `█░` cells), hover states, animated caret, window chrome and the close button.
+- The terminal background is never painted (D6): the mockup's navy page is the theme's `bg_ref`, assumed, and only the header band, selected rows, diff rows and overlays are painted.
+
+### 14.7 Palette: the default theme reproduces the mockups
+
+Method: `tools/sample-mockup-palette.py` (standard library only: PNG decoder, colour histogram, vivid pixels grouped by hue). Values are dominant pixel colours of the scaled, anti-aliased PNGs, so they are approximate (hue is reliable, saturation of thin lines is lowered by the scaling):
+
+| Role | Sampled in the mockups | Classic (git 05063f4) | Decision |
+|---|---|---|---|
+| Page background | `#080E12` (43 %), `#0A0E12` | none painted | `bg_ref` of `synthesis`: `#080E12` |
+| Header band | `#0E141A` | none | `surface`: `#0E141A` |
+| Selected row | `#161E26` | `60;72;105` selection | `synthesis` selection `#1A2433` (a little lighter than sampled so it shows on 256 colours too) |
+| Diff-added row | `#122220` | none | `diff_add_bg`: `#122220` |
+| Blue (focus, links, selected) | `#6888D8` (hue 222) | accent `#818CF8` (hue 234), light `#A5B4FC` | same family; keep Classic's exact values |
+| Green (ok, checks) | `#58A878`, `#78D898` (hue 140 to 150) | `#4ADE80` (hue 142) | same family; keep Classic |
+| Teal (cards, execution) | `#489878`, `#5898A8` (hue 160 to 190) | teal `#2DD4BF`, cyan `#22D3EE` | same family; keep Classic |
+| Amber / orange (warnings, hooks) | `#B88848` (hue 38) | yellow `#FACC15`, orange `#FB923C` | same family; keep Classic |
+| Red (errors, guards, memory) | `#C86868` (hue 0 to 359) | `#F87171` | same family; keep Classic |
+| Purple (sub-agents) | `#9848A8` (hue 285) | `#C084FC` | same family; keep Classic |
+| Soft white text | `#CACED6` | body `#D7D7DC`, strong `#F5F5F5` | keep Classic |
+
+Where the mockups and Classic agree on hue (all of the above), Classic's exact value is kept; the mockups add only the navy surfaces. The theme set:
+
+| Theme | What it is |
+|---|---|
+| `synthesis` (default) | Classic's colours on the mockups' navy surfaces. |
+| `classic` | The pre-P1 palette, value for value (`theme-color-fns` golden and the unchanged colours of every other golden pin it). |
+| `graphite` | Kit silver and pearl, accent revised to `#4D8BFF` (hue 219, the hue of the kit's Muted Blue `#0B1322`: the kit itself has no saturated accent token), light accent `#A3C3FF`, body `#DADDE3`, strong `#F5F6F8`, selection `#264173`. |
+| `midnight`, `high-contrast`, `pearl`, `mono`, `ansi16` | Unchanged. |
+
+Contrast (WCAG, against each theme's `bg_ref`): Synthesis body 13.53, strong 17.80, label 7.93, **muted 3.95**, ok 11.14, warn 12.68, err 7.02, info 10.74, border 3.21. Classic (against `#0B0C0F`): body 13.64, strong 17.94, label 7.99, **muted 3.98**, ok 11.22, warn 12.77, err 7.07, info 10.82, border 3.24. Graphite: body 14.37, strong 18.09, label 6.24, muted 4.93, ok 10.52, warn 9.92, err 7.61, info 7.72, accent 6.01. **Exception:** the muted text of Classic and Synthesis is the old `#707078`, which is below the 4.5 floor (3.95 and 3.98); the test allows 3.5 for those two themes only, and Classic's colour is not changed to satisfy the floor (owner instruction).
+
+### 14.8 Acceptance criteria for P2 and P3: "matches mockups A/B within terminal limits"
+
+Checked on 80x24, 120x36 and 200x50 with `synth --once` and tty-qa, against the mockups in `design/tui-reference/`:
+
+1. **Header:** every chip of §14.3 present in the order of B, dropped by priority when narrow; no second title after "Synthesis" anywhere.
+2. **Left:** the panels of §14.4 in the order Workspace, Running, Session, Tools & Skills, Recent activity, Session stats; the 50/50 rule when the optional ones are hidden.
+3. **Centre:** Agent Status and Context cards (B), the tab strip with the tabs of §14.3, the prompt box with model chip and send hint, the slash bar when the height allows.
+4. **Chat (P3):** user and Synthesis cards; tool cards with glyph, title, argument and right-hand meta for Reading file, Searching, Running, Applying patch (`+n −m`, numbered diff rows with green and red backgrounds) and Verifying (ticks and per-file results).
+5. **Right:** Topology as the card grid with the nine cards of A and B (User/Project, Guards, Skills, Sub-agents, Synthesis Core, Execution, Hooks, External/MCP, Memory/Feedback) with thin borders in teal, orange, purple, blue; Usage and Metrics bars; System Health with states; the sub-agent transcript always in the right sidebar.
+6. **Look:** the default theme's surfaces, accents and ticks are those of §14.7; green check marks, amber and orange warnings, soft white text; the greeting of D15 on the empty chat.
+7. **Rules:** Workspace, Running sessions and Chat cannot be hidden; every other panel can be hidden in `/config`; hiding a panel gives its rows to the others with no hole (the §6.3 invariants).
+8. **Goldens and contact sheet:** frames per size per theme, reviewed by the owner against the mockups; deviations are listed with the reason (terminal limit or data not available).

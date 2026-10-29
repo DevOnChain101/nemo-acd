@@ -903,7 +903,7 @@ fn selection_drag_copies_chat_text() {
     }
     // the highlight is painted until something clears it
     let hl = a.render(COLS, ROWS, T0).join("\n");
-    assert!(hl.contains("\x1b[48;2;36;40;48m")); // Graphite `elevated`
+    assert!(hl.contains("\x1b[48;2;26;36;51m")); // Synthesis `select` background
     keys(&mut a, "x");
     assert!(
         !a.render(COLS, ROWS, T0)

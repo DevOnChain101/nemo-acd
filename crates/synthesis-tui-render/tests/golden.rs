@@ -5,7 +5,7 @@
 //!
 //! `SYNTHESIS_UPDATE_GOLDEN=redesign-p1` is the gate of phase P1 of docs/specs/tui-design.md (theme
 //! tokens, header): it rewrites only colour (`expected.ansi.json`, the colour keys of two helper cases)
-//! and the header rows of `frame` cases, REFUSES any other change (the case then keeps failing),
+//! the header rows of `frame` cases and the welcome greeting rows, REFUSES any other change (the case then keeps failing),
 //! marks every rewritten case `reviewed_by = "pending-owner-review (P1 2026-10-30)"` and prints a
 //! summary. Cases listed in `golden_divergences.txt` differ from the oracle in text already and are
 //! skipped (their rebaseline belongs to the phase that changes that text).
@@ -666,17 +666,26 @@ fn run_case(dir: &std::path::Path, input: &Value) -> Vec<Check> {
     }
 }
 
-/// The Graphite tokens (the Node palette it replaced is gone: P1 of docs/specs/tui-design.md).
+/// The Classic theme in the shape of the Node palette (`THEME`, `ACCENT`, ...): Classic is that palette,
+/// token for token. The few stops no renderer reads any more (glow, deep, the logo gradient) are literals.
 fn palette_json() -> Value {
     let rgb = |c: Rgb| json!([c[0], c[1], c[2]]);
-    let t = &GRAPHITE;
+    let t = &CLASSIC;
+    let x = t.extra.unwrap();
+    let (glow, deep, cyan) = ([199, 210, 254], [79, 70, 229], [103, 232, 249]);
     json!({
-        "theme": "graphite",
-        "tokens": {"bg_ref": rgb(t.bg_ref), "surface": rgb(t.surface), "elevated": rgb(t.elevated), "border": rgb(t.border), "label": rgb(t.label), "muted": rgb(t.muted),
-            "body": rgb(t.body), "strong": rgb(t.strong), "accent": rgb(t.accent), "accent_light": rgb(t.accent_light), "pearl": rgb(t.pearl), "ok": rgb(t.ok), "warn": rgb(t.warn),
-            "err": rgb(t.err), "info": rgb(t.info), "sand": rgb(t.sand), "ink": rgb(t.ink), "diff_add_bg": rgb(t.diff_add_bg), "diff_del_bg": rgb(t.diff_del_bg)},
-        "heat": t.heat.iter().map(|c| rgb(*c)).collect::<Vec<_>>(),
-        "tints": t.tints.iter().map(|c| rgb(*c)).collect::<Vec<_>>(),
+        "THEME": {"claude": rgb(t.accent), "shimmer": rgb(t.accent_light), "text": rgb(t.strong), "body": rgb(t.body), "inactive": rgb(t.label), "subtle": rgb(t.muted),
+            "border": rgb(t.border), "permission": rgb(t.info), "autoAccept": rgb(t.purple()), "planMode": rgb(t.ok), "mcp": rgb(t.blue()), "bash": rgb(t.pink()),
+            "success": rgb(t.ok), "error": rgb(t.err), "warning": rgb(t.warn), "track": rgb(t.track())},
+        "ACCENT": {"core": rgb(t.accent), "light": rgb(t.accent_light), "glow": rgb(glow), "deep": rgb(deep), "cyan": rgb(cyan), "ink": rgb(t.ink)},
+        "VIVID": {"purple": rgb(x.purple), "blue": rgb(x.blue), "green": rgb(t.ok), "yellow": rgb(t.warn), "orange": rgb(x.orange), "pink": rgb(x.pink), "cyan": rgb(t.info), "teal": rgb(x.teal), "red": rgb(t.err)},
+        "WARM": {"claude": rgb(t.accent), "ember": rgb(t.accent_light), "amber": rgb(t.warn), "gold": rgb(t.ok), "sand": rgb(t.info), "clay": rgb(deep),
+            "cream": rgb(x.cream), "dim": rgb(t.border), "deep": rgb(x.track), "ok": rgb(t.ok), "bad": rgb(t.err)},
+        "HEAT": t.heat.iter().map(|c| rgb(*c)).collect::<Vec<_>>(),
+        "SELECT_BG": rgb(t.elevated), "SELECT_FG": rgb(t.strong),
+        "BORDER_GRAD": GRADIENT_STOPS.iter().map(|c| rgb(*c)).collect::<Vec<_>>(),
+        "LOGO_GRAD": [rgb(t.accent_light), rgb(cyan), rgb([196, 181, 253]), rgb(t.accent_light)],
+        "AGENT_COLORS": x.agents.iter().map(|c| rgb(*c)).collect::<Vec<_>>(),
         "CLAUDE_SPIN": (0..8).map(spin).collect::<Vec<_>>(),
     })
 }
@@ -837,6 +846,72 @@ fn without_keys(v: &Value, keys: &[&str]) -> Value {
     }
 }
 
+/// The rows P1 may change in a frame-like case: the header (first row, and the rule under it when it
+/// is a heavy `━` line) and the welcome greeting (the old "Hello there! I'm ..." row and the blank row
+/// under it, which now carries the prompt line).
+fn p1_rows(op: &str, old: &[&str]) -> Vec<usize> {
+    let mut rows = vec![];
+    if op == "frame" {
+        rows.push(0);
+        if old
+            .get(1)
+            .is_some_and(|r| !r.is_empty() && r.chars().all(|c| c == '━'))
+        {
+            rows.push(1);
+        }
+    }
+    for (i, r) in old.iter().enumerate() {
+        if r.contains("Hello there! I'm") {
+            rows.extend([i, i + 1]);
+        }
+    }
+    rows
+}
+
+/// Rewrites only the rows P1 may change, for a case that is listed in `golden_divergences.txt`
+/// (its other rows differ from the oracle for reasons of their own and stay as captured).
+fn p1_sync_rows(
+    dir: &std::path::Path,
+    op: &str,
+    expected: &Value,
+    a: &Actual,
+) -> Result<Vec<usize>, String> {
+    let old: Vec<&str> = expected["lines"]
+        .as_array()
+        .map(|v| v.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default();
+    if old.len() != a.ansi.len() {
+        return Err(format!("{} rows, expected {}", a.ansi.len(), old.len()));
+    }
+    let rows: Vec<usize> = p1_rows(op, &old)
+        .into_iter()
+        .filter(|i| *i < old.len() && strip_ansi(&a.ansi[*i]) != old[*i])
+        .collect();
+    if rows.is_empty() {
+        return Ok(rows);
+    }
+    let put = |name: &str, v: &Value| {
+        std::fs::write(
+            dir.join(name),
+            format!("{}\n", serde_json::to_string_pretty(v).unwrap()),
+        )
+        .unwrap()
+    };
+    let mut e = expected.clone();
+    let mut plain: Vec<String> = old.iter().map(|l| l.to_string()).collect();
+    let mut x = read(dir.join("expected.ansi.json"));
+    for i in &rows {
+        plain[*i] = strip_ansi(&a.ansi[*i]);
+        x["lines"][*i] = json!(a.ansi[*i]);
+        x["encoded_truecolor"][*i] = json!(encode(&a.ansi[*i], ColorMode::TrueColor));
+    }
+    e["lines"] = json!(plain);
+    put("expected.json", &e);
+    std::fs::write(dir.join("expected.txt"), format!("{}\n", plain.join("\n"))).unwrap();
+    put("expected.ansi.json", &x);
+    Ok(rows)
+}
+
 /// What P1 may rewrite in a frame-like case: Ok(header rows that changed) or the reason it refuses.
 fn p1_check_frame(op: &str, expected: &Value, a: &Actual) -> Result<Vec<usize>, String> {
     let old: Vec<&str> = expected["lines"]
@@ -847,17 +922,7 @@ fn p1_check_frame(op: &str, expected: &Value, a: &Actual) -> Result<Vec<usize>, 
     if old.len() != new.len() {
         return Err(format!("{} rows, expected {}", new.len(), old.len()));
     }
-    // header rows: the first row, and the rule under it when it is a heavy `━` line
-    let mut header = vec![];
-    if op == "frame" {
-        header.push(0);
-        if old
-            .get(1)
-            .is_some_and(|r| !r.is_empty() && r.chars().all(|c| c == '━'))
-        {
-            header.push(1);
-        }
-    }
+    let header = p1_rows(op, &old);
     let mut changed = vec![];
     for (i, (o, n)) in old.iter().zip(&new).enumerate() {
         if o != n {
@@ -963,7 +1028,17 @@ fn render_golden() {
         }
         if p1 && checks.iter().any(|(_, r)| r.is_err()) {
             if allowed.keys().any(|k| k.starts_with(&id)) {
-                p1_skipped.push(name.clone());
+                let a = ACTUAL.with(|a| std::mem::take(&mut *a.borrow_mut()));
+                let want = read(dir.join("expected.json"));
+                match (!a.ansi.is_empty())
+                    .then(|| p1_sync_rows(dir, input["op"].as_str().unwrap(), &want, &a))
+                {
+                    Some(Ok(rows)) if !rows.is_empty() => {
+                        stamp_pending(dir);
+                        p1_done.push((name.clone(), format!("divergent case, rows {rows:?} only")));
+                    }
+                    _ => p1_skipped.push(name.clone()),
+                }
             } else {
                 let a = ACTUAL.with(|a| std::mem::take(&mut *a.borrow_mut()));
                 let want = read(dir.join("expected.json"));
@@ -1115,5 +1190,52 @@ fn mono_and_16_colour_frames_use_only_their_codes() {
                 }
             }
         }
+    }
+}
+
+/// Frames in the non-default themes: `tests/golden/render-themes/<theme>__<case>/expected.ansi.json`
+/// holds the raw rows of the input of `render/<case>` drawn in `<theme>` (Classic, the default, is
+/// covered by the `render` goldens). `SYNTHESIS_UPDATE_GOLDEN=themes` rewrites them; review the diff.
+#[test]
+fn theme_frames_golden() {
+    let base = root().join("../../tests/golden");
+    let update = std::env::var("SYNTHESIS_UPDATE_GOLDEN").is_ok_and(|v| v == "themes");
+    let mut dirs: Vec<_> = std::fs::read_dir(base.join("render-themes"))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.is_dir())
+        .collect();
+    dirs.sort();
+    assert!(!dirs.is_empty());
+    for dir in dirs {
+        let name = dir.file_name().unwrap().to_string_lossy().into_owned();
+        let (theme, case) = name.split_once("__").expect("<theme>__<case>");
+        let theme = ThemeId::parse(theme).unwrap_or_else(|| panic!("{name}: unknown theme"));
+        let input = read(base.join("render").join(case).join("input.json"));
+        let _scope = ConfigScope::new(RenderConfig {
+            theme,
+            ascii: false,
+        });
+        let st = hydrate_state(&input["state"]);
+        let chars = st.editor.chars.clone();
+        let ds = st.dash(&chars, st.editor.cur);
+        let fr = render_frame(
+            &ds,
+            input["cols"].as_u64().unwrap() as usize,
+            input["rows"].as_u64().unwrap() as usize,
+            input["frame"].as_u64().unwrap() as usize,
+            input["now"].as_i64().unwrap(),
+        );
+        if update {
+            let v =
+                json!({"theme": name.split_once("__").unwrap().0, "case": case, "lines": fr.lines});
+            std::fs::write(
+                dir.join("expected.ansi.json"),
+                format!("{}\n", serde_json::to_string_pretty(&v).unwrap()),
+            )
+            .unwrap();
+        }
+        let want = read(dir.join("expected.ansi.json"));
+        assert_eq!(json!(fr.lines), want["lines"], "{name}");
     }
 }

@@ -769,7 +769,7 @@ mod signals {
         /// The first frame is on screen: the guard (SIGHUP/SIGTERM handlers) and the SIGINT
         /// watcher are installed before it is drawn, so signalling earlier is the test's race.
         fn ready(&self) {
-            self.wait_for("MISSION CONTROL"); // the title is set when the screen is entered
+            self.wait_for("Synthesis"); // the title is set when the screen is entered
             self.wait_for("sandbox: unknown");
         }
         /// Exit status, after the reader has drained the pipe: without the join, the child's last

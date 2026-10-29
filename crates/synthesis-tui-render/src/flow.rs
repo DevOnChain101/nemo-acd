@@ -12,7 +12,7 @@ const COMP_DISPATCH_MS: i64 = 600;
 const COMP_HOLD_MS: i64 = 2500;
 const CONVEYOR_MS: i64 = 50;
 fn slate() -> Rgb {
-    t().label
+    t().slate()
 }
 fn dim() -> Rgb {
     t().border
@@ -95,11 +95,11 @@ fn kind_icon(k: &str) -> &'static str {
 }
 fn kind_col(k: &str) -> Rgb {
     match k {
-        "agent" => t().pearl,
+        "agent" => t().purple(),
         "skill" => t().ok,
-        "mcp" => t().info,
+        "mcp" => t().blue(),
         "hook" => t().warn,
-        "cmd" => t().sand,
+        "cmd" => t().pink(),
         _ => t().info,
     }
 }
@@ -295,7 +295,7 @@ fn conveyor(cv: &mut Canvas, path: &[Pt], col: Rgb, reverse: bool, now: i64) {
             continue;
         }
         if ph == 0 {
-            cv.set(x, y, '●', Some(t().accent_light), 3);
+            cv.set(x, y, '●', Some(t().cream()), 3);
         } else {
             cv.tint(x, y, col, 3);
         }
@@ -321,7 +321,7 @@ const PHASES: [Phase_; 6] = [
         label: "Plan",
         short: "Plan",
         desc: "understand & plan",
-        col: |t| t.info,
+        col: |t| t.blue(),
     },
     Phase_ {
         key: "guard",
@@ -342,7 +342,7 @@ const PHASES: [Phase_; 6] = [
         label: "Execute",
         short: "Exec",
         desc: "run tools & code",
-        col: |t| t.ok,
+        col: |t| t.teal(),
     },
     Phase_ {
         key: "verify",
@@ -356,7 +356,7 @@ const PHASES: [Phase_; 6] = [
         label: "Learn",
         short: "Learn",
         desc: "update memory",
-        col: |t| t.pearl,
+        col: |t| t.purple(),
     },
 ];
 
@@ -524,7 +524,7 @@ fn card_meta(id: &str) -> (&'static str, &'static str, Rgb) {
         "hooks" => ("HOOKS", "HOOKS", kind_col("hook")),
         "mcp" => ("EXTERNAL · MCP", "MCP", kind_col("mcp")),
         "exec" => ("EXECUTION", "EXEC", kind_col("tool")),
-        _ => ("MEMORY · FEEDBACK", "MEMORY", t().sand),
+        _ => ("MEMORY · FEEDBACK", "MEMORY", t().pink()),
     }
 }
 
@@ -548,7 +548,7 @@ fn node_line(n: &Node, frame: usize, now: i64, i: usize, name: &str) -> Line {
         segb(format!("{g} "), gcol),
         (
             name.to_string(),
-            if active { t().accent_light } else { t().body },
+            if active { t().cream() } else { t().body },
             active,
         ),
     ];
@@ -763,7 +763,7 @@ fn build_cards(
                             if lp.is_empty() {
                                 t().muted
                             } else {
-                                t().accent_light
+                                t().cream()
                             },
                         ),
                     ],
@@ -811,7 +811,7 @@ fn build_cards(
             ),
             (
                 crate::util::pad_end(label, 13),
-                if on { t().accent_light } else { t().body },
+                if on { t().cream() } else { t().body },
                 on,
             ),
             seg(text, t().muted),
@@ -1854,11 +1854,7 @@ fn card_border(c: &Card, now: i64) -> Rgb {
         };
     }
     if c.busy {
-        return if blink_on(now) {
-            t().accent_light
-        } else {
-            c.col
-        };
+        return if blink_on(now) { t().cream() } else { c.col };
     }
     if c.returning {
         return t().ok;
@@ -2026,11 +2022,7 @@ fn draw_phases(cv: &mut Canvas, w: i64, ps: &PhaseState, frame: usize, detail: &
             x + 2,
             0,
             &t,
-            if cur {
-                crate::theme::t().accent_light
-            } else {
-                col
-            },
+            if cur { crate::theme::t().cream() } else { col },
             6,
         );
         x += 2 + len(&t);

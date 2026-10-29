@@ -44,7 +44,7 @@ fn c_light() -> Col {
     col(t().accent_light)
 }
 fn c_code() -> Col {
-    col(t().info)
+    col(t().code())
 }
 fn c_heading() -> Col {
     col(t().ok)
@@ -68,7 +68,7 @@ fn c_border() -> Col {
     col(t().border)
 }
 fn c_perm() -> Col {
-    col(t().info)
+    col(t().blue())
 }
 /// Same value as the ok colour, a different object in Node (see `highlight::Col`).
 fn c_add() -> Col {
@@ -81,10 +81,10 @@ fn c_bang() -> Col {
     col(t().info)
 }
 fn c_teal() -> Col {
-    col(t().ok)
+    col(t().teal())
 }
 fn c_purple() -> Col {
-    col(t().pearl)
+    col(t().purple())
 }
 
 // ---------------------------------------------------------------- runs
@@ -537,6 +537,8 @@ pub struct AgentOpts {
     pub agent_rows: Vec<String>,
     /// Where the next line goes when it is not the main agent: `@worker · running · 2 queued`.
     pub route: Option<String>,
+    /// Minutes east of UTC, for the time-of-day greeting.
+    pub tz_offset_min: i32,
     #[serde(skip)]
     pub config: Option<ModelConfig>,
 }
@@ -1464,6 +1466,9 @@ fn handoff_title(ln: &str) -> Option<(usize, &'static str)> {
 /// Context categories are told apart by the legend; none uses a status colour.
 fn ctx_colors() -> [Rgb; 8] {
     let t = t();
+    if let Some(x) = t.extra {
+        return x.ctx;
+    }
     [
         t.info,
         t.pearl,
@@ -1547,7 +1552,7 @@ fn context_rows(d: &Value, w: usize) -> Vec<Row> {
         let n = js_round(tok(c) / max * bar_w as f64) as usize;
         let free = c.get("kind").and_then(Value::as_str) == Some("free");
         let colr = if free {
-            t().border
+            t().track()
         } else {
             ctx_colors()[i % 8]
         };
@@ -2105,7 +2110,8 @@ fn hero_rows(w: usize, spare: usize) -> Vec<Row> {
     rows
 }
 
-fn welcome_rows(agent: &Agent, w: usize) -> Vec<Row> {
+fn welcome_rows(agent: &Agent, w: usize, now: i64, tz_offset_min: i32) -> Vec<Row> {
+    let (hello, prompt) = crate::greeting::GREETING.at(now, tz_offset_min);
     let inner = w.saturating_sub(4).max(10);
     let line = |runs: Vec<Run>| -> Row {
         let rw = wrap(&runs, inner, &[], &[]).into_iter().next().unwrap();
@@ -2119,7 +2125,7 @@ fn welcome_rows(agent: &Agent, w: usize) -> Vec<Row> {
         vec![r(format!("╭{}╮", "─".repeat(inner + 2)), c_border())],
         line(vec![
             rb("✻ ", c_accent()),
-            rb("Hello there! I'm Synthesis.", c_bright()),
+            rb(hello, c_bright()),
             r(
                 if agent.version.is_empty() {
                     String::new()
@@ -2129,7 +2135,7 @@ fn welcome_rows(agent: &Agent, w: usize) -> Vec<Row> {
                 c_subtle(),
             ),
         ]),
-        line(vec![]),
+        line(vec![r(prompt, c_dim())]),
         line(vec![r(
             "/help for commands · alt+v pastes an image",
             c_subtle(),
@@ -2854,14 +2860,14 @@ fn input_mode(m: Option<&str>) -> Option<InputMode> {
 
 fn vivid(name: &str) -> Option<Rgb> {
     Some(match name {
-        "purple" => t().pearl,
-        "blue" => t().info,
+        "purple" => t().purple(),
+        "blue" => t().blue(),
         "green" => t().ok,
         "yellow" => t().warn,
-        "orange" => t().warn,
-        "pink" => t().sand,
+        "orange" => t().orange(),
+        "pink" => t().pink(),
         "cyan" => t().info,
-        "teal" => t().ok,
+        "teal" => t().teal(),
         "red" => t().err,
         _ => return None,
     })
@@ -3584,7 +3590,7 @@ pub fn render_agent(
             c_subtle(),
         )]]));
     } else if items.is_empty() {
-        let mut rows = welcome_rows(agent, content_w);
+        let mut rows = welcome_rows(agent, content_w, now, opts.tz_offset_min);
         let hero = hero_rows(content_w, msg_h.saturating_sub(rows.len()));
         rows.splice(0..0, hero);
         parts.push(Rc::new(rows));
