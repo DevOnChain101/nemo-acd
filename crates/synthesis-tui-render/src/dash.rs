@@ -175,19 +175,45 @@ pub struct Frame {
 
 // ---------------------------------------------------------------- helpers
 
-const COL_BORDER: Rgb = T_BORDER;
-const COL_ACCENT: Rgb = T_CLAUDE;
-const COL_OK: Rgb = T_SUCCESS;
-const COL_WARN: Rgb = T_WARNING;
-const COL_BAD: Rgb = T_ERROR;
-const COL_MUTED: Rgb = T_INACTIVE;
-const COL_SUBTLE: Rgb = T_SUBTLE;
-const COL_TEXT: Rgb = T_BODY;
-const COL_WHITE: Rgb = T_TEXT;
-const COL_TOOL: Rgb = T_PERMISSION;
-const COL_AGENT: Rgb = T_AUTO_ACCEPT;
-const COL_SKILL: Rgb = T_PLAN_MODE;
-const COL_TRACK: Rgb = T_TRACK;
+fn col_border() -> Rgb {
+    t().border
+}
+fn col_accent() -> Rgb {
+    t().accent
+}
+fn col_ok() -> Rgb {
+    t().ok
+}
+fn col_warn() -> Rgb {
+    t().warn
+}
+fn col_bad() -> Rgb {
+    t().err
+}
+fn col_muted() -> Rgb {
+    t().label
+}
+fn col_subtle() -> Rgb {
+    t().muted
+}
+fn col_text() -> Rgb {
+    t().body
+}
+fn col_white() -> Rgb {
+    t().strong
+}
+fn col_tool() -> Rgb {
+    t().info
+}
+fn col_agent() -> Rgb {
+    t().pearl
+}
+fn col_skill() -> Rgb {
+    t().ok
+}
+fn col_track() -> Rgb {
+    t().border
+}
 const SPARK: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
 
 fn u(x: i64) -> usize {
@@ -196,42 +222,29 @@ fn u(x: i64) -> usize {
 
 pub fn level_color(p: f64) -> Rgb {
     if p >= 85.0 {
-        COL_BAD
+        col_bad()
     } else if p >= 60.0 {
-        COL_WARN
+        col_warn()
     } else {
-        COL_OK
+        col_ok()
     }
 }
 
-/// Bar with a shimmer that sweeps across the filled part. `p` of `None` counts as 0.
-pub fn bar(p: Option<f64>, w: usize, frame: usize, animate: bool) -> String {
+/// Filled `█` and empty `░` cells; `p` of `None` counts as 0. `frame` and `animate` are kept for
+/// the callers: the bar no longer shimmers (spec §2, quiet motion).
+pub fn bar(p: Option<f64>, w: usize, _frame: usize, _animate: bool) -> String {
     let pctv = p.filter(|v| !v.is_nan()).unwrap_or(0.0).clamp(0.0, 100.0);
-    let filled = js_round(pctv / 100.0 * w as f64) as i64;
-    let c = level_color(pctv);
-    let shimmer: i64 = if animate && filled > 0 {
-        (frame as i64) % (filled + 6)
-    } else {
-        -99
-    };
-    let mut out = String::new();
-    for i in 0..w as i64 {
-        if i < filled {
-            if (i - shimmer).abs() <= 1 {
-                out.push_str(&paint(lerp(c, COL_WHITE, 0.6), "█"));
-            } else {
-                out.push_str(&paint(c, "█"));
-            }
-        } else {
-            out.push_str(&paint(COL_TRACK, "░"));
-        }
-    }
-    out
+    let filled = js_round(pctv / 100.0 * w as f64) as usize;
+    format!(
+        "{}{}",
+        paint(level_color(pctv), &"█".repeat(filled.min(w))),
+        paint(col_track(), &"░".repeat(w - filled.min(w)))
+    )
 }
 
 fn sparkline(points: &[(i64, u64)], w: usize) -> String {
     if points.len() < 2 {
-        return paint(COL_MUTED, &"·".repeat(w));
+        return paint(col_muted(), &"·".repeat(w));
     }
     let deltas: Vec<u64> = points
         .windows(2)
@@ -243,7 +256,7 @@ fn sparkline(points: &[(i64, u64)], w: usize) -> String {
         .iter()
         .map(|d| SPARK[7.min((*d as f64 / max * 7.99).floor() as usize)])
         .collect();
-    paint(T_CLAUDE, &pad_start(&s, w))
+    paint(t().accent, &pad_start(&s, w))
 }
 
 fn valign_lines(lines: Lines, rows: usize) -> Lines {
@@ -300,7 +313,7 @@ pub enum VAlign {
 
 fn boxed(title: &str, lines: Lines, w: i64, h: i64, active: bool, valign: VAlign) -> Lines {
     let inner = w - 2;
-    let bc = if active { COL_ACCENT } else { COL_BORDER };
+    let bc = if active { col_accent() } else { col_border() };
     let mut t = if title.is_empty() {
         String::new()
     } else {
@@ -314,7 +327,7 @@ fn boxed(title: &str, lines: Lines, w: i64, h: i64, active: bool, valign: VAlign
         "{}{}{}",
         paint(bc, "┏━"),
         paint(
-            if active { COL_ACCENT } else { COL_MUTED },
+            if active { col_accent() } else { col_muted() },
             &format!("{t}{RESET}")
         ),
         paint(bc, &format!("{}┓", "━".repeat(u(w - 3 - tw))))
@@ -455,7 +468,7 @@ fn thinking_wave(frame: usize, w: usize) -> String {
     for i in 0..w {
         let v = ((i + frame) as f64 / 2.2).sin() * 0.5 + 0.5;
         s.push_str(&paint(
-            lerp(COL_SUBTLE, COL_ACCENT, v),
+            lerp(col_subtle(), col_accent(), v),
             &SPARK[(v * 7.99).floor() as usize].to_string(),
         ));
     }
@@ -464,10 +477,10 @@ fn thinking_wave(frame: usize, w: usize) -> String {
 
 fn phase_label(p: &Phase) -> (&'static str, Rgb) {
     match p {
-        Phase::Tool => ("RUNNING TOOL", COL_TOOL),
-        Phase::Agents => ("WAITING ON AGENTS", COL_AGENT),
-        Phase::Thinking => ("THINKING", COL_ACCENT),
-        Phase::Idle => ("IDLE", COL_MUTED),
+        Phase::Tool => ("RUNNING TOOL", col_tool()),
+        Phase::Agents => ("WAITING ON AGENTS", col_agent()),
+        Phase::Thinking => ("THINKING", col_accent()),
+        Phase::Idle => ("IDLE", col_muted()),
     }
 }
 
@@ -477,7 +490,7 @@ fn status_panel(s: &DashState, w: i64, h: i64, frame: usize, now: i64) -> Lines 
     let (text, lcol) = phase_label(&ph.phase);
     let idle = ph.phase == Phase::Idle;
     let spin_s = if idle {
-        paint(COL_MUTED, "●")
+        paint(col_muted(), "●")
     } else {
         paint(lcol, spin(frame))
     };
@@ -485,7 +498,7 @@ fn status_panel(s: &DashState, w: i64, h: i64, frame: usize, now: i64) -> Lines 
         "{spin_s} {}  {}",
         paint(lcol, &format!("{text}{RESET}")),
         paint(
-            COL_MUTED,
+            col_muted(),
             &format!(
                 "last activity {} ago",
                 fmt_dur(Some(
@@ -496,31 +509,31 @@ fn status_panel(s: &DashState, w: i64, h: i64, frame: usize, now: i64) -> Lines 
     )];
     if let Some(t) = ph.running.last() {
         let more = if ph.running.len() > 1 {
-            paint(COL_MUTED, &format!(" +{}", ph.running.len() - 1))
+            paint(col_muted(), &format!(" +{}", ph.running.len() - 1))
         } else {
             String::new()
         };
         lines.push(format!(
             "  {} {} {} {}{more}",
-            paint(COL_TOOL, spin(frame + 3)),
-            paint(COL_TOOL, &t.name),
-            paint(COL_TEXT, &t.summary),
+            paint(col_tool(), spin(frame + 3)),
+            paint(col_tool(), &t.name),
+            paint(col_text(), &t.summary),
             paint(
-                COL_MUTED,
+                col_muted(),
                 &fmt_dur(Some((now - t.start.unwrap_or(0)) as f64))
             )
         ));
     } else if ph.phase == Phase::Thinking {
         lines.push(format!("  {}", thinking_wave(frame, u((w - 6).min(32)))));
     } else {
-        lines.push(paint(COL_MUTED, "  waiting for the next prompt…"));
+        lines.push(paint(col_muted(), "  waiting for the next prompt…"));
     }
     let tap = s.usage.tap.as_ref();
     let ctx_max = context_size(session, tap, s.agent.and_then(|a| a.context_window));
     let ctx_pct = ctx_pct_of(s);
     let bw = u((w - 32).max(8));
     let nums = paint(
-        COL_MUTED,
+        col_muted(),
         &format!(
             " {}/{}",
             fmt_num(Some(session.context_used as f64)),
@@ -529,7 +542,7 @@ fn status_panel(s: &DashState, w: i64, h: i64, frame: usize, now: i64) -> Lines 
     );
     lines.push(format!(
         "{} {} {}{nums}",
-        paint(COL_MUTED, "Context "),
+        paint(col_muted(), "Context "),
         bar(Some(ctx_pct), bw, frame, !idle),
         paint(
             level_color(ctx_pct),
@@ -539,14 +552,14 @@ fn status_panel(s: &DashState, w: i64, h: i64, frame: usize, now: i64) -> Lines 
     let quota = |name: &str, win: &Quota| {
         format!(
             "{} {} {}{}",
-            paint(COL_MUTED, &pad_end(name, 8)),
+            paint(col_muted(), &pad_end(name, 8)),
             bar(Some(win.used), bw, frame, false),
             paint(
                 level_color(win.used),
                 &format!("{}%", pad_start(&to_fixed(win.used, 0), 3))
             ),
             paint(
-                COL_MUTED,
+                col_muted(),
                 &win.resets_at.map_or(String::new(), |r| format!(
                     " ↻ {}",
                     fmt_dur(Some((r - now) as f64))
@@ -580,7 +593,7 @@ fn token_panel(s: &DashState, w: i64, h: i64) -> Lines {
         fit(
             &format!(
                 "{}{}",
-                paint(COL_MUTED, &pad_end(k, 7)),
+                paint(col_muted(), &pad_end(k, 7)),
                 paint(c, &format!("{v}{}", if bold { RESET } else { "" }))
             ),
             half,
@@ -588,17 +601,17 @@ fn token_panel(s: &DashState, w: i64, h: i64) -> Lines {
     };
     let n = |v: u64| fmt_num(Some(v as f64));
     let lines = vec![
-        cell("total", &n(total), COL_ACCENT, true)
-            + &cell("agents", &n(agent_total), COL_AGENT, false),
-        cell("input", &n(t.input), COL_TEXT, false)
-            + &cell("output", &n(t.output), COL_ACCENT, false),
-        cell("cache", &n(t.cache_read), COL_OK, false)
-            + &cell("hit", &format!("{}%", to_fixed(hit, 1)), COL_OK, false),
+        cell("total", &n(total), col_accent(), true)
+            + &cell("agents", &n(agent_total), col_agent(), false),
+        cell("input", &n(t.input), col_text(), false)
+            + &cell("output", &n(t.output), col_accent(), false),
+        cell("cache", &n(t.cache_read), col_ok(), false)
+            + &cell("hit", &format!("{}%", to_fixed(hit, 1)), col_ok(), false),
         cell(
             "cost",
             &tap.and_then(|t| t.cost_usd)
                 .map_or("-".into(), |c| format!("${}", to_fixed(c, 2))),
-            COL_WARN,
+            col_warn(),
             false,
         ) + &cell(
             "lines",
@@ -607,7 +620,7 @@ fn token_panel(s: &DashState, w: i64, h: i64) -> Lines {
                     .map(|a| format!("+{} -{}", a, t.lines_removed.unwrap_or(0.0)))
             })
             .unwrap_or("-".into()),
-            COL_TEXT,
+            col_text(),
             false,
         ),
         sparkline(&session.timeline, u(w - 4)),
@@ -619,7 +632,7 @@ pub fn tasks_panel(s: &DashState, w: i64, h: i64, frame: usize, valign: VAlign) 
     let todos = &s.session.todos;
     let mut lines: Lines = vec![];
     if todos.is_empty() {
-        lines.push(paint(COL_MUTED, "no tasks tracked"));
+        lines.push(paint(col_muted(), "no tasks tracked"));
     }
     let done = todos.iter().filter(|t| t.status == "completed").count();
     if !todos.is_empty() {
@@ -627,7 +640,7 @@ pub fn tasks_panel(s: &DashState, w: i64, h: i64, frame: usize, valign: VAlign) 
         lines.push(format!(
             "{} {}",
             bar(Some(p), u((w - 16).max(8)), frame, false),
-            paint(COL_TEXT, &format!("{done}/{}", todos.len()))
+            paint(col_text(), &format!("{done}/{}", todos.len()))
         ));
     }
     let room = u(h - 2 - lines.len() as i64);
@@ -640,13 +653,16 @@ pub fn tasks_panel(s: &DashState, w: i64, h: i64, frame: usize, valign: VAlign) 
     let shown = &todos[start..(start + cap).min(todos.len())];
     let num_w = todos.len().to_string().len();
     for (i, t) in shown.iter().enumerate() {
-        let num = paint(COL_SUBTLE, &pad_start(&(start + i + 1).to_string(), num_w));
+        let num = paint(
+            col_subtle(),
+            &pad_start(&(start + i + 1).to_string(), num_w),
+        );
         match t.status.as_str() {
             "in_progress" => lines.push(format!(
                 "{num} {} {}",
-                paint(COL_WARN, spin(frame)),
+                paint(col_warn(), spin(frame)),
                 paint(
-                    COL_WARN,
+                    col_warn(),
                     if t.active_form.is_empty() {
                         &t.content
                     } else {
@@ -656,19 +672,19 @@ pub fn tasks_panel(s: &DashState, w: i64, h: i64, frame: usize, valign: VAlign) 
             )),
             "completed" => lines.push(format!(
                 "{num} {} {}",
-                paint(COL_OK, "✓"),
-                paint(COL_MUTED, &t.content)
+                paint(col_ok(), "✓"),
+                paint(col_muted(), &t.content)
             )),
             _ => lines.push(format!(
                 "{num} {} {}",
-                paint(COL_MUTED, "○"),
-                paint(COL_TEXT, &t.content)
+                paint(col_muted(), "○"),
+                paint(col_text(), &t.content)
             )),
         }
     }
     if shown.len() < todos.len() && room > 0 {
         lines.push(paint(
-            COL_SUBTLE,
+            col_subtle(),
             &format!("… +{} more", todos.len() - shown.len()),
         ));
     }
@@ -679,7 +695,7 @@ pub fn tasks_panel(s: &DashState, w: i64, h: i64, frame: usize, valign: VAlign) 
         format!(
             "Tasks {}",
             paint(
-                COL_MUTED,
+                col_muted(),
                 &format!(
                     "· {}",
                     if open > 0 {
@@ -715,21 +731,21 @@ fn tools_panel(s: &DashState, w: i64, h: i64) -> Lines {
         let len = 1.max(js_round(*n as f64 / max * bw as f64) as usize);
         lines.push(format!(
             "{} {} {}",
-            paint(COL_TOOL, &pad_end(&short(name, u(name_w)), u(name_w))),
-            paint(COL_TOOL, &"▇".repeat(len)),
-            paint(COL_MUTED, &n.to_string())
+            paint(col_tool(), &pad_end(&short(name, u(name_w)), u(name_w))),
+            paint(col_tool(), &"▇".repeat(len)),
+            paint(col_muted(), &n.to_string())
         ));
     }
     if entries.is_empty() {
-        lines.push(paint(COL_MUTED, "no tool calls yet"));
+        lines.push(paint(col_muted(), "no tool calls yet"));
     }
     if !s.session.skills.is_empty() {
-        lines.push(paint(COL_MUTED, "skills:"));
+        lines.push(paint(col_muted(), "skills:"));
         lines.push(
             s.session
                 .skills
                 .iter()
-                .map(|(k, n)| paint(COL_SKILL, &format!("{k}×{n}")))
+                .map(|(k, n)| paint(col_skill(), &format!("{k}×{n}")))
                 .collect::<Vec<_>>()
                 .join(" "),
         );
@@ -739,14 +755,14 @@ fn tools_panel(s: &DashState, w: i64, h: i64) -> Lines {
 
 fn feed_icon(k: &str) -> (&'static str, Rgb) {
     match k {
-        "prompt" => ("❯", COL_WHITE),
-        "tool" => ("▣", COL_TOOL),
-        "agent" => ("◆", COL_AGENT),
-        "skill" => ("★", COL_SKILL),
-        "error" => ("✗", COL_BAD),
-        "hook" => ("↯", COL_WARN),
-        "cmd" => ("/", COL_ACCENT),
-        _ => ("✎", COL_TEXT),
+        "prompt" => ("❯", col_white()),
+        "tool" => ("▣", col_tool()),
+        "agent" => ("◆", col_agent()),
+        "skill" => ("★", col_skill()),
+        "error" => ("✗", col_bad()),
+        "hook" => ("↯", col_warn()),
+        "cmd" => ("/", col_accent()),
+        _ => ("✎", col_text()),
     }
 }
 
@@ -771,13 +787,13 @@ fn feed_panel(s: &DashState, w: i64, h: i64, now: i64, rects: &mut Rects) -> Lin
             let (icon, c) = feed_icon(f.kind);
             let fresh = i == feed.len() - 1 && now - f.ts.unwrap_or(0) < 2500;
             let text = if fresh {
-                paint(COL_WHITE, &f.text)
+                paint(col_white(), &f.text)
             } else {
                 paint(c, &f.text)
             };
             format!(
                 "{} {} {text}",
-                paint(COL_MUTED, &fmt_time(f.ts.unwrap_or(0), s.tz_offset_min)),
+                paint(col_muted(), &fmt_time(f.ts.unwrap_or(0), s.tz_offset_min)),
                 paint(c, icon)
             )
         })
@@ -873,17 +889,17 @@ fn workspace_panel(
     let (start, end, above, below) = win;
     let blink_on = (frame / 4).is_multiple_of(2);
     if above > 0 {
-        lines.push(paint(COL_SUBTLE, &format!("   ↑ {above} more")));
+        lines.push(paint(col_subtle(), &format!("   ↑ {above} more")));
         hits.push(None);
     }
     for (i, ws) in wlist.iter().enumerate().take(end).skip(start) {
         let on = i == active_at;
         let icon = if ws.waiting {
-            paint(COL_BAD, if blink_on { "●" } else { "○" })
+            paint(col_bad(), if blink_on { "●" } else { "○" })
         } else if ws.busy {
-            paint(COL_OK, spin(frame + i))
+            paint(col_ok(), spin(frame + i))
         } else {
-            paint(if ws.count > 0 { COL_OK } else { COL_MUTED }, "●")
+            paint(if ws.count > 0 { col_ok() } else { col_muted() }, "●")
         };
         let count = if ws.waiting {
             format!("! {}", ws.count)
@@ -893,16 +909,16 @@ fn workspace_panel(
         let name_w = (inner - 4 - count.len() as i64).max(4);
         let name = short(&ws.name, u(name_w));
         let title = if ws.waiting {
-            paint(if blink_on { COL_BAD } else { COL_MUTED }, &name)
+            paint(if blink_on { col_bad() } else { col_muted() }, &name)
         } else if on {
-            paint(COL_ACCENT, &name)
+            paint(col_accent(), &name)
         } else {
-            paint(COL_TEXT, &name)
+            paint(col_text(), &name)
         };
         let left = format!(
             "{}{icon} {title}",
             if on {
-                paint(COL_ACCENT, "▌")
+                paint(col_accent(), "▌")
             } else {
                 " ".into()
             }
@@ -912,9 +928,9 @@ fn workspace_panel(
             "{left}{gap}{}",
             paint(
                 if ws.waiting {
-                    if blink_on { COL_BAD } else { COL_MUTED }
+                    if blink_on { col_bad() } else { col_muted() }
                 } else {
-                    COL_MUTED
+                    col_muted()
                 },
                 &count
             )
@@ -922,18 +938,18 @@ fn workspace_panel(
         hits.push(Some(ws.key.clone()));
     }
     if below > 0 {
-        lines.push(paint(COL_SUBTLE, &format!("   ↓ {below} more")));
+        lines.push(paint(col_subtle(), &format!("   ↓ {below} more")));
         hits.push(None);
     }
     let waiting_n = wlist.iter().filter(|x| x.waiting).count();
     let wait_tag = if waiting_n > 0 {
-        paint(COL_BAD, &format!(" !{waiting_n}"))
+        paint(col_bad(), &format!(" !{waiting_n}"))
     } else {
         String::new()
     };
     let title = format!(
         "Workspace {}{wait_tag}",
-        paint(COL_OK, &wlist.len().to_string())
+        paint(col_ok(), &wlist.len().to_string())
     );
     (
         boxed(
@@ -950,11 +966,11 @@ fn workspace_panel(
 
 fn mode_tag(m: &str) -> Option<(&'static str, Rgb)> {
     Some(match m {
-        "acceptEdits" => ("edits", COL_AGENT),
-        "plan" => ("plan", COL_SKILL),
-        "auto" => ("auto", COL_WARN),
-        "dontAsk" => ("dontAsk", COL_TOOL),
-        "bypassPermissions" => ("bypass", COL_BAD),
+        "acceptEdits" => ("edits", col_agent()),
+        "plan" => ("plan", col_skill()),
+        "auto" => ("auto", col_warn()),
+        "dontAsk" => ("dontAsk", col_tool()),
+        "bypassPermissions" => ("bypass", col_bad()),
         _ => return None,
     })
 }
@@ -979,7 +995,7 @@ fn sessions_panel(
     let (start, end, above, below) = win;
     session_hits.clear();
     if above > 0 {
-        lines.push(paint(COL_SUBTLE, &format!("   ↑ {above} more")));
+        lines.push(paint(col_subtle(), &format!("   ↑ {above} more")));
         session_hits.push(None);
     }
     for (i, sr) in sessions.iter().enumerate().take(end).skip(start) {
@@ -990,21 +1006,21 @@ fn sessions_panel(
         let waiting = sr.waiting || live.is_some_and(|l| l.status == "waiting");
         let blink_on = (frame / 4).is_multiple_of(2);
         let icon = if waiting {
-            paint(COL_BAD, if blink_on { "●" } else { "○" })
+            paint(col_bad(), if blink_on { "●" } else { "○" })
         } else if busy {
-            paint(COL_OK, spin(frame + i))
+            paint(col_ok(), spin(frame + i))
         } else if live.is_some() {
-            paint(COL_OK, "●")
+            paint(col_ok(), "●")
         } else {
-            paint(COL_MUTED, "○")
+            paint(col_muted(), "○")
         };
         let cursor = if sel {
-            paint(COL_ACCENT, if s.workspaces.is_some() { "▌" } else { "►" })
+            paint(col_accent(), if s.workspaces.is_some() { "▌" } else { "►" })
         } else {
             " ".into()
         };
         let tag = if is_agent {
-            paint(ACCENT_LIGHT, " ⌘")
+            paint(t().accent_light, " ⌘")
         } else {
             String::new()
         };
@@ -1027,20 +1043,27 @@ fn sessions_panel(
         };
         let name = short(&raw_name, u(name_w));
         let title = if waiting {
-            paint(if blink_on { COL_BAD } else { COL_MUTED }, &name)
+            paint(if blink_on { col_bad() } else { col_muted() }, &name)
         } else if sel {
-            paint(COL_ACCENT, &name)
+            paint(col_accent(), &name)
         } else {
-            paint(if live.is_some() { COL_TEXT } else { COL_MUTED }, &name)
+            paint(
+                if live.is_some() {
+                    col_text()
+                } else {
+                    col_muted()
+                },
+                &name,
+            )
         };
         let left = format!(
             "{cursor}{icon} {title}{}{tag}",
             mt.map_or(String::new(), |(_, c)| paint(c, &mode_s))
         );
         let ctx_col = if waiting {
-            if blink_on { COL_BAD } else { COL_MUTED }
+            if blink_on { col_bad() } else { col_muted() }
         } else {
-            ctx_pct.map_or(COL_MUTED, level_color)
+            ctx_pct.map_or(col_muted(), level_color)
         };
         lines.push(format!(
             "{left}{}{}",
@@ -1054,18 +1077,18 @@ fn sessions_panel(
             folder_with_parent(dir, u((inner - 3).max(8)))
         };
         lines.push(paint(
-            if sel { COL_TEXT } else { COL_SUBTLE },
+            if sel { col_text() } else { col_subtle() },
             &short(&format!("   {folder}"), u(inner)),
         ));
         session_hits.push(Some(sr.id.clone()));
         session_hits.push(Some(sr.id.clone()));
     }
     if below > 0 {
-        lines.push(paint(COL_SUBTLE, &format!("   ↓ {below} more")));
+        lines.push(paint(col_subtle(), &format!("   ↓ {below} more")));
         session_hits.push(None);
     }
     if sessions.is_empty() {
-        lines.push(paint(COL_MUTED, "no running sessions"));
+        lines.push(paint(col_muted(), "no running sessions"));
         session_hits.push(None);
     }
     let waiting_n = sessions
@@ -1073,7 +1096,7 @@ fn sessions_panel(
         .filter(|x| x.waiting || x.live.as_ref().is_some_and(|l| l.status == "waiting"))
         .count();
     let wait_tag = if waiting_n > 0 {
-        paint(COL_BAD, &format!(" !{waiting_n}"))
+        paint(col_bad(), &format!(" !{waiting_n}"))
     } else {
         String::new()
     };
@@ -1082,14 +1105,14 @@ fn sessions_panel(
         .and_then(|l| l.iter().find(|x| x.key == s.active_workspace));
     let where_ = ws.map_or(String::new(), |w0| {
         paint(
-            COL_MUTED,
+            col_muted(),
             &format!("· {} ", short(&w0.name, u((w - 20).max(4)))),
         )
     });
     boxed(
         &format!(
             "Running {where_}{}{wait_tag}",
-            paint(COL_OK, &sessions.len().to_string())
+            paint(col_ok(), &sessions.len().to_string())
         ),
         lines,
         w,
@@ -1107,7 +1130,7 @@ fn model_of(s: &DashState) -> Option<String> {
 fn session_row(k: &str, v: &str, c: Rgb, inner: i64) -> String {
     format!(
         "{}{}",
-        paint(COL_MUTED, &pad_end(k, 7)),
+        paint(col_muted(), &pad_end(k, 7)),
         paint(c, &short(v, u((inner - 7).max(4))))
     )
 }
@@ -1121,9 +1144,9 @@ fn mode_line(a: &Agent) -> (String, Rgb) {
             hint.map_or(String::new(), |h| format!(" (turn: {h})"))
         ),
         if !a.mode.is_empty() && a.mode != "default" {
-            COL_WARN
+            col_warn()
         } else {
-            COL_TEXT
+            col_text()
         },
     )
 }
@@ -1141,7 +1164,7 @@ fn goal_row(g: &agent::Goal, inner: i64) -> String {
             },
             g.condition
         ),
-        if working { COL_OK } else { COL_MUTED },
+        if working { col_ok() } else { col_muted() },
         inner,
     )
 }
@@ -1153,7 +1176,7 @@ fn session_info_panel(s: &DashState, w: i64, h: i64, frame: usize, now: i64) -> 
     let model = model_of(s)
         .or(Some(session.model.clone()).filter(|m| !m.is_empty()))
         .unwrap_or_else(|| waiting("loading model…", frame));
-    lines.push(session_row("model", &model, COL_ACCENT, inner));
+    lines.push(session_row("model", &model, col_accent(), inner));
     if let Some(a) = s.agent {
         let (m, c) = mode_line(a);
         lines.push(session_row("mode", &m, c, inner));
@@ -1167,7 +1190,7 @@ fn session_info_panel(s: &DashState, w: i64, h: i64, frame: usize, now: i64) -> 
                 } else {
                     &a.effort
                 }),
-            COL_TEXT,
+            col_text(),
             inner,
         ));
         if let Some(g) = &a.goal {
@@ -1177,22 +1200,32 @@ fn session_info_panel(s: &DashState, w: i64, h: i64, frame: usize, now: i64) -> 
             lines.push(session_row(
                 "window",
                 &format!("{} tokens", fmt_num(Some(cw))),
-                COL_TEXT,
+                col_text(),
                 inner,
             ));
         }
     }
     if !session.git_branch.is_empty() {
-        lines.push(session_row("branch", &session.git_branch, COL_SKILL, inner));
+        lines.push(session_row(
+            "branch",
+            &session.git_branch,
+            col_skill(),
+            inner,
+        ));
     }
     if !session.cwd.is_empty() {
-        lines.push(session_row("cwd", &basename(&session.cwd), COL_TEXT, inner));
+        lines.push(session_row(
+            "cwd",
+            &basename(&session.cwd),
+            col_text(),
+            inner,
+        ));
     }
     if let Some(st) = session.started_at.filter(|t| *t != 0) {
         lines.push(session_row(
             "uptime",
             &fmt_dur(Some((now - st) as f64)),
-            COL_TEXT,
+            col_text(),
             inner,
         ));
     }
@@ -1200,14 +1233,14 @@ fn session_info_panel(s: &DashState, w: i64, h: i64, frame: usize, now: i64) -> 
     lines.push(session_row(
         "turns",
         &format!("{} prompts · {tools} tools", session.prompts),
-        COL_TEXT,
+        col_text(),
         inner,
     ));
     if session.errors > 0 {
         lines.push(session_row(
             "errors",
             &session.errors.to_string(),
-            COL_BAD,
+            col_bad(),
             inner,
         ));
     }
@@ -1221,7 +1254,7 @@ fn session_info_essential(s: &DashState, w: i64, h: i64, frame: usize) -> Lines 
     let model = model_of(s)
         .or(Some(session.model.clone()).filter(|m| !m.is_empty()))
         .unwrap_or_else(|| waiting("loading model…", frame));
-    let mut lines = vec![session_row("model", &model, COL_ACCENT, inner)];
+    let mut lines = vec![session_row("model", &model, col_accent(), inner)];
     if let Some(a) = s.agent {
         let (m, c) = mode_line(a);
         lines.push(session_row("mode", &m, c, inner));
@@ -1235,7 +1268,7 @@ fn session_info_essential(s: &DashState, w: i64, h: i64, frame: usize) -> Lines 
                 } else {
                     &a.effort
                 }),
-            COL_TEXT,
+            col_text(),
             inner,
         ));
         if let Some(g) = &a.goal {
@@ -1327,10 +1360,10 @@ fn mcp_panel(s: &DashState, w: i64, h: i64, frame: usize) -> Lines {
         let (dot, right, c);
         if live {
             dot = match r.state.as_str() {
-                "connecting" => paint(COL_WARN, spin(frame + lines.len())),
-                "failed" => paint(COL_BAD, "●"),
-                "connected" => paint(COL_OK, "●"),
-                _ => paint(COL_MUTED, "○"),
+                "connecting" => paint(col_warn(), spin(frame + lines.len())),
+                "failed" => paint(col_bad(), "●"),
+                "connected" => paint(col_ok(), "●"),
+                _ => paint(col_muted(), "○"),
             };
             right = match r.state.as_str() {
                 "connected" => format!("{} tools", r.tool_count),
@@ -1341,11 +1374,11 @@ fn mcp_panel(s: &DashState, w: i64, h: i64, frame: usize) -> Lines {
                 o => o.to_string(),
             };
             c = if r.state == "failed" {
-                COL_BAD
+                col_bad()
             } else if r.state == "connected" {
-                COL_WHITE
+                col_white()
             } else {
-                COL_TEXT
+                col_text()
             };
         } else {
             let comp = s.session.components.get(&format!("mcp:{}", r.name));
@@ -1353,11 +1386,11 @@ fn mcp_panel(s: &DashState, w: i64, h: i64, frame: usize) -> Lines {
             let errored = comp.is_some_and(|c| c.error);
             let used = comp.is_some_and(|c| c.count > 0);
             dot = if busy {
-                paint(COL_OK, spin(frame + lines.len()))
+                paint(col_ok(), spin(frame + lines.len()))
             } else if errored {
-                paint(COL_BAD, "●")
+                paint(col_bad(), "●")
             } else {
-                paint(COL_OK, "●")
+                paint(col_ok(), "●")
             };
             let mut rt = if r.transport == "stdio" {
                 "stdio".to_string()
@@ -1371,11 +1404,11 @@ fn mcp_panel(s: &DashState, w: i64, h: i64, frame: usize) -> Lines {
             }
             right = rt;
             c = if errored {
-                COL_BAD
+                col_bad()
             } else if used {
-                COL_WHITE
+                col_white()
             } else {
-                COL_TEXT
+                col_text()
             };
         }
         let name_w = (inner - 2 - u16len(&right) as i64 - 1).max(4);
@@ -1385,7 +1418,7 @@ fn mcp_panel(s: &DashState, w: i64, h: i64, frame: usize) -> Lines {
             " ".repeat(u(
                 (inner - width(&left) as i64 - u16len(&right) as i64).max(1)
             )),
-            paint(COL_MUTED, &right)
+            paint(col_muted(), &right)
         ));
     }
     let disabled: Vec<&McpRow> = rows.iter().filter(|r| r.state == "disabled").collect();
@@ -1400,33 +1433,36 @@ fn mcp_panel(s: &DashState, w: i64, h: i64, frame: usize) -> Lines {
             let name_w = (inner - 2 - u16len(&right) as i64 - 1).max(4);
             let left = format!(
                 "{} {}",
-                paint(COL_MUTED, "○"),
-                paint(COL_MUTED, &short(&r.name, u(name_w)))
+                paint(col_muted(), "○"),
+                paint(col_muted(), &short(&r.name, u(name_w)))
             );
             lines.push(format!(
                 "{left}{}{}",
                 " ".repeat(u(
                     (inner - width(&left) as i64 - u16len(&right) as i64).max(1)
                 )),
-                paint(COL_SUBTLE, &right)
+                paint(col_subtle(), &right)
             ));
             shown_disabled += 1;
         }
     }
     if !live && lines.len() < room {
         lines.push(paint(
-            COL_SUBTLE,
+            col_subtle(),
             "configured · synthesis has no MCP client yet",
         ));
     }
     if shown_disabled < disabled.len() && lines.len() < room {
         lines.push(paint(
-            COL_SUBTLE,
+            col_subtle(),
             &format!("+{} disabled", disabled.len() - shown_disabled),
         ));
     }
     boxed(
-        &format!("MCP {} enabled", paint(COL_OK, &enabled.len().to_string())),
+        &format!(
+            "MCP {} enabled",
+            paint(col_ok(), &enabled.len().to_string())
+        ),
         lines,
         w,
         h,
@@ -1445,11 +1481,11 @@ fn mcp_summary_line(s: &DashState, w: i64) -> Lines {
         .join(", ");
     let line = format!(
         "{} {} {}",
-        paint(COL_OK, &enabled.len().to_string()),
-        paint(COL_MUTED, "enabled:"),
-        paint(COL_TEXT, &names)
+        paint(col_ok(), &enabled.len().to_string()),
+        paint(col_muted(), "enabled:"),
+        paint(col_text(), &names)
     );
-    vec![fit(&format!("{} {line}", paint(T_CLAUDE, "MCP")), u(w))]
+    vec![fit(&format!("{} {line}", paint(t().accent, "MCP")), u(w))]
 }
 
 #[derive(Default)]
@@ -1632,7 +1668,7 @@ fn agent_panel(
     let where_ = shorten_left(&chat.cwd, 12.max(u(w - 40)));
     let tag = if let Some(p) = &s.view.opts.preview {
         paint(
-            COL_WARN,
+            col_warn(),
             &format!(
                 "viewing {} · enter continue · esc back",
                 p.id.chars().take(8).collect::<String>()
@@ -1645,13 +1681,13 @@ fn agent_panel(
             _ => "permission needed",
         };
         paint(
-            COL_WARN,
+            col_warn(),
             &format!("◆ {what}{}", if focused { "" } else { " · tab" }),
         )
     } else if busy {
-        paint(COL_OK, &format!("{} working", spin(frame)))
+        paint(col_ok(), &format!("{} working", spin(frame)))
     } else {
-        paint(COL_MUTED, if focused { "ready" } else { "tab to type" })
+        paint(col_muted(), if focused { "ready" } else { "tab to type" })
     };
     let sub_route = if subagent_view {
         format!(
@@ -1674,7 +1710,7 @@ fn agent_panel(
         } else {
             String::new()
         },
-        paint(COL_MUTED, &format!("· {where_}{sub_route}"))
+        paint(col_muted(), &format!("· {where_}{sub_route}"))
     );
     let lines = res.lines;
     boxed(&title, lines, w, h, focused || busy, VAlign::Top)
@@ -1834,12 +1870,13 @@ fn usage_panel_size(s: &DashState, with_summary: bool, now: i64) -> (i64, i64) {
 fn legend() -> String {
     format!(
         "{} {} {}",
-        paint(COL_SUBTLE, "Less"),
-        HEAT.iter()
+        paint(col_subtle(), "Less"),
+        t().heat
+            .iter()
             .map(|c| paint(*c, "■"))
             .collect::<Vec<_>>()
             .join(" "),
-        paint(COL_SUBTLE, "More")
+        paint(col_subtle(), "More")
     )
 }
 
@@ -1928,24 +1965,24 @@ fn usage_summary(
     vec![
         (
             "today",
-            paint(COL_ACCENT, &m_fmt(m, today_entry.map_or(0.0, val))),
+            paint(col_accent(), &m_fmt(m, today_entry.map_or(0.0, val))),
         ),
-        ("7 days", paint(COL_TEXT, &m_fmt(m, sum(7)))),
-        ("month", paint(COL_TEXT, &m_fmt(m, month_total))),
+        ("7 days", paint(col_text(), &m_fmt(m, sum(7)))),
+        ("month", paint(col_text(), &m_fmt(m, month_total))),
         (
             "best",
             format!(
                 "{}{}",
-                paint(COL_TEXT, &m_fmt(m, peak_val.max(0.0))),
-                paint(COL_SUBTLE, &when)
+                paint(col_text(), &m_fmt(m, peak_val.max(0.0))),
+                paint(col_subtle(), &when)
             ),
         ),
         (
             "active",
             format!(
                 "{}{}",
-                paint(COL_TEXT, &active.to_string()),
-                paint(COL_SUBTLE, &format!("/{} days", month_days.len()))
+                paint(col_text(), &active.to_string()),
+                paint(col_subtle(), &format!("/{} days", month_days.len()))
             ),
         ),
         (
@@ -1953,10 +1990,10 @@ fn usage_summary(
             format!(
                 "{}{}",
                 paint(
-                    if streak > 0 { COL_OK } else { COL_TEXT },
+                    if streak > 0 { col_ok() } else { col_text() },
                     &streak.to_string()
                 ),
-                paint(COL_SUBTLE, if streak == 1 { " day" } else { " days" })
+                paint(col_subtle(), if streak == 1 { " day" } else { " days" })
             ),
         ),
     ]
@@ -1973,7 +2010,7 @@ fn usage_month_panel(s: &DashState, w: i64, h: i64, valign: VAlign, now: i64) ->
     if history.is_empty() {
         return boxed(
             "Usage",
-            vec![paint(COL_MUTED, "collecting history…")],
+            vec![paint(col_muted(), "collecting history…")],
             w,
             h,
             false,
@@ -1995,7 +2032,7 @@ fn usage_month_panel(s: &DashState, w: i64, h: i64, valign: VAlign, now: i64) ->
         format!("· {} · {}", m.label, m_fmt(&m, month_total)),
         format!("· {}", m_fmt(&m, month_total)),
     ]
-    .map(|t| format!("Usage {}", paint(COL_MUTED, &t)));
+    .map(|t| format!("Usage {}", paint(col_muted(), &t)));
     let title = titles
         .iter()
         .find(|t| width(t) as i64 <= w - 7)
@@ -2014,7 +2051,7 @@ fn usage_month_panel(s: &DashState, w: i64, h: i64, valign: VAlign, now: i64) ->
             .iter()
             .map(|d| {
                 paint(
-                    HEAT[heat_level(Some(d.entry.map_or(0.0, val)), Some(max))],
+                    t().heat[heat_level(Some(d.entry.map_or(0.0, val)), Some(max))],
                     "■",
                 )
             })
@@ -2030,7 +2067,7 @@ fn usage_month_panel(s: &DashState, w: i64, h: i64, valign: VAlign, now: i64) ->
         return boxed(&title, rows, w, h, false, valign);
     }
     let mut grid_rows = vec![paint(
-        COL_MUTED,
+        col_muted(),
         &format!("{} {}", MONTHS[grid.month], grid.year),
     )];
     for r in 0..7 {
@@ -2038,22 +2075,22 @@ fn usage_month_panel(s: &DashState, w: i64, h: i64, valign: VAlign, now: i64) ->
         for c in 0..weeks {
             match &grid.weeks[c][r] {
                 None => cells.push(" ".to_string()),
-                Some(d) if d.future => cells.push(paint(HEAT[0], "·")),
+                Some(d) if d.future => cells.push(paint(t().heat[0], "·")),
                 Some(d) => {
                     let lvl = heat_level(Some(d.entry.map_or(0.0, val)), Some(max));
-                    cells.push(paint(HEAT[lvl], "■"));
+                    cells.push(paint(t().heat[lvl], "■"));
                 }
             }
         }
         grid_rows.push(format!(
             "{}{}",
-            paint(COL_SUBTLE, &pad_end(row_label(r), USAGE_LABEL_W)),
+            paint(col_subtle(), &pad_end(row_label(r), USAGE_LABEL_W)),
             cells.join(" ")
         ));
     }
     let side: Lines = usage_summary(history, &grid, &m, s.tz_offset_min)
         .into_iter()
-        .map(|(k, v)| format!("{}{v}", paint(COL_MUTED, &pad_end(k, 8))))
+        .map(|(k, v)| format!("{}{v}", paint(col_muted(), &pad_end(k, 8))))
         .collect();
     let side_w = side.iter().map(|x| width(x)).max().unwrap_or(0) as i64;
     let mut lines = if inner - grid_w as i64 - 3 >= side_w {
@@ -2121,17 +2158,17 @@ fn usage_year_stats(
     let bc = civil(best.date_ms, tz);
     let when = format!(" {} {}", bc.day, MONTHS[bc.month]);
     let sessions: f64 = last(30).iter().map(|d| d.sessions).sum();
-    let t = |x: &str| paint(COL_TEXT, x);
-    let sb = |x: &str| paint(COL_SUBTLE, x);
+    let t = |x: &str| paint(col_text(), x);
+    let sb = |x: &str| paint(col_subtle(), x);
     let mut rows: Vec<(String, String)> = vec![
-        ("today".into(), paint(COL_ACCENT, &m_fmt(m, val(today)))),
+        ("today".into(), paint(col_accent(), &m_fmt(m, val(today)))),
         (
             "7 days".into(),
             format!(
                 "{}{}",
                 t(&m_fmt(m, this_week)),
                 change.map_or(String::new(), |c| paint(
-                    if c >= 0 { COL_OK } else { COL_WARN },
+                    if c >= 0 { col_ok() } else { col_warn() },
                     &format!(" {}{}%", if c >= 0 { "▲" } else { "▼" }, c.abs())
                 ))
             ),
@@ -2179,7 +2216,7 @@ fn usage_year_stats(
             format!(
                 "{}{}",
                 paint(
-                    if streak > 0 { COL_OK } else { COL_TEXT },
+                    if streak > 0 { col_ok() } else { col_text() },
                     &streak.to_string()
                 ),
                 sb(&format!(" now · {longest} best"))
@@ -2225,7 +2262,7 @@ fn usage_year_content(s: &DashState, inner: i64, max_rows: usize) -> (String, Li
     let title = format!(
         "Usage {}",
         paint(
-            COL_MUTED,
+            col_muted(),
             &format!(
                 "· {} · {} 7d · {} year · u: metric",
                 m.label,
@@ -2237,7 +2274,7 @@ fn usage_year_content(s: &DashState, inner: i64, max_rows: usize) -> (String, Li
     let leg = legend();
     let stats: Lines = usage_year_stats(history, &m, mname, s.tz_offset_min)
         .into_iter()
-        .map(|(k, v)| format!("{}{v}", paint(COL_MUTED, &pad_end(&k, 9))))
+        .map(|(k, v)| format!("{}{v}", paint(col_muted(), &pad_end(&k, 9))))
         .collect();
     let stat_w = 32.min(stats.iter().map(|x| width(x)).max().unwrap_or(0)) as i64;
     let fit_weeks = |reserve: i64| {
@@ -2300,17 +2337,17 @@ fn usage_year_content(s: &DashState, inner: i64, max_rows: usize) -> (String, Li
         }
         last_x = x;
     }
-    let mut grid = vec![paint(COL_MUTED, &months.iter().collect::<String>())];
+    let mut grid = vec![paint(col_muted(), &months.iter().collect::<String>())];
     for r in 0..7 {
         let cells: Vec<String> = (0..weeks)
             .map(|c| match cell(c, r) {
                 None => " ".to_string(),
-                Some(d) => paint(HEAT[heat_level(Some(val(d)), Some(max))], "■"),
+                Some(d) => paint(t().heat[heat_level(Some(val(d)), Some(max))], "■"),
             })
             .collect();
         grid.push(format!(
             "{}{}",
-            paint(COL_SUBTLE, &pad_end(row_label(r as usize), USAGE_LABEL_W)),
+            paint(col_subtle(), &pad_end(row_label(r as usize), USAGE_LABEL_W)),
             cells.join(" ")
         ));
     }
@@ -2395,57 +2432,41 @@ pub fn usage_panel(
 
 // ---------------------------------------------------------------- header / footer
 
-fn logo_pill(text: &str, frame: usize) -> String {
-    let chars: Vec<char> = text.chars().collect();
-    let n = chars.len() as i64;
-    let sweep = (frame as i64 % (n + 40)) - 4;
-    let bg_at = |i: i64| {
-        let base = cycle(
-            &LOGO_GRAD,
-            i as f64 / n as f64 / 2.0 + ((frame / 5) as f64) / 32.0,
-        );
-        let d = (i - sweep).abs();
-        if d < 3 {
-            lerp(base, ACCENT_GLOW, (3 - d) as f64 / 3.0 * 0.55)
-        } else {
-            base
-        }
-    };
-    let mut s = paint(bg_at(0), "▐");
-    for (i, ch) in chars.iter().enumerate() {
-        s.push_str(&format!(
-            "{}{}{BOLD}{ch}{RESET}",
-            bg(bg_at(i as i64)),
-            fg(ACCENT_INK)
-        ));
+/// The brand mark (braille ring): left cell accent, right cell pearl. Empty in the ASCII set.
+pub fn mark() -> String {
+    let m: Vec<char> = glyphs().mark.chars().collect();
+    match m[..] {
+        [a, b] => format!(
+            "{}{}",
+            paint(t().accent, &a.to_string()),
+            paint(t().pearl, &b.to_string())
+        ),
+        _ => String::new(),
     }
-    s + &paint(bg_at(n - 1), "▌")
 }
 
-fn mini_bar(pct: f64, n: usize) -> String {
-    let p = pct.clamp(0.0, 100.0);
-    let filled = js_round(p / 100.0 * n as f64) as usize;
-    format!(
-        "{}{}",
-        paint(level_color(p), &"▰".repeat(filled)),
-        paint(COL_TRACK, &"▱".repeat(n - filled))
-    )
+/// Wordmark by width (spec §4): spaced from 80 columns, plain from 60, none below (the mark only).
+fn wordmarks(w: i64) -> Vec<&'static str> {
+    if w >= 80 {
+        vec!["S Y N T H E S I S", "SYNTHESIS", ""]
+    } else if w >= 60 {
+        vec!["SYNTHESIS", ""]
+    } else {
+        vec![""]
+    }
 }
 
-fn header(s: &DashState, w: i64, frame: usize, now: i64) -> String {
+fn header(s: &DashState, w: i64, _frame: usize, now: i64) -> String {
     let session = s.session;
-    let sep = paint(COL_BORDER, " │ ");
+    let (th, g) = (t(), glyphs());
+    let sep = format!("  {}  ", paint(th.border, g.vbar));
     let live = s.sessions.iter().filter(|x| x.live.is_some()).count();
     let busy = s
         .sessions
         .iter()
         .filter(|x| x.live.is_some() && !x.phase.is_empty() && x.phase != "idle")
         .count();
-    let tap = s.usage.tap.as_ref();
-    let model = model_of(s)
-        .or(tap.and_then(|t| t.model.clone()).filter(|m| !m.is_empty()))
-        .or(Some(session.model.clone()).filter(|m| !m.is_empty()))
-        .unwrap_or_default();
+    let waiting = s.agent.map_or(0, |a| a.pending.len());
     let project = {
         let b = basename(&session.cwd);
         if b.is_empty() {
@@ -2454,105 +2475,68 @@ fn header(s: &DashState, w: i64, frame: usize, now: i64) -> String {
             b
         }
     };
-    let ctx_pct = ctx_pct_of(s);
-    let logos = [
-        " ✻ Synthesis  ·  MISSION CONTROL ",
-        " ✻ Synthesis · MISSION CONTROL ",
-        " ✻ Synthesis ",
-        " ✻ ",
-    ];
-    let pulse_s = if busy > 0 {
-        paint(COL_OK, spin(frame))
-    } else {
-        paint(COL_MUTED, "●")
-    };
-    // (priority, text)
+    // (drop priority, text): the highest number goes first
     let left_chips: Vec<(u8, String)> = [
         (
-            1,
-            format!(
-                "{pulse_s} {}{}",
-                paint(COL_TEXT, &format!("{live} live")),
-                if busy > 0 {
-                    paint(COL_MUTED, &format!(" · {busy} busy"))
-                } else {
-                    String::new()
-                }
-            ),
-        ),
-        (
-            2,
-            if model.is_empty() {
-                String::new()
-            } else {
-                paint(ACCENT_LIGHT, &format!("◆ {model}"))
-            },
-        ),
-        (
-            4,
+            3,
             if project.is_empty() {
                 String::new()
             } else {
-                format!("{}{}", paint(COL_MUTED, "⌂ "), paint(COL_TEXT, &project))
+                paint(th.body, &project)
             },
         ),
         (
-            5,
+            4,
             if session.git_branch.is_empty() {
                 String::new()
             } else {
-                paint(COL_MUTED, &format!("⎇ {}", session.git_branch))
+                paint(th.muted, &format!("{} {}", g.branch, session.git_branch))
             },
         ),
     ]
     .into_iter()
     .filter(|c| !c.1.is_empty())
     .collect();
+    let live_chip = format!(
+        "{} {}{}",
+        if live > 0 {
+            paint(th.ok, g.live)
+        } else {
+            paint(th.muted, g.idle)
+        },
+        paint(th.strong, &format!("{live} live")),
+        if busy > 0 {
+            paint(th.muted, &format!(" {} {busy} busy", g.dot))
+        } else {
+            String::new()
+        }
+    );
     let right_chips: Vec<(u8, String)> = [
-        (1, paint(COL_WHITE, &fmt_time(now, s.tz_offset_min))),
+        (1, paint(th.body, &fmt_time(now, s.tz_offset_min)[..5])),
+        (2, live_chip),
         (
-            3,
-            format!(
-                "{}{} {}",
-                paint(COL_MUTED, "ctx "),
-                mini_bar(ctx_pct, 6),
-                paint(level_color(ctx_pct), &format!("{}%", to_fixed(ctx_pct, 0)))
-            ),
-        ),
-        (
-            4,
-            s.usage.five_hour.as_ref().map_or(String::new(), |q| {
-                format!(
-                    "{}{}",
-                    paint(COL_MUTED, "5h "),
-                    paint(level_color(q.used), &format!("{}%", to_fixed(q.used, 0)))
-                )
-            }),
-        ),
-        (
-            4,
-            tap.and_then(|t| t.cost_usd).map_or(String::new(), |c| {
-                paint(COL_WARN, &format!("${}", to_fixed(c, 2)))
-            }),
+            5,
+            if waiting > 0 {
+                paint(th.warn, &format!("! {waiting} waiting"))
+            } else {
+                String::new()
+            },
         ),
         (
             6,
-            paint(
-                COL_MUTED,
-                &format!(
-                    "{} · up {}",
-                    session.id.chars().take(8).collect::<String>(),
-                    fmt_dur(Some(
-                        (now - session.started_at.filter(|t| *t != 0).unwrap_or(now)) as f64
-                    ))
-                ),
-            ),
+            s.usage
+                .tap
+                .as_ref()
+                .and_then(|t| t.cost_usd)
+                .map_or(String::new(), |c| {
+                    paint(th.muted, &format!("${}", to_fixed(c, 2)))
+                }),
         ),
     ]
     .into_iter()
     .filter(|c| !c.1.is_empty())
     .collect();
-    // chips by (side, index); dropped by priority, highest p first (stable for equal p: left before right)
+    // chips by (side, index), dropped by priority, highest number first
     let mut all: Vec<(u8, bool, usize)> = left_chips
         .iter()
         .enumerate()
@@ -2560,26 +2544,41 @@ fn header(s: &DashState, w: i64, frame: usize, now: i64) -> String {
         .chain(right_chips.iter().enumerate().map(|(i, c)| (c.0, false, i)))
         .collect();
     all.sort_by_key(|c| std::cmp::Reverse(c.0));
-    for (li, logo) in logos.iter().enumerate() {
-        let is_last = li == logos.len() - 1;
-        let pill = logo_pill(logo, frame);
+    let words = wordmarks(w);
+    for (li, word) in words.iter().enumerate() {
+        let is_last = li == words.len() - 1;
+        let brand = {
+            let m = mark();
+            let word = if word.is_empty() && m.is_empty() {
+                "SYNTH"
+            } else {
+                word
+            };
+            match (m.is_empty(), word.is_empty()) {
+                (_, true) => format!(" {m}"),
+                (true, _) => format!(" {}", paint(th.accent_light, word)),
+                _ => format!(" {m}  {}", paint(th.accent_light, word)),
+            }
+        };
         let mut keep_l = vec![true; left_chips.len()];
         let mut keep_r = vec![true; right_chips.len()];
         let build = |kl: &[bool], kr: &[bool]| {
-            let mut parts = vec![pill.clone()];
-            parts.extend(
-                left_chips
-                    .iter()
-                    .enumerate()
-                    .filter(|(i, _)| kl[*i])
-                    .map(|(_, c)| c.1.clone()),
-            );
-            let left = parts.join(&sep);
+            let chips: Vec<&str> = left_chips
+                .iter()
+                .zip(kl)
+                .filter(|(_, k)| **k)
+                .map(|(c, _)| c.1.as_str())
+                .collect();
+            let left = if chips.is_empty() {
+                brand.clone()
+            } else {
+                format!("{brand}   {}", chips.join("  "))
+            };
             let right = right_chips
                 .iter()
-                .enumerate()
-                .filter(|(i, _)| kr[*i])
-                .map(|(_, c)| c.1.clone())
+                .zip(kr)
+                .filter(|(_, k)| **k)
+                .map(|(c, _)| c.1.as_str())
                 .rev()
                 .collect::<Vec<_>>()
                 .join(&sep);
@@ -2605,7 +2604,7 @@ fn header(s: &DashState, w: i64, frame: usize, now: i64) -> String {
                 &format!(
                     "{}{}{}",
                     row.0,
-                    " ".repeat(u(w - width(&row.0) as i64 - width(&row.1) as i64).max(1)),
+                    " ".repeat(u(w - width(&row.0) as i64 - width(&row.1) as i64 - 1).max(1)),
                     row.1
                 ),
                 u(w),
@@ -2616,7 +2615,7 @@ fn header(s: &DashState, w: i64, frame: usize, now: i64) -> String {
 }
 
 fn header_rule(w: i64) -> String {
-    paint(lerp(ACCENT_CORE, COL_TRACK, 0.55), &"━".repeat(u(w)))
+    paint(t().border, &"─".repeat(u(w)))
 }
 
 fn topology_panel(s: &DashState, w: i64, h: i64, frame: usize, now: i64) -> Lines {
@@ -2634,9 +2633,9 @@ fn topology_panel(s: &DashState, w: i64, h: i64, frame: usize, now: i64) -> Line
     let rows = render_flow(s.session, u(w - 3), u(h - 2), frame, now, opts);
     let (active, total) = node_counts(s.session, now);
     let count = if active > 0 {
-        paint(PURPLE, &format!("{active} active"))
+        paint(t().pearl, &format!("{active} active"))
     } else {
-        paint(COL_MUTED, &format!("{total} nodes"))
+        paint(col_muted(), &format!("{total} nodes"))
     };
     boxed(
         &format!("TOPOLOGY {count}"),
@@ -2715,12 +2714,12 @@ fn footer(s: &DashState, w: i64) -> String {
         .map(|(i, (k, d))| {
             (
                 (i as u8).saturating_add(1).min(200),
-                format!("{} {}", paint(COL_ACCENT, k), paint(COL_MUTED, d)),
+                format!("{} {}", paint(col_accent(), k), paint(col_muted(), d)),
             )
         })
         .collect();
     if s.follow {
-        items.push((0, paint(COL_OK, "[following newest]")));
+        items.push((0, paint(col_ok(), "[following newest]")));
     }
     fit_items(&items, "   ", u(w))
 }
@@ -2908,7 +2907,7 @@ fn topology_column(s: &DashState, w: i64, h: i64, frame: usize, now: i64, cx: &m
             &format!(
                 "@{} {}",
                 sub.display_name(),
-                paint(COL_MUTED, &format!("· {status} · {route}"))
+                paint(col_muted(), &format!("· {status} · {route}"))
             ),
             lines,
             w,

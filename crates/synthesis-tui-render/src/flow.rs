@@ -11,8 +11,12 @@ const RETURN_HOLD_MS: i64 = 6000;
 const COMP_DISPATCH_MS: i64 = 600;
 const COMP_HOLD_MS: i64 = 2500;
 const CONVEYOR_MS: i64 = 50;
-const SLATE: Rgb = [176, 190, 210];
-const DIM: Rgb = WARM_DIM;
+fn slate() -> Rgb {
+    t().label
+}
+fn dim() -> Rgb {
+    t().border
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum St {
@@ -91,12 +95,12 @@ fn kind_icon(k: &str) -> &'static str {
 }
 fn kind_col(k: &str) -> Rgb {
     match k {
-        "agent" => T_AUTO_ACCEPT,
-        "skill" => T_PLAN_MODE,
-        "mcp" => T_MCP,
-        "hook" => T_WARNING,
-        "cmd" => T_BASH,
-        _ => T_PERMISSION,
+        "agent" => t().pearl,
+        "skill" => t().ok,
+        "mcp" => t().info,
+        "hook" => t().warn,
+        "cmd" => t().sand,
+        _ => t().info,
     }
 }
 
@@ -291,7 +295,7 @@ fn conveyor(cv: &mut Canvas, path: &[Pt], col: Rgb, reverse: bool, now: i64) {
             continue;
         }
         if ph == 0 {
-            cv.set(x, y, '●', Some(WARM_CREAM), 3);
+            cv.set(x, y, '●', Some(t().accent_light), 3);
         } else {
             cv.tint(x, y, col, 3);
         }
@@ -309,7 +313,7 @@ struct Phase_ {
     label: &'static str,
     short: &'static str,
     desc: &'static str,
-    col: Rgb,
+    col: fn(&Theme) -> Rgb,
 }
 const PHASES: [Phase_; 6] = [
     Phase_ {
@@ -317,42 +321,42 @@ const PHASES: [Phase_; 6] = [
         label: "Plan",
         short: "Plan",
         desc: "understand & plan",
-        col: BLUE,
+        col: |t| t.info,
     },
     Phase_ {
         key: "guard",
         label: "Guard",
         short: "Guard",
         desc: "check policies & safety",
-        col: GREEN,
+        col: |t| t.ok,
     },
     Phase_ {
         key: "orchestrate",
         label: "Orchestrate",
         short: "Orch",
         desc: "select skills / sub-agents",
-        col: CYAN,
+        col: |t| t.info,
     },
     Phase_ {
         key: "execute",
         label: "Execute",
         short: "Exec",
         desc: "run tools & code",
-        col: TEAL,
+        col: |t| t.ok,
     },
     Phase_ {
         key: "verify",
         label: "Verify",
         short: "Verify",
         desc: "check, test, review",
-        col: YELLOW,
+        col: |t| t.warn,
     },
     Phase_ {
         key: "learn",
         label: "Learn",
         short: "Learn",
         desc: "update memory",
-        col: PURPLE,
+        col: |t| t.pearl,
     },
 ];
 
@@ -512,15 +516,15 @@ struct Card {
 
 fn card_meta(id: &str) -> (&'static str, &'static str, Rgb) {
     match id {
-        "user" => ("USER · PROJECT", "USER", SLATE),
-        "core" => ("SYNTHESIS CORE", "CORE", T_CLAUDE),
-        "guards" => ("GUARDS", "GUARDS", RED),
+        "user" => ("USER · PROJECT", "USER", slate()),
+        "core" => ("SYNTHESIS CORE", "CORE", t().accent),
+        "guards" => ("GUARDS", "GUARDS", t().err),
         "skills" => ("SKILLS", "SKILLS", kind_col("skill")),
         "agents" => ("SUB-AGENTS", "AGENTS", kind_col("agent")),
         "hooks" => ("HOOKS", "HOOKS", kind_col("hook")),
         "mcp" => ("EXTERNAL · MCP", "MCP", kind_col("mcp")),
         "exec" => ("EXECUTION", "EXEC", kind_col("tool")),
-        _ => ("MEMORY · FEEDBACK", "MEMORY", PINK),
+        _ => ("MEMORY · FEEDBACK", "MEMORY", t().sand),
     }
 }
 
@@ -528,30 +532,30 @@ fn node_line(n: &Node, frame: usize, now: i64, i: usize, name: &str) -> Line {
     let busy = is_busy(n.st);
     let active = is_active(n.st);
     let mut g = kind_icon(&n.kind);
-    let mut gcol = lerp(n.col, DIM, 0.45);
+    let mut gcol = lerp(n.col, dim(), 0.45);
     let comp_err = matches!(n.r, NodeRef::Comp(c) if c.error);
     if busy {
         g = spin(frame + i);
         gcol = n.col;
     } else if n.st == St::Returning {
         g = "«";
-        gcol = if comp_err { RED } else { GREEN };
+        gcol = if comp_err { t().err } else { t().ok };
     } else if n.st == St::Failed {
         g = "✗";
-        gcol = RED;
+        gcol = t().err;
     }
     let mut left = vec![
         segb(format!("{g} "), gcol),
         (
             name.to_string(),
-            if active { WARM_CREAM } else { T_BODY },
+            if active { t().accent_light } else { t().body },
             active,
         ),
     ];
     if let NodeRef::Agent(a) = &n.r
         && !a.description.is_empty()
     {
-        left.push(seg(format!(" · {}", one_line(&a.description)), T_SUBTLE));
+        left.push(seg(format!(" · {}", one_line(&a.description)), t().muted));
     }
     let right = if busy {
         let detail = match &n.r {
@@ -572,9 +576,16 @@ fn node_line(n: &Node, frame: usize, now: i64, i: usize, name: &str) -> Line {
             NodeRef::Agent(a) => format!("« {} tok", fmt_num(a.tokens.total() as f64)),
             NodeRef::Comp(_) => "« returned".into(),
         };
-        seg(t, if comp_err { RED } else { GREEN })
+        seg(
+            t,
+            if comp_err {
+                crate::theme::t().err
+            } else {
+                crate::theme::t().ok
+            },
+        )
     } else if n.st == St::Failed {
-        seg("failed", RED)
+        seg("failed", t().err)
     } else {
         match &n.r {
             NodeRef::Agent(a) => seg(
@@ -584,7 +595,7 @@ fn node_line(n: &Node, frame: usize, now: i64, i: usize, name: &str) -> Line {
                         - a.start.filter(|e| *e != 0).unwrap_or(now)),
                     fmt_num(a.tokens.total() as f64)
                 ),
-                T_SUBTLE,
+                t().muted,
             ),
             NodeRef::Comp(c) => seg(
                 format!(
@@ -592,7 +603,7 @@ fn node_line(n: &Node, frame: usize, now: i64, i: usize, name: &str) -> Line {
                     c.count,
                     ago(now - if n.last != 0 { n.last } else { now })
                 ),
-                T_SUBTLE,
+                t().muted,
             ),
         }
     };
@@ -637,7 +648,7 @@ fn list_card(
 ) -> Card {
     let lines = if nodes.is_empty() {
         vec![Line {
-            left: vec![seg(empty, T_SUBTLE)],
+            left: vec![seg(empty, t().muted)],
             right: None,
         }]
     } else {
@@ -676,11 +687,11 @@ pub struct FlowOpts {
 
 fn level_col(pct: f64) -> Rgb {
     if pct >= 85.0 {
-        RED
+        t().err
     } else if pct >= 60.0 {
-        YELLOW
+        t().warn
     } else {
-        GREEN
+        t().ok
     }
 }
 
@@ -742,36 +753,40 @@ fn build_cards(
             lines: vec![
                 Line {
                     left: vec![
-                        segb("❯ ", SLATE),
+                        segb("❯ ", slate()),
                         seg(
                             if lp.is_empty() {
                                 "waiting for a prompt…".to_string()
                             } else {
                                 lp.clone()
                             },
-                            if lp.is_empty() { T_SUBTLE } else { WARM_CREAM },
+                            if lp.is_empty() {
+                                t().muted
+                            } else {
+                                t().accent_light
+                            },
                         ),
                     ],
                     right: None,
                 },
                 Line {
-                    left: vec![seg(format!("prompts {}", s.prompts), T_INACTIVE)],
+                    left: vec![seg(format!("prompts {}", s.prompts), t().label)],
                     right: Some(seg(
                         s.last_prompt_at
                             .filter(|p| *p != 0)
                             .map_or(String::new(), |p| format!("last {} ago", ago(now - p))),
-                        T_SUBTLE,
+                        t().muted,
                     )),
                 },
                 Line {
-                    left: vec![seg("project ", T_SUBTLE), seg(proj.clone(), T_BODY)],
+                    left: vec![seg("project ", t().muted), seg(proj.clone(), t().body)],
                     right: Some(seg(
                         if s.git_branch.is_empty() {
                             String::new()
                         } else {
                             format!("git:{}", s.git_branch)
                         },
-                        T_SUBTLE,
+                        t().muted,
                     )),
                 },
             ],
@@ -792,16 +807,16 @@ fn build_cards(
         left: vec![
             segb(
                 format!("{} ", stage_glyph(on, i)),
-                if on { col } else { DIM },
+                if on { col } else { dim() },
             ),
             (
                 crate::util::pad_end(label, 13),
-                if on { WARM_CREAM } else { T_BODY },
+                if on { t().accent_light } else { t().body },
                 on,
             ),
-            seg(text, T_SUBTLE),
+            seg(text, t().muted),
         ],
-        right: Some(seg(right, if on { col } else { T_SUBTLE })),
+        right: Some(seg(right, if on { col } else { t().muted })),
     };
     cards.push((
         "core",
@@ -825,7 +840,7 @@ fn build_cards(
                     } else {
                         String::new()
                     },
-                    BLUE,
+                    t().info,
                 ),
                 row(
                     plan_on,
@@ -843,7 +858,7 @@ fn build_cards(
                     } else {
                         format!("{done}/{} tasks", todos.len())
                     },
-                    BLUE,
+                    t().info,
                 ),
                 row(
                     orch_on,
@@ -855,7 +870,7 @@ fn build_cards(
                     } else {
                         "idle".into()
                     },
-                    CYAN,
+                    t().info,
                 ),
                 Line {
                     left: vec![
@@ -865,7 +880,7 @@ fn build_cards(
                         ),
                         seg(
                             format!("· {} tok", fmt_num(s.tokens.total() as f64)),
-                            T_SUBTLE,
+                            t().muted,
                         ),
                     ],
                     right: None,
@@ -892,23 +907,23 @@ fn build_cards(
             .map_or(comp(n).name.clone(), |r| format!("pre:{r}"))
     });
     let summary = Line {
-        left: vec![seg(format!("{} guards", guards.len()), T_INACTIVE)],
+        left: vec![seg(format!("{} guards", guards.len()), t().label)],
         right: Some(if blocked > 0 {
-            segb(format!("{blocked} blocked"), RED)
+            segb(format!("{blocked} blocked"), t().err)
         } else if !guards.is_empty() {
-            seg("all approved", GREEN)
+            seg("all approved", t().ok)
         } else {
-            seg("", T_SUBTLE)
+            seg("", t().muted)
         }),
     };
     let mut glines = vec![];
     if alert {
         glines.push(Line {
             left: vec![
-                segb("✗ STOP ", RED),
+                segb("✗ STOP ", t().err),
                 seg(
                     format!("{} blocked a call", comp(last_block.unwrap()).name),
-                    RED,
+                    t().err,
                 ),
             ],
             right: None,
@@ -976,11 +991,11 @@ fn build_cards(
     let calls: u32 = tools.iter().map(|n| comp(n).count).sum();
     let mut ex = list_card(&tools, frame, now, "no tool calls yet", &default_name);
     let mut elines = vec![Line {
-        left: vec![seg(format!("{calls} calls"), T_INACTIVE)],
+        left: vec![seg(format!("{calls} calls"), t().label)],
         right: Some(if s.errors > 0 {
-            seg(format!("{} errors", s.errors), RED)
+            seg(format!("{} errors", s.errors), t().err)
         } else {
-            seg("no errors", T_SUBTLE)
+            seg("no errors", t().muted)
         }),
     }];
     if !tools.is_empty() {
@@ -1000,18 +1015,18 @@ fn build_cards(
             lines: vec![
                 Line {
                     left: vec![
-                        seg("context ", T_SUBTLE),
+                        seg("context ", t().muted),
                         seg(ctx_bar(ctx_pct, 10), level_col(ctx_pct)),
                     ],
-                    right: Some(seg(format!("{}%", to_fixed(ctx_pct, 0)), T_INACTIVE)),
+                    right: Some(seg(format!("{}%", to_fixed(ctx_pct, 0)), t().label)),
                 },
                 match v {
                     Some(v) => Line {
                         left: vec![
-                            seg("verify  ", T_SUBTLE),
+                            seg("verify  ", t().muted),
                             segb(
                                 if v.ok { "✓ " } else { "✗ " },
-                                if v.ok { GREEN } else { RED },
+                                if v.ok { t().ok } else { t().err },
                             ),
                             seg(
                                 one_line(if v.summary.is_empty() {
@@ -1019,36 +1034,36 @@ fn build_cards(
                                 } else {
                                     &v.summary
                                 }),
-                                T_BODY,
+                                t().body,
                             ),
                         ],
-                        right: Some(seg(ago(now - v.ts.unwrap_or(0)), T_SUBTLE)),
+                        right: Some(seg(ago(now - v.ts.unwrap_or(0)), t().muted)),
                     },
                     None => Line {
                         left: vec![
-                            seg("verify  ", T_SUBTLE),
-                            seg("no test / build run yet", T_SUBTLE),
+                            seg("verify  ", t().muted),
+                            seg("no test / build run yet", t().muted),
                         ],
                         right: None,
                     },
                 },
                 Line {
                     left: vec![
-                        seg("memory  ", T_SUBTLE),
-                        seg(format!("{} writes", s.memory_writes), T_BODY),
+                        seg("memory  ", t().muted),
+                        seg(format!("{} writes", s.memory_writes), t().body),
                     ],
                     right: None,
                 },
                 Line {
                     left: vec![
-                        seg("tasks   ", T_SUBTLE),
+                        seg("tasks   ", t().muted),
                         seg(
                             if todos.is_empty() {
                                 "none".to_string()
                             } else {
                                 format!("{done}/{} done", todos.len())
                             },
-                            T_BODY,
+                            t().body,
                         ),
                     ],
                     right: None,
@@ -1075,11 +1090,11 @@ fn comp<'a>(n: &Node<'a>) -> &'a Component {
 
 fn level_or_inactive(p: f64) -> Rgb {
     if p >= 85.0 {
-        RED
+        t().err
     } else if p >= 60.0 {
-        YELLOW
+        t().warn
     } else {
-        T_INACTIVE
+        t().label
     }
 }
 
@@ -1833,18 +1848,22 @@ fn draw_line(cv: &mut Canvas, x: i64, y: i64, w: i64, ln: &Line) {
 fn card_border(c: &Card, now: i64) -> Rgb {
     if c.error {
         return if blink_on(now) {
-            RED
+            t().err
         } else {
-            lerp(RED, DIM, 0.4)
+            lerp(t().err, dim(), 0.4)
         };
     }
     if c.busy {
-        return if blink_on(now) { WARM_CREAM } else { c.col };
+        return if blink_on(now) {
+            t().accent_light
+        } else {
+            c.col
+        };
     }
     if c.returning {
-        return GREEN;
+        return t().ok;
     }
-    lerp(c.col, DIM, 0.6)
+    lerp(c.col, dim(), 0.6)
 }
 
 fn title_slot(p: &Pos, reserved: &[i64]) -> (i64, i64) {
@@ -1876,7 +1895,7 @@ fn draw_compact(cv: &mut Canvas, card: &Card, p: &Pos, now: i64) {
     let col = if active {
         card_border(card, now)
     } else {
-        lerp(card.col, DIM, 0.2)
+        lerp(card.col, dim(), 0.2)
     };
     let label = if len(card.title) <= (p.w as f64 * 0.4).floor() as i64 {
         card.title
@@ -1888,7 +1907,7 @@ fn draw_compact(cv: &mut Canvas, card: &Card, p: &Pos, now: i64) {
     let mut x = p.x + len(&title) + 1;
     if !card.badge.is_empty() {
         let b = clip(&card.badge, 0.max(p.w - (x - p.x) - 8));
-        cv.text(x, p.y, &b, T_SUBTLE, 6);
+        cv.text(x, p.y, &b, t().muted, 6);
         x += len(&b) + 1;
     }
     let first = card
@@ -1929,7 +1948,7 @@ fn draw_card(cv: &mut Canvas, card: &Card, p: &Pos, now: i64, reserved: &[i64]) 
         if active {
             card.col
         } else {
-            lerp(card.col, DIM, 0.2)
+            lerp(card.col, dim(), 0.2)
         },
         6,
     );
@@ -1939,7 +1958,7 @@ fn draw_card(cv: &mut Canvas, card: &Card, p: &Pos, now: i64, reserved: &[i64]) 
             tx + len(&title),
             p.y,
             &clip(&format!(" {} ", card.badge), badge_room),
-            T_SUBTLE,
+            t().muted,
             6,
         );
     }
@@ -1953,7 +1972,7 @@ fn draw_card(cv: &mut Canvas, card: &Card, p: &Pos, now: i64, reserved: &[i64]) 
         let more = card.lines.len() - keep;
         lines.truncate(keep);
         lines.push(Line {
-            left: vec![seg(format!("+{more} more"), T_SUBTLE)],
+            left: vec![seg(format!("+{more} more"), t().muted)],
             right: None,
         });
     }
@@ -1995,15 +2014,25 @@ fn draw_phases(cv: &mut Canvas, w: i64, ps: &PhaseState, frame: usize, detail: &
         let cur = ps.current.as_deref() == Some(p.key);
         let seen = ps.seen.contains(p.key);
         let col = if cur {
-            p.col
+            (p.col)(t())
         } else if seen {
-            lerp(p.col, DIM, 0.25)
+            lerp((p.col)(t()), dim(), 0.25)
         } else {
-            T_SUBTLE
+            t().muted
         };
         cv.text(x, 0, &format!("{} ", glyph_of(p, i)), col, 6);
         let t = (v.0)(p, i);
-        cv.text(x + 2, 0, &t, if cur { WARM_CREAM } else { col }, 6);
+        cv.text(
+            x + 2,
+            0,
+            &t,
+            if cur {
+                crate::theme::t().accent_light
+            } else {
+                col
+            },
+            6,
+        );
         x += 2 + len(&t);
         if i < PHASES.len() - 1 {
             cv.text(
@@ -2011,9 +2040,9 @@ fn draw_phases(cv: &mut Canvas, w: i64, ps: &PhaseState, frame: usize, detail: &
                 0,
                 v.1,
                 if seen || cur {
-                    lerp(p.col, DIM, 0.35)
+                    lerp((p.col)(crate::theme::t()), dim(), 0.35)
                 } else {
-                    DIM
+                    dim()
                 },
                 6,
             );
@@ -2033,7 +2062,7 @@ fn draw_phases(cv: &mut Canvas, w: i64, ps: &PhaseState, frame: usize, detail: &
                     format!(" — {detail}")
                 }
             ),
-            c.col,
+            (c.col)(t()),
         ),
         None => (
             if ps.seen.is_empty() {
@@ -2041,7 +2070,7 @@ fn draw_phases(cv: &mut Canvas, w: i64, ps: &PhaseState, frame: usize, detail: &
             } else {
                 "✓ turn complete · waiting for the next prompt".to_string()
             },
-            T_SUBTLE,
+            t().muted,
         ),
     };
     if ph >= 2 {
@@ -2081,7 +2110,7 @@ pub fn render_flow(
             0,
             0,
             &clip("enlarge the window to show the topology", w as i64),
-            T_SUBTLE,
+            t().muted,
             6,
         );
         return cv.rows();
@@ -2116,9 +2145,9 @@ pub fn render_flow(
         }
     };
     let tone = |st: LinkState, col: Rgb| match st {
-        LinkState::Idle => DIM,
-        LinkState::Error => RED,
-        LinkState::Returning => GREEN,
+        LinkState::Idle => dim(),
+        LinkState::Error => t().err,
+        LinkState::Returning => t().ok,
         LinkState::Busy => col,
     };
     struct Wire {
@@ -2139,7 +2168,7 @@ pub fn render_flow(
                     pt,
                     Wire {
                         bits: 0,
-                        col: DIM,
+                        col: dim(),
                         rank: -1,
                     },
                 ));
@@ -2171,8 +2200,8 @@ pub fn render_flow(
         let card = card_of(&cards, lk.id);
         match state_of(card) {
             LinkState::Busy => conveyor(&mut cv, &lk.path, card.col, lk.id == "user", now),
-            LinkState::Returning => conveyor(&mut cv, &lk.path, GREEN, true, now),
-            LinkState::Error => conveyor(&mut cv, &lk.path, RED, true, now),
+            LinkState::Returning => conveyor(&mut cv, &lk.path, t().ok, true, now),
+            LinkState::Error => conveyor(&mut cv, &lk.path, t().err, true, now),
             LinkState::Idle => {}
         }
     }
@@ -2213,7 +2242,7 @@ pub fn render_flow(
                 lk.arrow.x,
                 lk.arrow.y,
                 lk.arrow.ch,
-                Some(if on { col } else { DIM }),
+                Some(if on { col } else { dim() }),
                 7,
             );
         }

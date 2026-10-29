@@ -5,7 +5,7 @@
 //! visible window. Per-item rows are cached (see [`Item::rev`]).
 
 use crate::dialogs::{mode_name, permission_options};
-use crate::highlight::{ADD as HL_ADD, Col, DEL as HL_DEL, col, highlight, lang_from_file};
+use crate::highlight::{Col, add_c as hl_add, col, del_c as hl_del, highlight, lang_from_file};
 use crate::model::{Todo, summarize_tool};
 use crate::modelname::{ModelConfig, model_parts};
 use crate::picker::{DEFAULT_WINDOW, Picker};
@@ -25,29 +25,67 @@ mod thinking;
 
 // ---------------------------------------------------------------- colours
 
-const C_TEXT: Col = col(T_BODY);
-const C_BRIGHT: Col = col(T_TEXT);
-const C_DIM: Col = col(T_INACTIVE);
-const C_SUBTLE: Col = col(T_SUBTLE);
-const C_ACCENT: Col = col(ACCENT_CORE);
-const C_LIGHT: Col = col(ACCENT_LIGHT);
-const C_CODE: Col = col([125, 211, 252]);
-const C_HEADING: Col = col(GREEN);
-const C_STRONG: Col = col(ACCENT_LIGHT);
-const C_LINK: Col = col(ACCENT_LIGHT);
-const C_OK: Col = col(GREEN);
-const C_BAD: Col = col(RED);
-const C_WARN: Col = col(YELLOW);
-const C_BORDER: Col = col(WARM_DIM);
-const C_PERM: Col = col(BLUE);
-/// Same value as GREEN, a different object in Node (see `highlight::Col`).
-const C_ADD: Col = Col {
-    rgb: [74, 222, 128],
-    tag: 1,
-};
-const C_BANG: Col = col(CYAN);
-const C_TEAL: Col = col(TEAL);
-const C_PURPLE: Col = col(PURPLE);
+fn c_text() -> Col {
+    col(t().body)
+}
+fn c_bright() -> Col {
+    col(t().strong)
+}
+fn c_dim() -> Col {
+    col(t().label)
+}
+fn c_subtle() -> Col {
+    col(t().muted)
+}
+fn c_accent() -> Col {
+    col(t().accent)
+}
+fn c_light() -> Col {
+    col(t().accent_light)
+}
+fn c_code() -> Col {
+    col(t().info)
+}
+fn c_heading() -> Col {
+    col(t().ok)
+}
+fn c_strong() -> Col {
+    col(t().accent_light)
+}
+fn c_link() -> Col {
+    col(t().accent_light)
+}
+fn c_ok() -> Col {
+    col(t().ok)
+}
+fn c_bad() -> Col {
+    col(t().err)
+}
+fn c_warn() -> Col {
+    col(t().warn)
+}
+fn c_border() -> Col {
+    col(t().border)
+}
+fn c_perm() -> Col {
+    col(t().info)
+}
+/// Same value as the ok colour, a different object in Node (see `highlight::Col`).
+fn c_add() -> Col {
+    Col {
+        rgb: t().ok,
+        tag: 1,
+    }
+}
+fn c_bang() -> Col {
+    col(t().info)
+}
+fn c_teal() -> Col {
+    col(t().ok)
+}
+fn c_purple() -> Col {
+    col(t().pearl)
+}
 
 // ---------------------------------------------------------------- runs
 
@@ -159,6 +197,8 @@ pub struct Child {
 struct Cache {
     w: usize,
     expanded: bool,
+    /// Rows carry colours, so a theme change drops them.
+    cfg: RenderConfig,
     fp: u64,
     rows: Rc<Vec<Row>>,
 }
@@ -520,28 +560,28 @@ fn inline(text: &str, base: Col) -> Vec<Run> {
         let tok = m.as_str();
         if tok.starts_with('[') {
             let close = tok.find("](").unwrap();
-            out.push(run_full(&tok[1..close], C_LINK, false, false, true));
+            out.push(run_full(&tok[1..close], c_link(), false, false, true));
             out.push(run_full(
                 format!(" ({})", &tok[close + 2..tok.len() - 1]),
-                C_LINK,
+                c_link(),
                 false,
                 false,
                 true,
             ));
         } else if tok.starts_with("http") {
             let url = tok.trim_end_matches(['.', ',', ';', ':', '!', '?']);
-            out.push(run_full(url, C_LINK, false, false, true));
+            out.push(run_full(url, c_link(), false, false, true));
             if url.len() < tok.len() {
                 out.push(r(&tok[url.len()..], base));
             }
         } else if tok.starts_with("**") {
-            out.push(rb(&tok[2..tok.len() - 2], C_STRONG));
+            out.push(rb(&tok[2..tok.len() - 2], c_strong()));
         } else if tok.starts_with('`') {
-            out.push(r(&tok[1..tok.len() - 1], C_CODE));
+            out.push(r(&tok[1..tok.len() - 1], c_code()));
         } else {
             out.push(run_full(
                 &tok[1..tok.len() - 1],
-                C_BRIGHT,
+                c_bright(),
                 false,
                 true,
                 false,
@@ -650,7 +690,7 @@ fn markdown(text: &str, expanded: bool) -> Vec<MdLine> {
         let (shown, footer) = clamp(hl, expanded, false);
         for line in &shown {
             // a plain bar: a "+" / "−" here read as diff additions
-            let mut runs = vec![r("│ ", C_SUBTLE)];
+            let mut runs = vec![r("│ ", c_subtle())];
             runs.extend(line.iter().map(|t| r(&t.t, t.c)));
             out.push(MdLine {
                 runs,
@@ -660,7 +700,7 @@ fn markdown(text: &str, expanded: bool) -> Vec<MdLine> {
         }
         if let Some(f) = footer {
             out.push(MdLine {
-                runs: vec![r(format!("│ {f}"), C_SUBTLE)],
+                runs: vec![r(format!("│ {f}"), c_subtle())],
                 indent: 2,
                 table: None,
             });
@@ -719,13 +759,13 @@ fn markdown(text: &str, expanded: bool) -> Vec<MdLine> {
         }
         if let Some(h) = res.head.captures(raw) {
             out.push(MdLine {
-                runs: vec![rb(h[2].replace("**", ""), C_HEADING)],
+                runs: vec![rb(h[2].replace("**", ""), c_heading())],
                 indent: 0,
                 table: None,
             });
         } else if let Some(q) = res.quote.captures(raw) {
-            let mut runs = vec![r("▎ ", C_SUBTLE)];
-            runs.extend(inline(&q[1], C_DIM));
+            let mut runs = vec![r("▎ ", c_subtle())];
+            runs.extend(inline(&q[1], c_dim()));
             out.push(MdLine {
                 runs,
                 indent: 2,
@@ -739,8 +779,8 @@ fn markdown(text: &str, expanded: bool) -> Vec<MdLine> {
                 "• ".to_string()
             };
             let indent = pad.chars().count() + mark.chars().count();
-            let mut runs = vec![r(format!("{pad}{mark}"), C_DIM)];
-            runs.extend(inline(&li[3], C_TEXT));
+            let mut runs = vec![r(format!("{pad}{mark}"), c_dim())];
+            runs.extend(inline(&li[3], c_text()));
             out.push(MdLine {
                 runs,
                 indent,
@@ -748,13 +788,13 @@ fn markdown(text: &str, expanded: bool) -> Vec<MdLine> {
             });
         } else if is_hr(raw) {
             out.push(MdLine {
-                runs: vec![r("─".repeat(20), C_SUBTLE)],
+                runs: vec![r("─".repeat(20), c_subtle())],
                 indent: 0,
                 table: None,
             });
         } else {
             out.push(MdLine {
-                runs: inline(raw, C_TEXT),
+                runs: inline(raw, c_text()),
                 indent: 0,
                 table: None,
             });
@@ -922,19 +962,19 @@ fn table_rows(table: &Table, w: usize) -> Vec<Row> {
                     .collect::<Vec<_>>()
                     .join(m)
             ),
-            C_BORDER,
+            c_border(),
         )]
     };
     let draw = |cells: &Vec<String>| -> Vec<Row> {
         let wrapped: Vec<Vec<Row>> = cells
             .iter()
             .enumerate()
-            .map(|(i, c)| wrap(&inline(c, C_TEXT), widths[i], &[], &[]))
+            .map(|(i, c)| wrap(&inline(c, c_text()), widths[i], &[], &[]))
             .collect();
         let height = wrapped.iter().map(Vec::len).max().unwrap_or(1);
         (0..height)
             .map(|y| {
-                let mut line = vec![r("│", C_BORDER)];
+                let mut line = vec![r("│", c_border())];
                 for i in 0..n {
                     let empty: Row = vec![];
                     let cell = wrapped[i].get(y).unwrap_or(&empty);
@@ -944,10 +984,10 @@ fn table_rows(table: &Table, w: usize) -> Vec<Row> {
                         "center" => spare / 2,
                         _ => 0,
                     };
-                    line.push(r(format!(" {}", " ".repeat(left)), C_TEXT));
+                    line.push(r(format!(" {}", " ".repeat(left)), c_text()));
                     line.extend(cell.iter().cloned());
-                    line.push(r(format!("{} ", " ".repeat(spare - left)), C_TEXT));
-                    line.push(r("│", C_BORDER));
+                    line.push(r(format!("{} ", " ".repeat(spare - left)), c_text()));
+                    line.push(r("│", c_border()));
                 }
                 line
             })
@@ -1118,23 +1158,23 @@ fn diff_rows(
         clip_runs(runs, w)
     };
     for i in 0..del.len().min(max) {
-        rows.push(line('-', HL_DEL, old_t.get(i)));
+        rows.push(line('-', hl_del(), old_t.get(i)));
     }
     if del.len() > max {
         let n = del.len() - max;
         match on_more.as_mut() {
             Some(f) => f(n),
-            None => rows.push(vec![r(format!("  … {n} more removed"), C_SUBTLE)]),
+            None => rows.push(vec![r(format!("  … {n} more removed"), c_subtle())]),
         }
     }
     for i in 0..add.len().min(max) {
-        rows.push(line('+', HL_ADD, new_t.get(i)));
+        rows.push(line('+', hl_add(), new_t.get(i)));
     }
     if add.len() > max {
         let n = add.len() - max;
         match on_more.as_mut() {
             Some(f) => f(n),
-            None => rows.push(vec![r(format!("  … {n} more added"), C_SUBTLE)]),
+            None => rows.push(vec![r(format!("  … {n} more added"), c_subtle())]),
         }
     }
     rows
@@ -1382,7 +1422,7 @@ fn code_body(it: &Item, w: usize, expanded: bool) -> (Vec<Row>, Option<String>) 
             .trim_end_matches('\n')
             .split('\n')
             .filter(|_| !it.result.is_empty())
-            .map(|l| vec![r(l.replace('\t', "  "), C_DIM)])
+            .map(|l| vec![r(l.replace('\t', "  "), c_dim())])
             .collect(),
         _ => vec![],
     };
@@ -1421,7 +1461,20 @@ fn handoff_title(ln: &str) -> Option<(usize, &'static str)> {
     ))
 }
 
-const CTX_COLORS: [Rgb; 8] = [BLUE, PURPLE, TEAL, YELLOW, PINK, CYAN, GREEN, RED];
+/// Context categories are told apart by the legend; none uses a status colour.
+fn ctx_colors() -> [Rgb; 8] {
+    let t = t();
+    [
+        t.info,
+        t.pearl,
+        t.sand,
+        t.accent,
+        t.ok,
+        t.label,
+        t.accent_light,
+        t.muted,
+    ]
+}
 
 fn context_rows(d: &Value, w: usize) -> Vec<Row> {
     let mut rows: Vec<Row> = vec![];
@@ -1480,11 +1533,11 @@ fn context_rows(d: &Value, w: usize) -> Vec<Row> {
         ),
         None => format!("  {} tokens (window unknown)", fmt_tok(used)),
     };
-    rows.push(vec![rb("Context usage", C_BRIGHT), r(head, C_DIM)]);
+    rows.push(vec![rb("Context usage", c_bright()), r(head, c_dim())]);
     if let Some(o) = overflow.filter(|o| *o > 0.0) {
         rows.push(vec![r(
             format!("  {} estimated overflow", fmt_tok(o)),
-            C_WARN,
+            c_warn(),
         )]);
     }
     let bar_w = (w.saturating_sub(4)).clamp(10, 60);
@@ -1493,7 +1546,11 @@ fn context_rows(d: &Value, w: usize) -> Vec<Row> {
     for (i, c) in cats.iter().enumerate() {
         let n = js_round(tok(c) / max * bar_w as f64) as usize;
         let free = c.get("kind").and_then(Value::as_str) == Some("free");
-        let colr = if free { T_TRACK } else { CTX_COLORS[i % 8] };
+        let colr = if free {
+            t().border
+        } else {
+            ctx_colors()[i % 8]
+        };
         if n > 0 {
             segs.push(r(
                 if free { "░" } else { "█" }.repeat(n.min(bar_w.saturating_sub(filled))),
@@ -1502,19 +1559,19 @@ fn context_rows(d: &Value, w: usize) -> Vec<Row> {
         }
         filled += n;
     }
-    let mut bar = vec![r("  ", C_TEXT)];
+    let mut bar = vec![r("  ", c_text())];
     bar.extend(segs);
     rows.push(bar);
     for (i, c) in cats.iter().enumerate() {
         let free = c.get("kind").and_then(Value::as_str) == Some("free");
-        let colr = if free { T_SUBTLE } else { CTX_COLORS[i % 8] };
+        let colr = if free { t().muted } else { ctx_colors()[i % 8] };
         let share = to_fixed((tok(c) / max * 100.0).min(100.0), 1);
         rows.push(vec![
-            r("  ", C_TEXT),
+            r("  ", c_text()),
             r(if free { "░ " } else { "█ " }, col(colr)),
             r(
                 pad_end(c.get("name").and_then(Value::as_str).unwrap_or(""), 18),
-                C_TEXT,
+                c_text(),
             ),
             r(
                 format!(
@@ -1522,7 +1579,7 @@ fn context_rows(d: &Value, w: usize) -> Vec<Row> {
                     pad_start(&fmt_tok(tok(c)), 7),
                     pad_start(&share, 5)
                 ),
-                C_DIM,
+                c_dim(),
             ),
         ]);
     }
@@ -1531,7 +1588,7 @@ fn context_rows(d: &Value, w: usize) -> Vec<Row> {
         .and_then(Value::as_str)
         .filter(|s| !s.is_empty())
     {
-        rows.push(vec![r(format!("  auto-compact: {s}"), C_SUBTLE)]);
+        rows.push(vec![r(format!("  auto-compact: {s}"), c_subtle())]);
     }
     rows
 }
@@ -1545,59 +1602,59 @@ fn item_rows(it: &Item, w: usize, frame: usize, now: i64, expanded: bool) -> Vec
                 let norm = it.text.replace("\r\n", "\n").replace('\r', "\n");
                 let lines: Vec<&str> = norm.split('\n').collect();
                 for (i, line) in lines.iter().enumerate() {
-                    let mut runs = vec![r(*line, C_BRIGHT)];
+                    let mut runs = vec![r(*line, c_bright())];
                     if it.queued && i == lines.len() - 1 {
-                        runs.push(r("  (queued)", C_SUBTLE));
+                        runs.push(r("  (queued)", c_subtle()));
                     }
                     rows.extend(wrap(
                         &runs,
                         w,
-                        &[rb(if i > 0 { "  " } else { "> " }, C_LIGHT)],
-                        &[r("  ", C_TEXT)],
+                        &[rb(if i > 0 { "  " } else { "> " }, c_light())],
+                        &[r("  ", c_text())],
                     ));
                 }
             } else {
                 rows.push(vec![
-                    rb("> ", C_LIGHT),
-                    r(if it.queued { "(queued)" } else { "" }, C_SUBTLE),
+                    rb("> ", c_light()),
+                    r(if it.queued { "(queued)" } else { "" }, c_subtle()),
                 ]);
             }
             for (i, im) in it.images.iter().enumerate() {
                 rows.extend(wrap(
-                    &[r(image_label(im, i), C_DIM)],
+                    &[r(image_label(im, i), c_dim())],
                     w,
-                    &[r("  ⎿ ", C_SUBTLE)],
-                    &[r("    ", C_TEXT)],
+                    &[r("  ⎿ ", c_subtle())],
+                    &[r("    ", c_text())],
                 ));
             }
         }
         "history" => rows.extend(wrap(
-            &[r(&it.text, C_SUBTLE)],
+            &[r(&it.text, c_subtle())],
             w,
-            &[r(format!("{} ", history_icon(&it.feed_kind)), C_SUBTLE)],
-            &[r("  ", C_TEXT)],
+            &[r(format!("{} ", history_icon(&it.feed_kind)), c_subtle())],
+            &[r("  ", c_text())],
         )),
         "text" => {
             rows.push(vec![]);
             // no blank rows at either end: the one blank between blocks is the separator above
             let body = it.text.trim_start_matches(['\n', '\r']).trim_end();
             for (i, ln) in markdown(body, expanded).iter().enumerate() {
-                let bar = || deco("▌ ", C_OK);
+                let bar = || deco("▌ ", c_ok());
                 let lead = if it.is_final {
                     vec![bar()]
                 } else if i == 0 {
-                    vec![deco("● ", C_BRIGHT)]
+                    vec![deco("● ", c_bright())]
                 } else {
-                    vec![deco("  ", C_TEXT)]
+                    vec![deco("  ", c_text())]
                 };
                 let rest_pad = if it.is_final {
                     let mut v = vec![bar()];
                     if ln.indent > 0 {
-                        v.push(deco(&" ".repeat(ln.indent), C_TEXT));
+                        v.push(deco(&" ".repeat(ln.indent), c_text()));
                     }
                     v
                 } else {
-                    vec![deco(&" ".repeat(2 + ln.indent), C_TEXT)]
+                    vec![deco(&" ".repeat(2 + ln.indent), c_text())]
                 };
                 if let Some(t) = &ln.table {
                     let grid = table_rows(t, w.saturating_sub(row_w(&lead)).max(4));
@@ -1617,17 +1674,17 @@ fn item_rows(it: &Item, w: usize, frame: usize, now: i64, expanded: bool) -> Vec
                 }
             }
             if it.streaming {
-                rows.last_mut().unwrap().push(r(" ▍", C_LIGHT));
+                rows.last_mut().unwrap().push(r(" ▍", c_light()));
             }
         }
         "thinking" => rows.extend(thinking::rows(it, w, frame, now)),
         "tool" => {
             let st = it.status.as_str();
             let (dot, dcol) = match st {
-                "running" => (spin(frame), C_LIGHT),
-                "error" => ("●", if it.soft { C_BRIGHT } else { C_BAD }),
-                "interrupted" => ("●", C_WARN),
-                _ => ("●", C_OK),
+                "running" => (spin(frame), c_light()),
+                "error" => ("●", if it.soft { c_bright() } else { c_bad() }),
+                "interrupted" => ("●", c_warn()),
+                _ => ("●", c_ok()),
             };
             rows.push(vec![]);
             let dv = diffview::view(it, w, expanded);
@@ -1643,10 +1700,10 @@ fn item_rows(it: &Item, w: usize, frame: usize, now: i64, expanded: bool) -> Vec
                 None => (title.as_str(), ""),
             };
             rows.extend(wrap(
-                &[rb(name, C_BRIGHT), r(args, C_DIM)],
+                &[rb(name, c_bright()), r(args, c_dim())],
                 w,
                 &[rb(format!("{dot} "), dcol)],
-                &[r("  ", C_TEXT)],
+                &[r("  ", c_text())],
             ));
             let (result, footer) = match &dv {
                 Some(v) => (vec![v.summary.clone()], None),
@@ -1654,43 +1711,43 @@ fn item_rows(it: &Item, w: usize, frame: usize, now: i64, expanded: bool) -> Vec
             };
             for (i, ln) in result.iter().enumerate() {
                 let c = if it.not_run || it.checking {
-                    C_DIM
+                    c_dim()
                 } else if st == "error" {
-                    if it.soft { C_BRIGHT } else { C_BAD }
+                    if it.soft { c_bright() } else { c_bad() }
                 } else if st == "interrupted" {
-                    C_WARN
+                    c_warn()
                 } else {
-                    C_DIM
+                    c_dim()
                 };
                 rows.extend(wrap(
                     &[r(ln, c)],
                     w,
-                    &[r(if i == 0 { "  ⎿  " } else { "     " }, C_SUBTLE)],
-                    &[r("     ", C_TEXT)],
+                    &[r(if i == 0 { "  ⎿  " } else { "     " }, c_subtle())],
+                    &[r("     ", c_text())],
                 ));
             }
             if let Some(f) = footer {
-                rows.push(vec![r(format!("     {f}"), C_SUBTLE)]);
+                rows.push(vec![r(format!("     {f}"), c_subtle())]);
             }
             let (body, footer) = match dv {
                 Some(v) => (v.body, v.footer),
                 None => code_body(it, w, expanded),
             };
             for rw in body {
-                let mut line = vec![r("     ", C_TEXT)];
+                let mut line = vec![r("     ", c_text())];
                 line.extend(rw);
                 rows.push(line);
             }
             if let Some(f) = footer {
-                rows.push(vec![r(format!("     {f}"), C_SUBTLE)]);
+                rows.push(vec![r(format!("     {f}"), c_subtle())]);
             }
         }
         "note" => {
             let c = match it.tone.as_str() {
-                "error" => C_BAD,
-                "warn" => C_WARN,
-                "goal" => C_ACCENT,
-                _ => C_DIM,
+                "error" => c_bad(),
+                "warn" => c_warn(),
+                "goal" => c_accent(),
+                _ => c_dim(),
             };
             let text = if it.busy {
                 waiting(&it.text, frame)
@@ -1703,29 +1760,29 @@ fn item_rows(it: &Item, w: usize, frame: usize, now: i64, expanded: bool) -> Vec
                 "※ ".to_string()
             };
             rows.extend(wrap(
-                &[r(text, if it.busy { C_LIGHT } else { c })],
+                &[r(text, if it.busy { c_light() } else { c })],
                 w,
-                &[r(lead, if it.busy { C_LIGHT } else { c })],
-                &[r("  ", C_TEXT)],
+                &[r(lead, if it.busy { c_light() } else { c })],
+                &[r("  ", c_text())],
             ));
         }
         "handoff" => {
             rows.push(vec![]);
-            let mark = vec![rb(if it.bootstrap { "↳ " } else { "⇄ " }, C_ACCENT)];
+            let mark = vec![rb(if it.bootstrap { "↳ " } else { "⇄ " }, c_accent())];
             let text = it.text.replace('\r', "").replace('\t', "  ");
             for (i, ln) in text.split('\n').enumerate() {
                 let runs = match handoff_title(ln) {
                     Some((n, kind)) => {
                         let c = match kind {
-                            "ok" => C_OK,
-                            "warn" => C_WARN,
-                            _ => C_ACCENT,
+                            "ok" => c_ok(),
+                            "warn" => c_warn(),
+                            _ => c_accent(),
                         };
-                        vec![rb(&ln[..n], c), r(&ln[n..], C_TEXT)]
+                        vec![rb(&ln[..n], c), r(&ln[n..], c_text())]
                     }
-                    None => vec![r(ln, C_TEXT)],
+                    None => vec![r(ln, c_text())],
                 };
-                let two = [r("  ", C_TEXT)];
+                let two = [r("  ", c_text())];
                 rows.extend(wrap(&runs, w, if i == 0 { &mark } else { &two[..] }, &two));
             }
         }
@@ -1744,32 +1801,32 @@ fn item_rows(it: &Item, w: usize, frame: usize, now: i64, expanded: bool) -> Vec
                 )
             };
             rows.extend(wrap(
-                &[r(text, C_DIM)],
+                &[r(text, c_dim())],
                 w,
-                &[r("※ ", C_DIM)],
-                &[r("  ", C_TEXT)],
+                &[r("※ ", c_dim())],
+                &[r("  ", c_text())],
             ));
         }
         "command-output" => {
-            let c = if it.error { C_BAD } else { C_DIM };
+            let c = if it.error { c_bad() } else { c_dim() };
             for (i, ln) in it.text.split('\n').enumerate() {
                 rows.extend(wrap(
                     &[r(ln, c)],
                     w,
-                    &[r(if i == 0 { "  ⎿  " } else { "     " }, C_SUBTLE)],
-                    &[r("     ", C_TEXT)],
+                    &[r(if i == 0 { "  ⎿  " } else { "     " }, c_subtle())],
+                    &[r("     ", c_text())],
                 ));
             }
         }
         "help" => {
             rows.push(vec![]);
-            rows.push(vec![rb("Commands & keys", C_BRIGHT)]);
+            rows.push(vec![rb("Commands & keys", c_bright())]);
             for ln in &it.lines {
                 rows.extend(wrap(
-                    &[r(ln, C_DIM)],
+                    &[r(ln, c_dim())],
                     w,
-                    &[r("  ", C_TEXT)],
-                    &[r("    ", C_TEXT)],
+                    &[r("  ", c_text())],
+                    &[r("    ", c_text())],
                 ));
             }
         }
@@ -1781,17 +1838,17 @@ fn item_rows(it: &Item, w: usize, frame: usize, now: i64, expanded: bool) -> Vec
                 "!"
             };
             let c = if it.status == "error" {
-                C_BAD
+                c_bad()
             } else if it.status == "running" {
-                C_LIGHT
+                c_light()
             } else {
-                C_BANG
+                c_bang()
             };
             rows.extend(wrap(
-                &[r(&it.command, C_BRIGHT)],
+                &[r(&it.command, c_bright())],
                 w,
                 &[rb(format!("{dot} "), c)],
-                &[r("  ", C_TEXT)],
+                &[r("  ", c_text())],
             ));
             let out = it.output.replace('\r', "");
             let out = out.trim_end_matches('\n');
@@ -1813,36 +1870,40 @@ fn item_rows(it: &Item, w: usize, frame: usize, now: i64, expanded: bool) -> Vec
                 rows.extend(wrap(
                     &[r(
                         ln.replace('\t', "  "),
-                        if it.status == "error" { C_BAD } else { C_DIM },
+                        if it.status == "error" {
+                            c_bad()
+                        } else {
+                            c_dim()
+                        },
                     )],
                     w,
-                    &[r(if i == 0 { "  ⎿  " } else { "     " }, C_SUBTLE)],
-                    &[r("     ", C_TEXT)],
+                    &[r(if i == 0 { "  ⎿  " } else { "     " }, c_subtle())],
+                    &[r("     ", c_text())],
                 ));
             }
             if let Some(f) = footer {
-                rows.push(vec![r(format!("     {f}"), C_SUBTLE)]);
+                rows.push(vec![r(format!("     {f}"), c_subtle())]);
             }
             if it.status != "running" && !it.restored {
                 rows.push(vec![r(
                     "     output will be sent to Synthesis with your next message",
-                    C_SUBTLE,
+                    c_subtle(),
                 )]);
             }
         }
         "memory" => {
             rows.push(vec![]);
             rows.extend(wrap(
-                &[r(&it.text, C_BRIGHT)],
+                &[r(&it.text, c_bright())],
                 w,
-                &[rb("# ", C_PURPLE)],
-                &[r("  ", C_TEXT)],
+                &[rb("# ", c_purple())],
+                &[r("  ", c_text())],
             ));
-            rows.push(vec![r(format!("  ⎿  saved to {}", it.file), C_SUBTLE)]);
+            rows.push(vec![r(format!("  ⎿  saved to {}", it.file), c_subtle())]);
         }
         "info" => {
             rows.push(vec![]);
-            rows.push(vec![rb(&it.title, C_BRIGHT)]);
+            rows.push(vec![rb(&it.title, c_bright())]);
             let key_w = (it
                 .rows
                 .iter()
@@ -1855,10 +1916,10 @@ fn item_rows(it: &Item, w: usize, frame: usize, now: i64, expanded: bool) -> Vec
                 let k = rw.first().map_or("", String::as_str);
                 let v = rw.get(1).map_or("", String::as_str);
                 rows.extend(wrap(
-                    &[r(v, C_TEXT)],
+                    &[r(v, c_text())],
                     w,
-                    &[r("  ", C_TEXT), r(pad_end(k, key_w), C_DIM)],
-                    &[r(" ".repeat(key_w + 2), C_TEXT)],
+                    &[r("  ", c_text()), r(pad_end(k, key_w), c_dim())],
+                    &[r(" ".repeat(key_w + 2), c_text())],
                 ));
             }
         }
@@ -1870,10 +1931,10 @@ fn item_rows(it: &Item, w: usize, frame: usize, now: i64, expanded: bool) -> Vec
             rows.push(vec![]);
             if !it.ok {
                 rows.extend(wrap(
-                    &[r(format!("error: {}", it.text), C_BAD)],
+                    &[r(format!("error: {}", it.text), c_bad())],
                     w,
-                    &[rb("✗ ", C_BAD)],
-                    &[r("  ", C_TEXT)],
+                    &[rb("✗ ", c_bad())],
+                    &[r("  ", c_text())],
                 ));
             } else {
                 let mut bits = vec![];
@@ -1891,11 +1952,11 @@ fn item_rows(it: &Item, w: usize, frame: usize, now: i64, expanded: bool) -> Vec
                 } else {
                     "Done".to_string()
                 };
-                let mut runs = vec![rb(label, C_OK)];
+                let mut runs = vec![rb(label, c_ok())];
                 if !bits.is_empty() {
-                    runs.push(r(format!(" · {}", bits.join(" · ")), C_BRIGHT));
+                    runs.push(r(format!(" · {}", bits.join(" · ")), c_bright()));
                 }
-                rows.extend(wrap(&runs, w, &[rb("✓ ", C_OK)], &[r("  ", C_TEXT)]));
+                rows.extend(wrap(&runs, w, &[rb("✓ ", c_ok())], &[r("  ", c_text())]));
             }
         }
         _ => {}
@@ -1917,6 +1978,7 @@ fn cached_item_rows(it: &Item, w: usize, frame: usize, now: i64, expanded: bool)
     if let Some(c) = it.cache.borrow().as_ref()
         && c.w == w
         && c.expanded == expanded
+        && c.cfg == config()
         && c.fp == fp
     {
         return c.rows.clone();
@@ -1925,6 +1987,7 @@ fn cached_item_rows(it: &Item, w: usize, frame: usize, now: i64, expanded: bool)
     *it.cache.borrow_mut() = Some(Cache {
         w,
         expanded,
+        cfg: config(),
         fp,
         rows: rows.clone(),
     });
@@ -2002,42 +2065,82 @@ fn tail_fit(s: &str, w: usize) -> String {
     out.into_iter().collect()
 }
 
+/// Art, wordmark and tagline above the welcome box, only when the pane has the rows to spare;
+/// below that size (or narrower than 40 columns) just the box shows. With the ASCII glyph set the
+/// art is left out and only the wordmark is drawn.
+fn hero_rows(w: usize, spare: usize) -> Vec<Row> {
+    const WORDMARK: &str = "S Y N T H E S I S";
+    const TAGLINE: &str = "Autonomous development environment";
+    let ascii = config().ascii;
+    let text_rows = 3; // wordmark, tagline, blank
+    let need = text_rows + if ascii { 0 } else { crate::logo::ART_ROWS + 1 } + 2;
+    if w < 40 || spare < need {
+        return vec![];
+    }
+    let centre = |text: &str, c: Col| -> Row {
+        vec![
+            r(" ".repeat(w.saturating_sub(str_w(text)) / 2), c),
+            r(text, c),
+        ]
+    };
+    let mut rows: Vec<Row> = vec![];
+    if !ascii {
+        let pad = r(
+            " ".repeat(w.saturating_sub(crate::logo::ART_COLS) / 2),
+            c_text(),
+        );
+        for line in crate::logo::art_cells() {
+            let mut row = vec![pad.clone()];
+            row.extend(
+                line.into_iter()
+                    .map(|(ch, rgb)| r(ch.to_string(), col(rgb))),
+            );
+            rows.push(row);
+        }
+        rows.push(vec![]);
+    }
+    rows.push(centre(WORDMARK, col(t().accent_light)));
+    rows.push(centre(TAGLINE, c_dim()));
+    rows.push(vec![]);
+    rows
+}
+
 fn welcome_rows(agent: &Agent, w: usize) -> Vec<Row> {
     let inner = w.saturating_sub(4).max(10);
     let line = |runs: Vec<Run>| -> Row {
         let rw = wrap(&runs, inner, &[], &[]).into_iter().next().unwrap();
         let pad = inner.saturating_sub(row_w(&rw));
-        let mut l = vec![r("│ ", C_BORDER)];
+        let mut l = vec![r("│ ", c_border())];
         l.extend(rw);
-        l.push(r(format!("{} │", " ".repeat(pad)), C_BORDER));
+        l.push(r(format!("{} │", " ".repeat(pad)), c_border()));
         l
     };
     let mut v = vec![
-        vec![r(format!("╭{}╮", "─".repeat(inner + 2)), C_BORDER)],
+        vec![r(format!("╭{}╮", "─".repeat(inner + 2)), c_border())],
         line(vec![
-            rb("✻ ", C_ACCENT),
-            rb("Hello there! I'm Synthesis.", C_BRIGHT),
+            rb("✻ ", c_accent()),
+            rb("Hello there! I'm Synthesis.", c_bright()),
             r(
                 if agent.version.is_empty() {
                     String::new()
                 } else {
                     format!("  · {}", agent.version)
                 },
-                C_SUBTLE,
+                c_subtle(),
             ),
         ]),
         line(vec![]),
         line(vec![r(
             "/help for commands · alt+v pastes an image",
-            C_SUBTLE,
+            c_subtle(),
         )]),
         line(vec![
-            r("cwd: ", C_SUBTLE),
-            r(tail_fit(&agent.cwd, inner.saturating_sub(5)), C_DIM),
+            r("cwd: ", c_subtle()),
+            r(tail_fit(&agent.cwd, inner.saturating_sub(5)), c_dim()),
         ]),
-        vec![r(format!("╰{}╯", "─".repeat(inner + 2)), C_BORDER)],
+        vec![r(format!("╰{}╯", "─".repeat(inner + 2)), c_border())],
         vec![],
-        vec![r(" Tips for getting started:", C_DIM)],
+        vec![r(" Tips for getting started:", c_dim())],
     ];
     let tips = [
         "Ask Synthesis to explain, fix or build something in this folder",
@@ -2046,10 +2149,10 @@ fn welcome_rows(agent: &Agent, w: usize) -> Vec<Row> {
     ];
     for (i, t) in tips.iter().enumerate() {
         v.extend(wrap(
-            &[r(*t, C_SUBTLE)],
+            &[r(*t, c_subtle())],
             w.saturating_sub(5),
-            &[r(format!("  {}. ", i + 1), C_TEXT)],
-            &[r("     ", C_TEXT)],
+            &[r(format!("  {}. ", i + 1), c_text())],
+            &[r("     ", c_text())],
         ));
     }
     v
@@ -2064,8 +2167,8 @@ pub fn visible_subagents<'a>(subs: &'a [Agent], chat_target: Option<&str>) -> Ve
 
 fn subagent_rows(subs: &[Agent], target: Option<&str>, docked: bool) -> Vec<Row> {
     let mut rows = vec![vec![
-        rb("Conversations  ", C_BRIGHT),
-        r("↑/↓ switch · Enter view · @name message", C_SUBTLE),
+        rb("Conversations  ", c_bright()),
+        r("↑/↓ switch · Enter view · @name message", c_subtle()),
     ]];
     let mut entries: Vec<(Option<&str>, String, &str, String)> =
         vec![(None, "main agent".into(), "main", String::new())];
@@ -2089,11 +2192,11 @@ fn subagent_rows(subs: &[Agent], target: Option<&str>, docked: bool) -> Vec<Row>
         rows.push(vec![
             rb(
                 if selected { "▶ " } else { "  " },
-                if selected { C_ACCENT } else { C_SUBTLE },
+                if selected { c_accent() } else { c_subtle() },
             ),
             run_full(
                 format!("{label} · {st}"),
-                if selected { C_BRIGHT } else { C_TEXT },
+                if selected { c_bright() } else { c_text() },
                 selected,
                 false,
                 false,
@@ -2104,7 +2207,7 @@ fn subagent_rows(subs: &[Agent], target: Option<&str>, docked: bool) -> Vec<Row>
                 } else {
                     ""
                 },
-                C_ACCENT,
+                c_accent(),
             ),
             r(
                 if desc.is_empty() {
@@ -2112,7 +2215,7 @@ fn subagent_rows(subs: &[Agent], target: Option<&str>, docked: bool) -> Vec<Row>
                 } else {
                     format!("  {}", one_line(&desc))
                 },
-                C_SUBTLE,
+                c_subtle(),
             ),
         ]);
     }
@@ -2178,7 +2281,7 @@ fn question_rows(item: &Pending, w: usize) -> (Vec<Row>, Vec<QHit>) {
             let text = format!(" {label} ");
             tabs.push(run_full(
                 &text,
-                if i == item.qi { C_PERM } else { C_DIM },
+                if i == item.qi { c_perm() } else { c_dim() },
                 i == item.qi,
                 false,
                 false,
@@ -2189,20 +2292,20 @@ fn question_rows(item: &Pending, w: usize) -> (Vec<Row>, Vec<QHit>) {
         let submit = " ✓ Submit ";
         tabs.push(run_full(
             submit,
-            if on_submit { C_OK } else { C_DIM },
+            if on_submit { c_ok() } else { c_dim() },
             on_submit,
             false,
             false,
         ));
         hits.push(hit("submit-tab", None, None, x, x + str_w(submit), 0));
-        let mut row = vec![r("← ", C_SUBTLE)];
+        let mut row = vec![r("← ", c_subtle())];
         row.extend(tabs);
-        row.push(r(" →", C_SUBTLE));
+        row.push(r(" →", c_subtle()));
         body.push(row);
         body.push(vec![]);
     }
     if on_submit {
-        body.push(vec![rb("Review your answers", C_BRIGHT)]);
+        body.push(vec![rb("Review your answers", c_bright())]);
         for (i, q) in item.questions.iter().enumerate() {
             let st = &item.qstate[i];
             let labels: Vec<String> = st
@@ -2228,38 +2331,42 @@ fn question_rows(item: &Pending, w: usize) -> (Vec<Row>, Vec<QHit>) {
             };
             body.extend(wrap(
                 &[
-                    r(format!("{} ", q.question), C_DIM),
-                    r("→ ", C_SUBTLE),
+                    r(format!("{} ", q.question), c_dim()),
+                    r("→ ", c_subtle()),
                     run_full(
                         shown,
-                        if labels.is_empty() { C_WARN } else { C_BRIGHT },
+                        if labels.is_empty() {
+                            c_warn()
+                        } else {
+                            c_bright()
+                        },
                         true,
                         false,
                         false,
                     ),
                 ],
                 inner,
-                &[r("  ", C_TEXT)],
-                &[r("  ", C_TEXT)],
+                &[r("  ", c_text())],
+                &[r("  ", c_text())],
             ));
         }
         body.push(vec![]);
         let submit_row = body.len();
         body.push(vec![
-            rb("❯ ", C_PERM),
-            rb("Submit answers", C_PERM),
-            r("   esc to cancel", C_SUBTLE),
+            rb("❯ ", c_perm()),
+            rb("Submit answers", c_perm()),
+            r("   esc to cancel", c_subtle()),
         ]);
         hits.push(hit("submit", None, None, 0, inner, submit_row));
-        return (framed(body, w, C_PERM, "Synthesis has questions"), hits);
+        return (framed(body, w, c_perm(), "Synthesis has questions"), hits);
     }
     let q = &item.questions[item.qi];
     let st = &item.qstate[item.qi];
-    body.extend(wrap(&[rb(&q.question, C_BRIGHT)], inner, &[], &[]));
+    body.extend(wrap(&[rb(&q.question, c_bright())], inner, &[], &[]));
     if q.multi_select {
         body.push(vec![r(
             "  (select all that apply · space to toggle; click choices to toggle)",
-            C_SUBTLE,
+            c_subtle(),
         )]);
     }
     body.push(vec![]);
@@ -2291,22 +2398,22 @@ fn question_rows(item: &Pending, w: usize) -> (Vec<Row>, Vec<QHit>) {
         body.extend(wrap(
             &[run_full(
                 format!("{}. {bx}{label}", k + 1),
-                if sel { C_PERM } else { C_TEXT },
+                if sel { c_perm() } else { c_text() },
                 sel,
                 false,
                 false,
             )],
             inner,
-            &[rb(if sel { "❯ " } else { "  " }, C_PERM)],
-            &[r("     ", C_TEXT)],
+            &[rb(if sel { "❯ " } else { "  " }, c_perm())],
+            &[r("     ", c_text())],
         ));
         hits.push(hit("option", Some(k), Some(item.qi), 0, inner, option_row));
         if !o.description.is_empty() && !(is_other && !st.other.is_empty()) {
             body.extend(wrap(
-                &[r(&o.description, C_SUBTLE)],
+                &[r(&o.description, c_subtle())],
                 inner,
-                &[r("     ", C_TEXT)],
-                &[r("     ", C_TEXT)],
+                &[r("     ", c_text())],
+                &[r("     ", c_text())],
             ));
         }
     }
@@ -2325,14 +2432,14 @@ fn question_rows(item: &Pending, w: usize) -> (Vec<Row>, Vec<QHit>) {
                 ""
             }
         ),
-        C_SUBTLE,
+        c_subtle(),
     )]);
     let title = if q.header.is_empty() {
         "Synthesis has a question"
     } else {
         &q.header
     };
-    (framed(body, w, C_PERM, title), hits)
+    (framed(body, w, c_perm(), title), hits)
 }
 
 fn plan_rows(item: &Pending, w: usize) -> Vec<Row> {
@@ -2346,42 +2453,47 @@ fn plan_rows(item: &Pending, w: usize) -> Vec<Row> {
             break;
         }
         let runs = if ln.runs.is_empty() {
-            vec![r("", C_TEXT)]
+            vec![r("", c_text())]
         } else {
             ln.runs.clone()
         };
         body.extend(wrap(
             &runs,
             inner,
-            &[r(" ".repeat(ln.indent), C_TEXT)],
-            &[r(" ".repeat(ln.indent), C_TEXT)],
+            &[r(" ".repeat(ln.indent), c_text())],
+            &[r(" ".repeat(ln.indent), c_text())],
         ));
     }
     if body.len() >= max_rows {
         body.truncate(max_rows);
         body.push(vec![r(
             format!("… plan continues ({} lines)", md.len()),
-            C_SUBTLE,
+            c_subtle(),
         )]);
     }
     body.push(vec![]);
-    body.push(vec![r("Would you like to proceed?", C_BRIGHT)]);
+    body.push(vec![r("Would you like to proceed?", c_bright())]);
     for (i, o) in item.options.iter().flatten().enumerate() {
         let sel = i == item.choice;
         body.extend(wrap(
             &[run_full(
                 format!("{}. {}", i + 1, o.label),
-                if sel { C_PERM } else { C_TEXT },
+                if sel { c_perm() } else { c_text() },
                 sel,
                 false,
                 false,
             )],
             inner,
-            &[rb(if sel { "❯ " } else { "  " }, C_PERM)],
-            &[r("     ", C_TEXT)],
+            &[rb(if sel { "❯ " } else { "  " }, c_perm())],
+            &[r("     ", c_text())],
         ));
     }
-    framed(body, w, C_TEAL, "Ready to code? · here is Synthesis’s plan")
+    framed(
+        body,
+        w,
+        c_teal(),
+        "Ready to code? · here is Synthesis’s plan",
+    )
 }
 
 /// A tool input as JSON: shown up to [`INPUT_SHOWN`] chars followed by an explicit
@@ -2391,7 +2503,7 @@ fn input_json_rows(body: &mut Vec<Row>, item: &Pending, input: &Value, inner: us
     let n = json.chars().count();
     let mut line = |text: String, c: Col| body.extend(wrap(&[r(text, c)], inner, &[], &[]));
     if item.view_all {
-        let rows = wrap(&[r(&json, C_DIM)], inner, &[], &[]);
+        let rows = wrap(&[r(&json, c_dim())], inner, &[], &[]);
         let total = rows.len();
         item.input_rows
             .store(total, std::sync::atomic::Ordering::Relaxed);
@@ -2409,23 +2521,23 @@ fn input_json_rows(body: &mut Vec<Row>, item: &Pending, input: &Value, inner: us
                     "[rows {}-{end} of {total}{scroll} · x to collapse]",
                     start + 1
                 ),
-                C_WARN,
+                c_warn(),
             )],
             inner,
             &[],
             &[],
         ));
     } else if n > INPUT_SHOWN {
-        line(json.chars().take(INPUT_SHOWN).collect(), C_DIM);
+        line(json.chars().take(INPUT_SHOWN).collect(), c_dim());
         line(
             format!(
                 "[{} more chars hidden — press x to view all]",
                 n - INPUT_SHOWN
             ),
-            C_WARN,
+            c_warn(),
         );
     } else {
-        line(json, C_DIM);
+        line(json, c_dim());
     }
 }
 
@@ -2446,13 +2558,13 @@ fn permission_rows(item: &Pending, w: usize, more: usize, now: i64) -> (Vec<Row>
     let tool = item.tool.as_str();
     if tool == "Bash" || tool == "PowerShell" || COMMAND_TOOLS.contains(&tool) {
         for ln in s("command").split('\n').take(8) {
-            add(&mut body, vec![r(ln, C_BRIGHT)], &[r("  ", C_TEXT)]);
+            add(&mut body, vec![r(ln, c_bright())], &[r("  ", c_text())]);
         }
         if !s("description").is_empty() {
             add(
                 &mut body,
-                vec![r(s("description"), C_DIM)],
-                &[r("  ", C_TEXT)],
+                vec![r(s("description"), c_dim())],
+                &[r("  ", c_text())],
             );
         }
         // cwd / env / ... of terminal_spawn and verify_run are as decisive as the command
@@ -2472,10 +2584,10 @@ fn permission_rows(item: &Pending, w: usize, more: usize, now: i64) -> (Vec<Row>
         .then(|| diffview::dialog_rows(&item.diff, inner, DIALOG_DIFF_ROWS))
         .flatten()
     {
-        add(&mut body, vec![rb(s("file_path"), C_BRIGHT)], &[]);
+        add(&mut body, vec![rb(s("file_path"), c_bright())], &[]);
         body.extend(rows);
     } else if tool == "Edit" || tool == "MultiEdit" {
-        add(&mut body, vec![rb(s("file_path"), C_BRIGHT)], &[]);
+        add(&mut body, vec![rb(s("file_path"), c_bright())], &[]);
         let lang = lang_from_file(inp.get("file_path").and_then(Value::as_str)).unwrap_or("");
         for e in input_edits(inp).into_iter().take(3) {
             body.extend(diff_rows(
@@ -2488,21 +2600,21 @@ fn permission_rows(item: &Pending, w: usize, more: usize, now: i64) -> (Vec<Row>
             ));
         }
     } else if tool == "Write" {
-        add(&mut body, vec![rb(s("file_path"), C_BRIGHT)], &[]);
+        add(&mut body, vec![rb(s("file_path"), c_bright())], &[]);
         let lines: Vec<&str> = s("content").split('\n').collect();
         for ln in lines.iter().take(6) {
-            body.push(vec![r(clip_to(&format!("+ {ln}"), inner), C_ADD)]);
+            body.push(vec![r(clip_to(&format!("+ {ln}"), inner), c_add())]);
         }
         if lines.len() > 6 {
             body.push(vec![r(
                 format!("  … {} more lines", lines.len() - 6),
-                C_SUBTLE,
+                c_subtle(),
             )]);
         }
     } else if tool == "WebFetch" {
-        add(&mut body, vec![r(s("url"), C_BRIGHT)], &[]);
+        add(&mut body, vec![r(s("url"), c_bright())], &[]);
         if !s("prompt").is_empty() {
-            add(&mut body, vec![r(s("prompt"), C_DIM)], &[]);
+            add(&mut body, vec![r(s("prompt"), c_dim())], &[]);
         }
     } else {
         input_json_rows(&mut body, item, inp, inner);
@@ -2518,7 +2630,7 @@ fn permission_rows(item: &Pending, w: usize, more: usize, now: i64) -> (Vec<Row>
         ""
     };
     if !desc.is_empty() && tool != "Bash" && tool != "PowerShell" {
-        add(&mut body, vec![r(desc, C_SUBTLE)], &[]);
+        add(&mut body, vec![r(desc, c_subtle())], &[]);
     }
     if let Some(dl) = item.deadline {
         let left = ((dl - now) as f64 / 1000.0).ceil().max(0.0) as i64;
@@ -2531,29 +2643,29 @@ fn permission_rows(item: &Pending, w: usize, more: usize, now: i64) -> (Vec<Row>
                     left / 60,
                     left % 60
                 ),
-                C_WARN,
+                c_warn(),
             )],
             &[],
         );
     }
     if !item.prompt.is_empty() {
-        add(&mut body, vec![r(&item.prompt, C_WARN)], &[]);
+        add(&mut body, vec![r(&item.prompt, c_warn())], &[]);
     }
     body.push(vec![]);
-    body.push(vec![r("Do you want to proceed?", C_BRIGHT)]);
+    body.push(vec![r("Do you want to proceed?", c_bright())]);
     for (i, o) in item.options.iter().flatten().enumerate() {
         let sel = i == item.choice;
         body.extend(wrap(
             &[run_full(
                 format!("{}. {}", i + 1, o.label),
-                if sel { C_PERM } else { C_TEXT },
+                if sel { c_perm() } else { c_text() },
                 sel,
                 false,
                 false,
             )],
             inner,
-            &[rb(if sel { "❯ " } else { "  " }, C_PERM)],
-            &[r("     ", C_TEXT)],
+            &[rb(if sel { "❯ " } else { "  " }, c_perm())],
+            &[r("     ", c_text())],
         ));
     }
     if more > 0 {
@@ -2562,7 +2674,7 @@ fn permission_rows(item: &Pending, w: usize, more: usize, now: i64) -> (Vec<Row>
                 "+{more} more request{} waiting",
                 if more > 1 { "s" } else { "" }
             ),
-            C_SUBTLE,
+            c_subtle(),
         )]);
     }
     let title = perm_title(tool).map(String::from).unwrap_or_else(|| {
@@ -2577,7 +2689,7 @@ fn permission_rows(item: &Pending, w: usize, more: usize, now: i64) -> (Vec<Row>
             tool.to_string()
         }
     });
-    (framed(body, w, C_PERM, &title), vec![])
+    (framed(body, w, c_perm(), &title), vec![])
 }
 
 // ---------------------------------------------------------------- prompt box
@@ -2724,14 +2836,14 @@ fn input_mode(m: Option<&str>) -> Option<InputMode> {
     match m {
         Some("bash") => Some(InputMode {
             lead: "! ",
-            col: C_BANG,
-            lead_col: Some(C_BANG),
+            col: c_bang(),
+            lead_col: Some(c_bang()),
             hint: "run a shell command in this folder · backspace to leave bash mode",
             label: "! bash mode",
         }),
         Some("memory") => Some(InputMode {
             lead: "# ",
-            col: C_PURPLE,
+            col: c_purple(),
             lead_col: None,
             hint: "remember this in ./AGENTS.md · backspace to leave memory mode",
             label: "# memory mode",
@@ -2742,15 +2854,15 @@ fn input_mode(m: Option<&str>) -> Option<InputMode> {
 
 fn vivid(name: &str) -> Option<Rgb> {
     Some(match name {
-        "purple" => PURPLE,
-        "blue" => BLUE,
-        "green" => GREEN,
-        "yellow" => YELLOW,
-        "orange" => ORANGE,
-        "pink" => PINK,
-        "cyan" => CYAN,
-        "teal" => TEAL,
-        "red" => RED,
+        "purple" => t().pearl,
+        "blue" => t().info,
+        "green" => t().ok,
+        "yellow" => t().warn,
+        "orange" => t().warn,
+        "pink" => t().sand,
+        "cyan" => t().info,
+        "teal" => t().ok,
+        "red" => t().err,
         _ => return None,
     })
 }
@@ -2772,17 +2884,17 @@ fn input_rows(
     } else if let Some(c) = prompt_color.and_then(vivid) {
         col(c)
     } else if focused {
-        col(ACCENT_CORE)
+        col(t().accent)
     } else {
-        C_BORDER
+        c_border()
     };
     let mut out: Vec<Row> = vec![vec![r(format!("╭{}╮", "─".repeat(w - 2)), border)]];
     for (i, a) in attachments.iter().enumerate() {
         let label = clip_to(&format!("▣ {}", image_label(a, i)), inner);
         out.push(vec![
             r("│ ", border),
-            r("  ", C_TEXT),
-            r(&label, C_LIGHT),
+            r("  ", c_text()),
+            r(&label, c_light()),
             r(
                 format!("{} │", " ".repeat(inner.saturating_sub(str_w(&label)))),
                 border,
@@ -2792,7 +2904,7 @@ fn input_rows(
     let raw = |t: String, w: usize| Run {
         raw: true,
         w,
-        ..r(t, C_TEXT)
+        ..r(t, c_text())
     };
     let mut caret = None;
     for (ri, chars) in shown.iter().enumerate() {
@@ -2807,10 +2919,10 @@ fn input_rows(
         let lead = if rr == 0 {
             match &im {
                 Some(im) => rb(im.lead, im.lead_col.unwrap_or(im.col)),
-                None => rb("> ", if focused { C_LIGHT } else { C_SUBTLE }),
+                None => rb("> ", if focused { c_light() } else { c_subtle() }),
             }
         } else {
-            r("  ", C_TEXT)
+            r("  ", c_text())
         };
         let mut cells: Vec<Run> = vec![];
         let mut used = 0;
@@ -2818,16 +2930,16 @@ fn input_rows(
             let is_cur = focused && pos.0 == rr && pos.1 == c;
             if is_cur {
                 cells.push(raw(
-                    format!("{}{}{ch}{RESET}", bg(ACCENT_LIGHT), fg(ACCENT_INK)),
+                    format!("{}{}{ch}{RESET}", bg(t().accent_light), fg(t().ink)),
                     cw(*ch),
                 ));
             } else {
-                cells.push(r(ch.to_string(), C_BRIGHT));
+                cells.push(r(ch.to_string(), c_bright()));
             }
             used += cw(*ch);
         }
         if focused && pos.0 == rr && pos.1 >= chars.len() {
-            cells.push(raw(format!("{} {RESET}", bg(ACCENT_LIGHT)), 1));
+            cells.push(raw(format!("{} {RESET}", bg(t().accent_light)), 1));
             used += 1;
         }
         if ed.chars.is_empty() && rr == 0 {
@@ -2858,7 +2970,7 @@ fn input_rows(
             }
             let h: String = parts.join(" · ").chars().take(room).collect();
             used += str_w(&h);
-            cells.push(r(h, C_SUBTLE));
+            cells.push(r(h, c_subtle()));
         }
         let mut line = vec![r("│ ", border), lead];
         line.extend(cells);
@@ -2890,25 +3002,25 @@ fn suggestion_rows(sug: Option<&Suggestions>, selected: usize, w: usize) -> Vec<
             let label = clip_to(&s.label, label_w);
             let detail = clip_to(&s.detail, w.saturating_sub(label_w + 4));
             vec![
-                rb(if sel { "❯ " } else { "  " }, C_LIGHT),
+                rb(if sel { "❯ " } else { "  " }, c_light()),
                 run_full(
                     format!(
                         "{label}{}",
                         " ".repeat(label_w.saturating_sub(str_w(&label)))
                     ),
-                    if sel { C_LIGHT } else { C_TEXT },
+                    if sel { c_light() } else { c_text() },
                     sel,
                     false,
                     false,
                 ),
-                r(detail, if sel { C_DIM } else { C_SUBTLE }),
+                r(detail, if sel { c_dim() } else { c_subtle() }),
             ]
         })
         .collect();
     if total > SUGGEST_ROWS {
         rows.push(vec![r(
             format!("  {}/{}", total.min(selected + 1), total),
-            C_SUBTLE,
+            c_subtle(),
         )]);
     }
     rows
@@ -2943,9 +3055,9 @@ fn todo_rows(todos: &[Todo], w: usize, expanded: bool) -> Vec<Row> {
     let mut rows: Vec<Row> = vec![];
     for (i, t) in shown.iter().enumerate() {
         let (mark, c) = match t.status.as_str() {
-            "completed" => ("☒ ", C_SUBTLE),
-            "in_progress" => ("■ ", C_LIGHT),
-            _ => ("☐ ", C_DIM),
+            "completed" => ("☒ ", c_subtle()),
+            "in_progress" => ("■ ", c_light()),
+            _ => ("☐ ", c_dim()),
         };
         let text = if t.status == "in_progress" && !t.active_form.is_empty() {
             &t.active_form
@@ -2956,10 +3068,10 @@ fn todo_rows(todos: &[Todo], w: usize, expanded: bool) -> Vec<Row> {
             &[run_full(text, c, t.status == "in_progress", false, false)],
             w,
             &[
-                r(if i == 0 { "  ⎿ " } else { "    " }, C_SUBTLE),
+                r(if i == 0 { "  ⎿ " } else { "    " }, c_subtle()),
                 r(mark, c),
             ],
-            &[r("      ", C_TEXT)],
+            &[r("      ", c_text())],
         ));
     }
     if todos.len() > CLAMP_LINES {
@@ -2972,7 +3084,7 @@ fn todo_rows(todos: &[Todo], w: usize, expanded: bool) -> Vec<Row> {
                     todos.len() - shown.len()
                 )
             },
-            C_SUBTLE,
+            c_subtle(),
         )]);
     }
     rows
@@ -2983,14 +3095,14 @@ fn preview_banner(p: &Preview, w: usize) -> Vec<Row> {
     let short_id: String = p.id.chars().take(8).collect();
     let mut body = wrap(
         &[
-            r("Viewing ", C_DIM),
+            r("Viewing ", c_dim()),
             rb(
                 if p.title.is_empty() {
                     short_id.clone()
                 } else {
                     p.title.clone()
                 },
-                C_BRIGHT,
+                c_bright(),
             ),
             r(
                 format!(
@@ -3001,7 +3113,7 @@ fn preview_banner(p: &Preview, w: usize) -> Vec<Row> {
                         ""
                     }
                 ),
-                C_SUBTLE,
+                c_subtle(),
             ),
         ],
         inner,
@@ -3010,18 +3122,18 @@ fn preview_banner(p: &Preview, w: usize) -> Vec<Row> {
     );
     body.extend(wrap(
         &[
-            rb("enter", C_LIGHT),
-            r(" continue this session here   ", C_DIM),
-            rb("esc", C_LIGHT),
-            r(" back to your conversation   ", C_DIM),
-            rb("ctrl+↑/↓", C_LIGHT),
-            r(" other sessions", C_DIM),
+            rb("enter", c_light()),
+            r(" continue this session here   ", c_dim()),
+            rb("esc", c_light()),
+            r(" back to your conversation   ", c_dim()),
+            rb("ctrl+↑/↓", c_light()),
+            r(" other sessions", c_dim()),
         ],
         inner,
         &[],
         &[],
     ));
-    framed(body, w, C_WARN, "Session preview")
+    framed(body, w, c_warn(), "Session preview")
 }
 
 fn search_rows(s: &Search, w: usize) -> Vec<Row> {
@@ -3029,9 +3141,9 @@ fn search_rows(s: &Search, w: usize) -> Vec<Row> {
     framed(
         vec![
             vec![
-                r("search: ", C_DIM),
-                rb(&s.query, C_BRIGHT),
-                r("▍", C_LIGHT),
+                r("search: ", c_dim()),
+                rb(&s.query, c_bright()),
+                r("▍", c_light()),
             ],
             vec![r(
                 if m.is_empty() {
@@ -3039,11 +3151,11 @@ fn search_rows(s: &Search, w: usize) -> Vec<Row> {
                 } else {
                     format!("› {}", one_line(&m))
                 },
-                if m.is_empty() { C_SUBTLE } else { C_TEXT },
+                if m.is_empty() { c_subtle() } else { c_text() },
             )],
         ],
         w,
-        C_LIGHT,
+        c_light(),
         "reverse-i-search · enter use · esc cancel · ctrl+r older",
     )
 }
@@ -3053,7 +3165,7 @@ fn bypass_rows(w: usize) -> Vec<Row> {
     let mut body = wrap(
         &[r(
             "Bypass permissions skips normal tool permission prompts. Explicit deny rules and protected-path safeguards still apply.",
-            C_WARN,
+            c_warn(),
         )],
         inner,
         &[],
@@ -3062,27 +3174,27 @@ fn bypass_rows(w: usize) -> Vec<Row> {
     body.push(vec![]);
     body.extend(wrap(
         &[
-            rb("enter", C_LIGHT),
-            r(" enable bypass permissions   ", C_DIM),
-            rb("esc", C_LIGHT),
-            r(" keep auto mode", C_DIM),
+            rb("enter", c_light()),
+            r(" enable bypass permissions   ", c_dim()),
+            rb("esc", c_light()),
+            r(" keep auto mode", c_dim()),
         ],
         inner,
         &[],
         &[],
     ));
-    framed(body, w, C_WARN, "Warning: bypass permissions")
+    framed(body, w, c_warn(), "Warning: bypass permissions")
 }
 
 fn picker_rows(p: &Picker, w: usize, h: usize, frame: usize) -> Vec<Row> {
     let inner = w.saturating_sub(4).max(10);
     let mut body: Vec<Row> = vec![];
     if !p.subtitle.is_empty() {
-        body.extend(wrap(&[r(&p.subtitle, C_SUBTLE)], inner, &[], &[]));
+        body.extend(wrap(&[r(&p.subtitle, c_subtle())], inner, &[], &[]));
     }
     if p.loading {
         body.push(vec![
-            rb(format!("{} ", spin(frame)), C_LIGHT),
+            rb(format!("{} ", spin(frame)), c_light()),
             r(
                 waiting(
                     if p.loading_text.is_empty() {
@@ -3092,10 +3204,10 @@ fn picker_rows(p: &Picker, w: usize, h: usize, frame: usize) -> Vec<Row> {
                     },
                     frame,
                 ),
-                C_BRIGHT,
+                c_bright(),
             ),
         ]);
-        return framed(body, w, C_PERM, &p.title);
+        return framed(body, w, c_perm(), &p.title);
     }
     let fixed = 6 + usize::from(!p.subtitle.is_empty());
     let max_window = DEFAULT_WINDOW.min(h.saturating_sub(fixed)).max(3);
@@ -3123,11 +3235,11 @@ fn picker_rows(p: &Picker, w: usize, h: usize, frame: usize) -> Vec<Row> {
         .min(combined.saturating_sub(prefix_w + 2));
     let detail_col = combined.min(prefix_w + label_w + 2);
     if items.is_empty() {
-        body.push(vec![r("no matches", C_SUBTLE)]);
+        body.push(vec![r("no matches", c_subtle())]);
     }
     if offset > 0 {
         body.extend(wrap(
-            &[r(format!("↑ {offset} more"), C_SUBTLE)],
+            &[r(format!("↑ {offset} more"), c_subtle())],
             inner,
             &[],
             &[],
@@ -3142,23 +3254,23 @@ fn picker_rows(p: &Picker, w: usize, h: usize, frame: usize) -> Vec<Row> {
             pad_start(&(idx + 1).to_string(), ordinal_w),
             clip_to(&it.label, label_w)
         );
-        let c = if sel { C_PERM } else { C_TEXT };
+        let c = if sel { c_perm() } else { c_text() };
         let runs = vec![
             run_full(&label, c, sel, false, false),
             r(" ".repeat(detail_col.saturating_sub(str_w(&label))), c),
-            r(&it.detail, if sel { C_DIM } else { C_SUBTLE }),
+            r(&it.detail, if sel { c_dim() } else { c_subtle() }),
         ];
         body.extend(wrap(
             &runs,
             inner,
-            &[rb(if sel { "❯ " } else { "  " }, C_PERM)],
-            &[r("     ", C_TEXT)],
+            &[rb(if sel { "❯ " } else { "  " }, c_perm())],
+            &[r("     ", c_text())],
         ));
     }
     let remaining = items.len() as i64 - offset as i64 - visible.len() as i64;
     if remaining > 0 {
         body.extend(wrap(
-            &[r(format!("↓ {remaining} more"), C_SUBTLE)],
+            &[r(format!("↓ {remaining} more"), c_subtle())],
             inner,
             &[],
             &[],
@@ -3169,9 +3281,9 @@ fn picker_rows(p: &Picker, w: usize, h: usize, frame: usize) -> Vec<Row> {
     let filterable = !p.no_filter;
     if filterable {
         body.push(vec![
-            r("filter: ", C_DIM),
-            rb(&p.query, C_BRIGHT),
-            r("▍", C_LIGHT),
+            r("filter: ", c_dim()),
+            rb(&p.query, c_bright()),
+            r("▍", c_light()),
         ]);
     }
     body.extend(wrap(
@@ -3181,13 +3293,13 @@ fn picker_rows(p: &Picker, w: usize, h: usize, frame: usize) -> Vec<Row> {
             } else {
                 "↑/↓ choose · enter select · esc cancel"
             },
-            C_SUBTLE,
+            c_subtle(),
         )],
         inner,
         &[],
         &[],
     ));
-    framed(body, w, C_PERM, &p.title)
+    framed(body, w, c_perm(), &p.title)
 }
 
 // ---------------------------------------------------------------- render_agent
@@ -3211,12 +3323,12 @@ pub struct AgentOut {
 
 fn mode_label(mode: &str) -> Option<(&'static str, Col)> {
     Some(match mode {
-        "default" => ("⏸ manual mode on", C_DIM),
-        "acceptEdits" => ("⏵⏵ accept edits on", C_PURPLE),
-        "plan" => ("⏸ plan mode on", C_TEAL),
-        "auto" => ("⏵⏵ auto mode on", col(YELLOW)),
-        "bypassPermissions" => ("⏵⏵ bypass permissions on", col(RED)),
-        "dontAsk" => ("⏵⏵ don’t ask on", col(RED)),
+        "default" => ("⏸ manual mode on", c_dim()),
+        "acceptEdits" => ("⏵⏵ accept edits on", c_purple()),
+        "plan" => ("⏸ plan mode on", c_teal()),
+        "auto" => ("⏵⏵ auto mode on", col(t().warn)),
+        "bypassPermissions" => ("⏵⏵ bypass permissions on", col(t().err)),
+        "dontAsk" => ("⏵⏵ don’t ask on", col(t().err)),
         _ => return None,
     })
 }
@@ -3306,12 +3418,12 @@ pub fn render_agent(
     let mut left: Vec<Run> = if let (Some(im), None) = (&im, &opts.preview) {
         vec![
             rb(im.label, im.col),
-            r(" · enter to run · esc to cancel", C_SUBTLE),
+            r(" · enter to run · esc to cancel", c_subtle()),
         ]
     } else if let Some((text, c)) = mode {
-        vec![rb(text, c), r(" (shift+tab to cycle)", C_SUBTLE)]
+        vec![rb(text, c), r(" (shift+tab to cycle)", c_subtle())]
     } else {
-        vec![r("? for shortcuts · shift+tab: mode", C_SUBTLE)]
+        vec![r("? for shortcuts · shift+tab: mode", c_subtle())]
     };
     let effort_text = format!(
         "effort: {}",
@@ -3342,7 +3454,7 @@ pub fn render_agent(
     if let Some(rm) = running_mode {
         let extra = format!(" · this turn: {rm}");
         if row_w(&left) + str_w(&extra) + str_w(&right) + 2 <= content_w {
-            left.push(r(extra, C_SUBTLE));
+            left.push(r(extra, c_subtle()));
         }
     }
     let mut shown = right.clone();
@@ -3370,9 +3482,9 @@ pub fn render_agent(
         let mut s = left_runs.clone();
         s.push(r(
             " ".repeat(content_w - row_w(&left_runs) - str_w(&shown)),
-            C_TEXT,
+            c_text(),
         ));
-        s.push(r(&shown, C_SUBTLE));
+        s.push(r(&shown, c_subtle()));
         s
     } else {
         left.clone()
@@ -3384,11 +3496,7 @@ pub fn render_agent(
     } else if agent.status != "idle" && pending.is_none() {
         let secs = fmt_dur(now - agent.turn_start);
         let glyph = spin(frame);
-        let shimmer = col(lerp(
-            ACCENT_CORE,
-            ACCENT_GLOW,
-            ((frame as f64 / 3.0).sin() + 1.0) / 2.0,
-        ));
+        let pearl = col(t().pearl);
         let thinking_now = agent
             .items
             .last()
@@ -3411,9 +3519,9 @@ pub fn render_agent(
             bits.push("esc to interrupt".into());
         }
         working.push(vec![
-            rb(format!("{glyph} "), shimmer),
-            rb(format!("{} ", waiting(verb, frame)), shimmer),
-            r(format!("({})", bits.join(" · ")), C_DIM),
+            rb(format!("{glyph} "), pearl),
+            rb(format!("{} ", waiting(verb, frame)), c_accent()),
+            r(format!("({})", bits.join(" · ")), c_dim()),
         ]);
     } else if let Some(p) = pending {
         let what = match p.dialog.as_str() {
@@ -3422,9 +3530,9 @@ pub fn render_agent(
             _ => "Synthesis needs your permission",
         };
         working.push(vec![
-            rb("◆ ", C_PERM),
-            rb(what, C_PERM),
-            r("  ↑/↓ choose · enter confirm · esc reject", C_SUBTLE),
+            rb("◆ ", c_perm()),
+            rb(what, c_perm()),
+            r("  ↑/↓ choose · enter confirm · esc reject", c_subtle()),
         ]);
     }
     if opts.preview.is_none() && todos.iter().any(|t| t.status != "completed") {
@@ -3432,21 +3540,21 @@ pub fn render_agent(
     }
     for row in opts.agent_rows.iter().take(6) {
         working.push(vec![
-            rb("◆ ", C_ACCENT),
-            r(clip_to(row, content_w.saturating_sub(4)), C_DIM),
+            rb("◆ ", c_accent()),
+            r(clip_to(row, content_w.saturating_sub(4)), c_dim()),
         ]);
     }
     if let Some(t) = &opts.route {
         working.push(vec![
-            r("to ", C_SUBTLE),
-            rb(clip_to(t, content_w.saturating_sub(4)), C_ACCENT),
+            r("to ", c_subtle()),
+            rb(clip_to(t, content_w.saturating_sub(4)), c_accent()),
         ]);
     }
     for q in opts.queued.iter().take(3) {
         let one_line = q.replace('\n', " ");
         working.push(vec![
-            r("⧗ queued: ", C_WARN),
-            r(clip_to(&one_line, content_w.saturating_sub(12)), C_DIM),
+            r("⧗ queued: ", c_warn()),
+            r(clip_to(&one_line, content_w.saturating_sub(12)), c_dim()),
         ]);
     }
     if opts.queued.len() > 3 {
@@ -3455,7 +3563,7 @@ pub fn render_agent(
                 "⧗ +{} more queued · esc cancels, ↑ edits",
                 opts.queued.len() - 3
             ),
-            C_DIM,
+            c_dim(),
         )]);
     }
 
@@ -3473,10 +3581,13 @@ pub fn render_agent(
     if opts.preview.is_some() && items.is_empty() {
         parts.push(Rc::new(vec![vec![r(
             "  (no messages in this session yet)",
-            C_SUBTLE,
+            c_subtle(),
         )]]));
     } else if items.is_empty() {
-        parts.push(Rc::new(welcome_rows(agent, content_w)));
+        let mut rows = welcome_rows(agent, content_w);
+        let hero = hero_rows(content_w, msg_h.saturating_sub(rows.len()));
+        rows.splice(0..0, hero);
+        parts.push(Rc::new(rows));
     } else {
         let mut prev: Option<&str> = None;
         for it in items {
@@ -3502,7 +3613,7 @@ pub fn render_agent(
     }
     if off > 0 && !lines.is_empty() {
         let last = lines.len() - 1;
-        lines[last] = paint_row(&[r(format!("↓ {off} more rows · pgdn"), C_WARN)]);
+        lines[last] = paint_row(&[r(format!("↓ {off} more rows · pgdn"), c_warn())]);
     }
     for rw in &working {
         lines.push(paint_row(rw));
@@ -3570,7 +3681,7 @@ pub fn transcript_rows(
     lines.extend(win.view.iter().map(|rw| paint_row(rw)));
     if win.off > 0 && !lines.is_empty() {
         let last = lines.len() - 1;
-        lines[last] = paint_row(&[r(format!("↓ {} more rows · scroll", win.off), C_WARN)]);
+        lines[last] = paint_row(&[r(format!("↓ {} more rows · scroll", win.off), c_warn())]);
     }
     (lines, win.max_scroll)
 }

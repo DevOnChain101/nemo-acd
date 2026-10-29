@@ -18,6 +18,7 @@ mod route;
 mod runtime;
 mod status;
 mod tty;
+mod tui_settings;
 
 pub use link::{EventWriter, UiLink};
 pub use links::{OpenTarget, Opener, PathTarget, SystemOpener};
@@ -27,6 +28,7 @@ pub use runtime::{
 };
 pub use status::{SandboxStatus, status_line};
 pub use tty::{ScriptedTty, Tty, replay};
+pub use tui_settings::{GlyphChoice, TuiSettings};
 
 /// A session in the store, for the sidebar and the resume picker.
 #[derive(Clone, Debug, Default)]

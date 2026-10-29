@@ -411,6 +411,11 @@ impl Settings {
             }
             self.apply_env(raw);
             self.apply_synthesis(raw, what);
+            if !user && raw.get("synthesis").and_then(|n| n.get("tui")).is_some() {
+                self.diagnostics.push(format!(
+                    "{what}: synthesis.tui is read from user settings only, ignored"
+                ));
+            }
         } else if raw.get("disableAllHooks").is_some()
             || raw.get("env").is_some()
             || raw.get("synthesis").is_some()

@@ -903,12 +903,12 @@ fn selection_drag_copies_chat_text() {
     }
     // the highlight is painted until something clears it
     let hl = a.render(COLS, ROWS, T0).join("\n");
-    assert!(hl.contains("\x1b[48;2;60;72;105m"));
+    assert!(hl.contains("\x1b[48;2;36;40;48m")); // Graphite `elevated`
     keys(&mut a, "x");
     assert!(
         !a.render(COLS, ROWS, T0)
             .join("\n")
-            .contains("\x1b[48;2;60;72;105m")
+            .contains("\x1b[48;2;36;40;48m")
     );
     // a click without a drag copies nothing
     let click_up = Key::Mouse {
@@ -1716,8 +1716,14 @@ fn header_status_panel_and_footer_share_one_context_meter_and_clear_resets_it() 
         T0,
     );
     let s = screen(&mut a);
+    // the header no longer carries the meter (spec §5.1: it moved to the Context panel); the Status
+    // panel's context bar and the footer still share it
     let head = s.lines().next().unwrap();
-    assert!(head.contains("ctx") && head.contains("50%"), "{head}");
+    assert!(
+        head.contains("S Y N T H E S I S") && !head.contains("ctx"),
+        "{head}"
+    );
+    assert!(s.contains("Context") && s.contains("50%"), "{s}");
     assert!(
         s.contains("100.0k/200.0k") || s.contains("100k/200k"),
         "{s}"
@@ -1725,7 +1731,7 @@ fn header_status_panel_and_footer_share_one_context_meter_and_clear_resets_it() 
     assert!(s.lines().last().unwrap().contains("ctx 50% 100k/200k"));
     keys(&mut a, "/clear\r");
     let s = screen(&mut a);
-    assert!(s.lines().next().unwrap().contains("0%"), "{s}");
+    assert!(s.contains("Context") && s.contains("0/200"), "{s}");
     assert!(!s.lines().last().unwrap().contains("ctx 50%"), "{s}");
 }
 

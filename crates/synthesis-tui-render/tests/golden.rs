@@ -3,6 +3,13 @@
 //! SGR rows plus their `sgr::encode` form). Every case must pass or be listed with a reason in
 //! `golden_divergences.txt` (`render/<case>` or `render/<case>#json|txt|ansi`); no silent skips.
 //!
+//! `SYNTHESIS_UPDATE_GOLDEN=redesign-p1` is the gate of phase P1 of docs/specs/tui-design.md (theme
+//! tokens, header): it rewrites only colour (`expected.ansi.json`, the colour keys of two helper cases)
+//! and the header rows of `frame` cases, REFUSES any other change (the case then keeps failing),
+//! marks every rewritten case `reviewed_by = "pending-owner-review (P1 2026-10-30)"` and prints a
+//! summary. Cases listed in `golden_divergences.txt` differ from the oracle in text already and are
+//! skipped (their rebaseline belongs to the phase that changes that text).
+//!
 //! `SYNTHESIS_UPDATE_GOLDEN=1` rewrites the expected files of a failing case from the actual output
 //! ONLY when the difference is explained by the Nemo -> Synthesis rename (same text once the
 //! product name, whitespace and box drawing are ignored, or only text dropped: the longer name
@@ -25,6 +32,15 @@ use synthesis_tui_render::theme::*;
 use synthesis_tui_render::{dialogs, highlight};
 
 const NOW: i64 = 1_790_942_400_000;
+
+/// The stops of the former `BORDER_GRAD`: `cycle` is a generic function and its golden keeps them.
+const GRADIENT_STOPS: [Rgb; 5] = [
+    [79, 70, 229],
+    [129, 140, 248],
+    [103, 232, 249],
+    [129, 140, 248],
+    [79, 70, 229],
+];
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -650,21 +666,17 @@ fn run_case(dir: &std::path::Path, input: &Value) -> Vec<Check> {
     }
 }
 
+/// The Graphite tokens (the Node palette it replaced is gone: P1 of docs/specs/tui-design.md).
 fn palette_json() -> Value {
     let rgb = |c: Rgb| json!([c[0], c[1], c[2]]);
+    let t = &GRAPHITE;
     json!({
-        "THEME": {"claude": rgb(T_CLAUDE), "shimmer": rgb(T_SHIMMER), "text": rgb(T_TEXT), "body": rgb(T_BODY), "inactive": rgb(T_INACTIVE), "subtle": rgb(T_SUBTLE),
-            "border": rgb(T_BORDER), "permission": rgb(T_PERMISSION), "autoAccept": rgb(T_AUTO_ACCEPT), "planMode": rgb(T_PLAN_MODE), "mcp": rgb(T_MCP), "bash": rgb(T_BASH),
-            "success": rgb(T_SUCCESS), "error": rgb(T_ERROR), "warning": rgb(T_WARNING), "track": rgb(T_TRACK)},
-        "ACCENT": {"core": rgb(ACCENT_CORE), "light": rgb(ACCENT_LIGHT), "glow": rgb(ACCENT_GLOW), "deep": rgb(ACCENT_DEEP), "cyan": rgb(ACCENT_CYAN), "ink": rgb(ACCENT_INK)},
-        "VIVID": {"purple": rgb(PURPLE), "blue": rgb(BLUE), "green": rgb(GREEN), "yellow": rgb(YELLOW), "orange": rgb(ORANGE), "pink": rgb(PINK), "cyan": rgb(CYAN), "teal": rgb(TEAL), "red": rgb(RED)},
-        "WARM": {"claude": rgb(ACCENT_CORE), "ember": rgb(ACCENT_LIGHT), "amber": rgb(YELLOW), "gold": rgb(GREEN), "sand": rgb(CYAN), "clay": rgb(ACCENT_DEEP),
-            "cream": rgb(WARM_CREAM), "dim": rgb(WARM_DIM), "deep": rgb(WARM_DEEP), "ok": rgb(GREEN), "bad": rgb(RED)},
-        "HEAT": HEAT.iter().map(|c| rgb(*c)).collect::<Vec<_>>(),
-        "SELECT_BG": rgb(SELECT_BG), "SELECT_FG": rgb(SELECT_FG),
-        "BORDER_GRAD": BORDER_GRAD.iter().map(|c| rgb(*c)).collect::<Vec<_>>(),
-        "LOGO_GRAD": LOGO_GRAD.iter().map(|c| rgb(*c)).collect::<Vec<_>>(),
-        "AGENT_COLORS": AGENT_COLORS.iter().map(|c| rgb(*c)).collect::<Vec<_>>(),
+        "theme": "graphite",
+        "tokens": {"bg_ref": rgb(t.bg_ref), "surface": rgb(t.surface), "elevated": rgb(t.elevated), "border": rgb(t.border), "label": rgb(t.label), "muted": rgb(t.muted),
+            "body": rgb(t.body), "strong": rgb(t.strong), "accent": rgb(t.accent), "accent_light": rgb(t.accent_light), "pearl": rgb(t.pearl), "ok": rgb(t.ok), "warn": rgb(t.warn),
+            "err": rgb(t.err), "info": rgb(t.info), "sand": rgb(t.sand), "ink": rgb(t.ink), "diff_add_bg": rgb(t.diff_add_bg), "diff_del_bg": rgb(t.diff_del_bg)},
+        "heat": t.heat.iter().map(|c| rgb(*c)).collect::<Vec<_>>(),
+        "tints": t.tints.iter().map(|c| rgb(*c)).collect::<Vec<_>>(),
         "CLAUDE_SPIN": (0..8).map(spin).collect::<Vec<_>>(),
     })
 }
@@ -714,7 +726,7 @@ fn helper_case(op: &str, input: &Value, expected: &Value) -> Result<(), String> 
             let arr = |v: &Value| -> Rgb { let a = v.as_array().unwrap(); [a[0].as_u64().unwrap() as u8, a[1].as_u64().unwrap() as u8, a[2].as_u64().unwrap() as u8] };
             json!({
                 "lerp": input["lerp"].as_array().unwrap().iter().map(|c| rgb(lerp(arr(&c[0]), arr(&c[1]), c[2].as_f64().unwrap()))).collect::<Vec<_>>(),
-                "cycle": input["cycle"].as_array().unwrap().iter().map(|t| rgb(cycle(&BORDER_GRAD, t.as_f64().unwrap()))).collect::<Vec<_>>(),
+                "cycle": input["cycle"].as_array().unwrap().iter().map(|t| rgb(cycle(&GRADIENT_STOPS, t.as_f64().unwrap()))).collect::<Vec<_>>(),
                 "pulse": input["pulse"].as_array().unwrap().iter().map(|f| rgb(pulse([0, 0, 0], [200, 100, 50], f.as_u64().unwrap(), 20))).collect::<Vec<_>>(),
                 "agent_colors": input["agentTypes"].as_array().unwrap().iter().map(|t| json!({"type": t, "rgb": rgb(agent_color(t.as_str().unwrap()))})).collect::<Vec<_>>(),
                 "dots": input["dots"].as_array().unwrap().iter().map(|f| json!(dots(f.as_u64().unwrap() as usize))).collect::<Vec<_>>(),
@@ -727,6 +739,7 @@ fn helper_case(op: &str, input: &Value, expected: &Value) -> Result<(), String> 
         "dialogs" => dialogs_json(),
         other => return Err(format!("unknown op {other}")),
     };
+    note_json("helper", got.clone());
     same(got, expected, op)
 }
 
@@ -803,11 +816,104 @@ fn dialogs_json() -> Value {
     })
 }
 
+const P1_STAMP: &str = "pending-owner-review (P1 2026-10-30)";
+
+/// Helper cases whose `expected.json` may change in P1, with the keys (at any depth) that may.
+const P1_HELPER_KEYS: [(&str, &[&str]); 2] = [
+    ("theme-color-fns", &["palette", "agent_colors"]),
+    ("bar-widths", &["ansi"]),
+];
+
+fn without_keys(v: &Value, keys: &[&str]) -> Value {
+    match v {
+        Value::Object(m) => Value::Object(
+            m.iter()
+                .filter(|(k, _)| !keys.contains(&k.as_str()))
+                .map(|(k, v)| (k.clone(), without_keys(v, keys)))
+                .collect(),
+        ),
+        Value::Array(a) => Value::Array(a.iter().map(|v| without_keys(v, keys)).collect()),
+        o => o.clone(),
+    }
+}
+
+/// What P1 may rewrite in a frame-like case: Ok(header rows that changed) or the reason it refuses.
+fn p1_check_frame(op: &str, expected: &Value, a: &Actual) -> Result<Vec<usize>, String> {
+    let old: Vec<&str> = expected["lines"]
+        .as_array()
+        .map(|v| v.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default();
+    let new: Vec<String> = a.ansi.iter().map(|l| strip_ansi(l)).collect();
+    if old.len() != new.len() {
+        return Err(format!("{} rows, expected {}", new.len(), old.len()));
+    }
+    // header rows: the first row, and the rule under it when it is a heavy `━` line
+    let mut header = vec![];
+    if op == "frame" {
+        header.push(0);
+        if old
+            .get(1)
+            .is_some_and(|r| !r.is_empty() && r.chars().all(|c| c == '━'))
+        {
+            header.push(1);
+        }
+    }
+    let mut changed = vec![];
+    for (i, (o, n)) in old.iter().zip(&new).enumerate() {
+        if o != n {
+            if !header.contains(&i) {
+                return Err(format!(
+                    "row {i} changed outside the header: {o:?} -> {n:?}"
+                ));
+            }
+            changed.push(i);
+        }
+    }
+    for (k, v) in &a.json {
+        if expected.get(*k).unwrap_or(&Value::Null) != v
+            && !(v.is_array() && v.as_array().unwrap().is_empty() && expected.get(*k).is_none())
+        {
+            return Err(format!("{k} changed (layout or hit boxes)"));
+        }
+    }
+    Ok(changed)
+}
+
+fn p1_check_helper(name: &str, expected: &Value, a: &Actual) -> Result<(), String> {
+    let Some((_, keys)) = P1_HELPER_KEYS.iter().find(|(n, _)| *n == name) else {
+        return Err("not a colour-bearing helper case".into());
+    };
+    let got = a.json.get("helper").ok_or("no actual output recorded")?;
+    if without_keys(got, keys) == without_keys(expected, keys) {
+        Ok(())
+    } else {
+        Err(format!("differs outside the colour keys {keys:?}"))
+    }
+}
+
+fn stamp_pending(dir: &std::path::Path) {
+    let mut m = read(dir.join("meta.json"));
+    m["reviewed_by"] = json!(P1_STAMP);
+    std::fs::write(
+        dir.join("meta.json"),
+        format!("{}\n", serde_json::to_string_pretty(&m).unwrap()),
+    )
+    .unwrap();
+}
+
 #[test]
 fn render_golden() {
     let allowed = divergences();
-    let update = std::env::var_os("SYNTHESIS_UPDATE_GOLDEN").is_some_and(|v| v == "1");
+    let mode = std::env::var("SYNTHESIS_UPDATE_GOLDEN").unwrap_or_default();
+    let update = mode == "1";
+    let p1 = mode == "redesign-p1";
     let (mut rewritten, mut unexplained) = (Vec::<String>::new(), Vec::<String>::new());
+    // P1 summary: (case, what changed), refusals with the reason, divergent cases left alone
+    let (mut p1_done, mut p1_refused, mut p1_skipped) = (
+        Vec::<(String, String)>::new(),
+        Vec::<(String, String)>::new(),
+        Vec::<String>::new(),
+    );
     let base = root().join("../../tests/golden/render");
     let mut dirs: Vec<_> = std::fs::read_dir(&base)
         .unwrap()
@@ -853,6 +959,47 @@ fn render_golden() {
                 checks = vec![("json", Ok(()))];
             } else if !allowed.keys().any(|k| k.starts_with(&id)) {
                 unexplained.push(name.clone());
+            }
+        }
+        if p1 && checks.iter().any(|(_, r)| r.is_err()) {
+            if allowed.keys().any(|k| k.starts_with(&id)) {
+                p1_skipped.push(name.clone());
+            } else {
+                let a = ACTUAL.with(|a| std::mem::take(&mut *a.borrow_mut()));
+                let want = read(dir.join("expected.json"));
+                let verdict = if a.ansi.is_empty() {
+                    p1_check_helper(&name, &want, &a).map(|()| {
+                        let mut v = a.json["helper"].clone();
+                        if let (Some(o), Some(n)) = (want.as_object(), v.as_object_mut()) {
+                            for (k, x) in o {
+                                n.entry(k.clone()).or_insert_with(|| x.clone());
+                            }
+                        }
+                        std::fs::write(
+                            dir.join("expected.json"),
+                            format!("{}\n", serde_json::to_string_pretty(&v).unwrap()),
+                        )
+                        .unwrap();
+                        "colour keys".to_string()
+                    })
+                } else {
+                    p1_check_frame(input["op"].as_str().unwrap(), &want, &a).map(|hdr| {
+                        rewrite_expected(dir, &want, &a);
+                        if hdr.is_empty() {
+                            "colour".to_string()
+                        } else {
+                            format!("colour + header rows {hdr:?}")
+                        }
+                    })
+                };
+                match verdict {
+                    Ok(what) => {
+                        stamp_pending(dir);
+                        p1_done.push((name.clone(), what));
+                        checks = vec![("json", Ok(()))];
+                    }
+                    Err(why) => p1_refused.push((name.clone(), why)),
+                }
             }
         }
         cases += 1;
@@ -901,6 +1048,29 @@ fn render_golden() {
             unexplained.join("\n  ")
         );
     }
+    if p1 {
+        let n = |w: &str| p1_done.iter().filter(|(_, x)| x.starts_with(w)).count();
+        println!(
+            "SYNTHESIS_UPDATE_GOLDEN=redesign-p1: rewrote {} case(s) ({} colour only, {} colour + header rows, {} helper colour keys), marked reviewed_by = {P1_STAMP:?}\nREFUSED {} case(s) (outside the P1 scope, left unchanged, still failing):\n  {}\nskipped {} case(s) listed in golden_divergences.txt (text differs from the oracle already):\n  {}\nrewritten:\n  {}",
+            p1_done.len(),
+            p1_done.iter().filter(|(_, x)| x == "colour").count(),
+            n("colour +"),
+            n("colour keys"),
+            p1_refused.len(),
+            p1_refused
+                .iter()
+                .map(|(c, w)| format!("{c}: {w}"))
+                .collect::<Vec<_>>()
+                .join("\n  "),
+            p1_skipped.len(),
+            p1_skipped.join("\n  "),
+            p1_done
+                .iter()
+                .map(|(c, w)| format!("{c} [{w}]"))
+                .collect::<Vec<_>>()
+                .join("\n  ")
+        );
+    }
     let (txt, ansi) = (files["txt"], files["ansi"]);
     println!(
         "GOLDEN render: {cases} cases, {passed} passed, {diverged} divergent (listed); frame-like cases: expected.txt {}/{}, expected.ansi.json {}/{}",
@@ -912,4 +1082,38 @@ fn render_golden() {
         failures.len(),
         failures.join("\n")
     );
+}
+
+/// A full frame under NO_COLOR and 16 colours carries no colour code the terminal could not draw.
+#[test]
+fn mono_and_16_colour_frames_use_only_their_codes() {
+    use synthesis_tui_base::sgr::ColorMode as M;
+    let input = read(root().join("../../tests/golden/render/dash-busy-tools-120x40/input.json"));
+    for (theme, mode) in [(ThemeId::Mono, M::Mono), (ThemeId::Ansi16, M::Ansi16)] {
+        let _scope = ConfigScope::new(RenderConfig {
+            theme,
+            ascii: false,
+        });
+        let st = hydrate_state(&input["state"]);
+        let chars = st.editor.chars.clone();
+        let ds = st.dash(&chars, st.editor.cur);
+        let fr = render_frame(&ds, 120, 40, 3, input["now"].as_i64().unwrap());
+        for line in &fr.lines {
+            let out = encode(line, mode);
+            for seq in out.split('\x1b').skip(1) {
+                let Some(params) = seq.strip_prefix('[').and_then(|s| s.split('m').next()) else {
+                    continue;
+                };
+                for p in params.split(';').filter(|p| !p.is_empty()) {
+                    let n: u32 = p.parse().unwrap_or(0);
+                    let colour =
+                        (30..=38).contains(&n) || (40..=48).contains(&n) || (90..=107).contains(&n);
+                    match mode {
+                        M::Mono => assert!(!colour, "{theme:?}: colour code {n} in {out:?}"),
+                        _ => assert!(n != 38 && n != 48, "{theme:?}: {out:?}"),
+                    }
+                }
+            }
+        }
+    }
 }

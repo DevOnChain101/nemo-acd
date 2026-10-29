@@ -217,7 +217,15 @@ fn golden_sgr() {
                     .as_object()
                     .unwrap()
                     .iter()
-                    .map(|(k, v)| (k.clone(), v.as_str().unwrap().to_string())),
+                    // Node's override is CLAUDE_MONITOR_COLOR; Synthesis reads SYNTHESIS_COLOR only
+                    .map(|(k, v)| {
+                        let k = if k == "CLAUDE_MONITOR_COLOR" {
+                            "SYNTHESIS_COLOR"
+                        } else {
+                            k
+                        };
+                        (k.to_string(), v.as_str().unwrap().to_string())
+                    }),
             );
             let platform = Platform::from_node(i["platform"].as_str().unwrap());
             let mode = match ColorMode::detect(&env, platform) {

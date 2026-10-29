@@ -4,7 +4,7 @@
 //! colour *object*, and `keyword` / `operator` have equal values but are different objects, so
 //! [`Col`] carries a tag next to the RGB value.
 
-use crate::theme::Rgb;
+use crate::theme::{Rgb, t};
 use regex::Regex;
 use std::collections::HashSet;
 use std::sync::OnceLock;
@@ -27,21 +27,43 @@ pub const fn col(rgb: Rgb) -> Col {
     Col { rgb, tag: 0 }
 }
 
-pub const FG: Col = col([248, 248, 242]);
-pub const KEYWORD: Col = col([249, 38, 114]);
-pub const STORAGE: Col = col([102, 217, 239]);
-pub const BUILTIN: Col = col([166, 226, 46]);
-pub const LITERAL: Col = col([190, 132, 255]);
-pub const STRING: Col = col([230, 219, 116]);
-pub const COMMENT: Col = col([117, 113, 94]);
-pub const VARIABLE: Col = col([255, 255, 255]);
-/// Same value as [`KEYWORD`], a different object in Node.
-pub const OPERATOR: Col = Col {
-    rgb: [249, 38, 114],
-    tag: 2,
-};
-pub const ADD: Col = col([80, 200, 80]);
-pub const DEL: Col = col([220, 90, 90]);
+pub fn fg_c() -> Col {
+    col(t().syntax.fg)
+}
+pub fn keyword_c() -> Col {
+    col(t().syntax.keyword)
+}
+pub fn storage_c() -> Col {
+    col(t().syntax.storage)
+}
+pub fn builtin_c() -> Col {
+    col(t().syntax.builtin)
+}
+pub fn literal_c() -> Col {
+    col(t().syntax.literal)
+}
+pub fn string_c() -> Col {
+    col(t().syntax.string)
+}
+pub fn comment_c() -> Col {
+    col(t().syntax.comment)
+}
+pub fn variable_c() -> Col {
+    col(t().syntax.variable)
+}
+/// Same value as [`keyword`], a different object in Node.
+pub fn operator_c() -> Col {
+    Col {
+        rgb: t().syntax.keyword,
+        tag: 2,
+    }
+}
+pub fn add_c() -> Col {
+    col(t().syntax.add)
+}
+pub fn del_c() -> Col {
+    col(t().syntax.del)
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Tok {
@@ -290,23 +312,23 @@ pub fn highlight(code: &str, lang: &str) -> Vec<Vec<Tok>> {
         }
     };
     let Some(group) = group else {
-        return lines.iter().map(|l| plain(l, FG)).collect();
+        return lines.iter().map(|l| plain(l, fg_c())).collect();
     };
     if group == "diff" {
         return lines
             .iter()
             .map(|l| {
                 let c = match l.chars().next() {
-                    Some('+') => ADD,
-                    Some('-') => DEL,
-                    _ if l.starts_with("@@") => STORAGE,
+                    Some('+') => add_c(),
+                    Some('-') => del_c(),
+                    _ if l.starts_with("@@") => storage_c(),
                     _ if ["diff ", "index ", "+++", "---"]
                         .iter()
                         .any(|p| l.starts_with(p)) =>
                     {
-                        COMMENT
+                        comment_c()
                     }
-                    _ => FG,
+                    _ => fg_c(),
                 };
                 plain(l, c)
             })
@@ -339,11 +361,11 @@ pub fn highlight(code: &str, lang: &str) -> Vec<Vec<Tok>> {
             if state == Some("block") {
                 match find(&line, "*/", i) {
                     None => {
-                        emit!(n, COMMENT);
+                        emit!(n, comment_c());
                         break;
                     }
                     Some(e) => {
-                        emit!(e + 2, COMMENT);
+                        emit!(e + 2, comment_c());
                         state = None;
                         continue;
                     }
@@ -353,11 +375,11 @@ pub fn highlight(code: &str, lang: &str) -> Vec<Vec<Tok>> {
                 let close = if st == "tick" { "`" } else { st };
                 match find(&line, close, i) {
                     None => {
-                        emit!(n, STRING);
+                        emit!(n, string_c());
                         break;
                     }
                     Some(e) => {
-                        emit!(e + close.chars().count(), STRING);
+                        emit!(e + close.chars().count(), string_c());
                         state = None;
                         continue;
                     }
@@ -367,12 +389,12 @@ pub fn highlight(code: &str, lang: &str) -> Vec<Vec<Tok>> {
             if cfg.block && starts(&rest, "/*") {
                 match find(&line, "*/", i + 2) {
                     None => {
-                        emit!(n, COMMENT);
+                        emit!(n, comment_c());
                         state = Some("block");
                         break;
                     }
                     Some(e) => {
-                        emit!(e + 2, COMMENT);
+                        emit!(e + 2, comment_c());
                         continue;
                     }
                 }
@@ -385,12 +407,12 @@ pub fn highlight(code: &str, lang: &str) -> Vec<Vec<Tok>> {
                 };
                 match find(&line, q, i + 3) {
                     None => {
-                        emit!(n, STRING);
+                        emit!(n, string_c());
                         state = Some(q);
                         break;
                     }
                     Some(e) => {
-                        emit!(e + 3, STRING);
+                        emit!(e + 3, string_c());
                         continue;
                     }
                 }
@@ -401,18 +423,18 @@ pub fn highlight(code: &str, lang: &str) -> Vec<Vec<Tok>> {
                     || i == 0
                     || synthesis_tui_base::text::is_js_space(line[i - 1]));
             if comment_ok {
-                emit!(n, COMMENT);
+                emit!(n, comment_c());
                 break;
             }
             if cfg.tick && line[i] == '`' {
                 match find(&line, "`", i + 1) {
                     None => {
-                        emit!(n, STRING);
+                        emit!(n, string_c());
                         state = Some("tick");
                         break;
                     }
                     Some(e) => {
-                        emit!(e + 1, STRING);
+                        emit!(e + 1, string_c());
                         continue;
                     }
                 }
@@ -426,7 +448,7 @@ pub fn highlight(code: &str, lang: &str) -> Vec<Vec<Tok>> {
                     p += if line[p] == '\\' { 2 } else { 1 };
                 }
                 if p < n {
-                    emit!(p + 1, STRING);
+                    emit!(p + 1, string_c());
                     continue;
                 }
             }
@@ -434,22 +456,22 @@ pub fn highlight(code: &str, lang: &str) -> Vec<Vec<Tok>> {
                 && line[i] == '$'
                 && let Some(m) = r.shvar.find(&rest)
             {
-                emit!(i + m.as_str().chars().count(), VARIABLE);
+                emit!(i + m.as_str().chars().count(), variable_c());
                 continue;
             }
             if matches!(group, "js" | "py" | "clike")
                 && line[i] == '@'
                 && let Some(m) = r.deco.find(&rest)
             {
-                emit!(i + m.as_str().chars().count(), COMMENT);
+                emit!(i + m.as_str().chars().count(), comment_c());
                 continue;
             }
             if group == "clike" && i == 0 && r.include.is_match(&rest) {
-                emit!(n, COMMENT);
+                emit!(n, comment_c());
                 break;
             }
             if let Some(m) = r.num.find(&rest) {
-                emit!(i + m.as_str().chars().count(), LITERAL);
+                emit!(i + m.as_str().chars().count(), literal_c());
                 continue;
             }
             if is_id_start(line[i]) {
@@ -464,32 +486,32 @@ pub fn highlight(code: &str, lang: &str) -> Vec<Vec<Tok>> {
                 }
                 let prev = if q >= 0 { Some(line[q as usize]) } else { None };
                 let next = slice(e, e + 64);
-                let mut c = FG;
+                let mut c = fg_c();
                 if prev != Some('.') {
                     if title_next {
-                        c = BUILTIN;
+                        c = builtin_c();
                         title_next = false;
                     } else if (key.contains(m.as_str()) || storage.contains(m.as_str()))
                         && !soft_plain(&m, &line, e)
                     {
                         c = if storage.contains(m.as_str()) {
-                            STORAGE
+                            storage_c()
                         } else {
-                            KEYWORD
+                            keyword_c()
                         };
                         if storage.contains(m.as_str()) || m == "function" {
                             title_next = true;
                         }
                     } else if common.contains(m.as_str()) {
-                        c = LITERAL;
+                        c = literal_c();
                     } else if ["this", "self", "cls", "super"].contains(&m.as_str()) {
-                        c = VARIABLE;
+                        c = variable_c();
                     } else if built.contains(m.as_str())
                         || (m.starts_with(|ch: char| ch.is_ascii_uppercase())
                             && m.chars().any(|ch| ch.is_ascii_lowercase()))
                         || r.call.is_match(&next)
                     {
-                        c = BUILTIN;
+                        c = builtin_c();
                     }
                 }
                 push(&mut out, &m, c);
@@ -500,10 +522,10 @@ pub fn highlight(code: &str, lang: &str) -> Vec<Vec<Tok>> {
                 && !matches!(group, "json" | "yaml")
                 && !(group == "sh" && !r.sh_op.is_match(&rest))
             {
-                emit!(i + m.as_str().chars().count(), OPERATOR);
+                emit!(i + m.as_str().chars().count(), operator_c());
                 continue;
             }
-            push(&mut out, &line[i].to_string(), FG);
+            push(&mut out, &line[i].to_string(), fg_c());
             i += 1;
         }
         // JSON/YAML/HCL property names are attributes, including quoted JSON keys.
@@ -522,7 +544,7 @@ pub fn highlight(code: &str, lang: &str) -> Vec<Vec<Tok>> {
                 for (t, c) in out.iter_mut() {
                     let l = t.chars().count();
                     if seen <= at && at < seen + l {
-                        *c = BUILTIN;
+                        *c = builtin_c();
                     }
                     seen += l;
                 }

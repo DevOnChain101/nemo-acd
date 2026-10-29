@@ -3,7 +3,7 @@
 //! decoration: a missing fact is shown as missing ("unknown", "unverified"), never as OK.
 
 use synthesis_events::Budget;
-use synthesis_tui_render::theme::{GREEN, RED, Rgb, T_INACTIVE, YELLOW, fit_items, paint};
+use synthesis_tui_render::theme::{self, Rgb, fit_items, paint};
 use synthesis_tui_render::util::{fmt_n, short, to_fixed};
 
 use crate::chat::{Totals, Verification};
@@ -134,10 +134,10 @@ impl ContextStatus {
             .filter(|n| now < n.1)
             .map(|n| n.0.as_str());
         if self.compacting {
-            return Some(("⟳ compacting…".into(), YELLOW));
+            return Some(("⟳ compacting…".into(), theme::t().warn));
         }
         if !self.known {
-            return note.map(|n| (n.to_string(), T_INACTIVE));
+            return note.map(|n| (n.to_string(), theme::t().label));
         }
         let pct = self.percent.unwrap_or_else(|| {
             if self.window > 0 {
@@ -163,9 +163,9 @@ impl ContextStatus {
             s = format!("{s} {n}");
         }
         let colour = match pct {
-            p if p >= 90.0 => RED,
-            p if p >= 75.0 => YELLOW,
-            _ => T_INACTIVE,
+            p if p >= 90.0 => theme::t().err,
+            p if p >= 75.0 => theme::t().warn,
+            _ => theme::t().label,
         };
         Some((s, colour))
     }
@@ -213,7 +213,7 @@ pub fn status_line_with(
     extra: &StatusExtra,
 ) -> String {
     let (sandbox, bad) = sb.text();
-    let sandbox = paint(if bad { RED } else { GREEN }, &sandbox);
+    let sandbox = paint(if bad { theme::t().err } else { theme::t().ok }, &sandbox);
 
     let mut budgets = vec![
         format!("turns {}/{}", t.turns, budget.max_turns),
@@ -236,9 +236,9 @@ pub fn status_line_with(
     let verify = match verification {
         Some(v) => {
             let colour = match v.status.as_str() {
-                "passed" => GREEN,
-                "failed" => RED,
-                _ => YELLOW,
+                "passed" => theme::t().ok,
+                "failed" => theme::t().err,
+                _ => theme::t().warn,
             };
             let ev = if v.summary.is_empty() {
                 String::new()
@@ -247,17 +247,17 @@ pub fn status_line_with(
             };
             paint(colour, &format!("verify {}{ev}", v.status))
         }
-        None if ran_a_task => paint(YELLOW, "verify unverified: no verification result"),
-        None => paint(T_INACTIVE, "verify n/a"),
+        None if ran_a_task => paint(theme::t().warn, "verify unverified: no verification result"),
+        None => paint(theme::t().label, "verify n/a"),
     };
-    let dot = paint(T_INACTIVE, "·");
+    let dot = paint(theme::t().label, "·");
     let ctx = extra
         .context
         .and_then(|c| c.text(extra.now))
         .map(|(s, c)| paint(c, &s))
         .unwrap_or_default();
     let view = paint(
-        T_INACTIVE,
+        theme::t().label,
         if extra.expanded {
             "ctrl+o: collapse"
         } else {
@@ -267,7 +267,7 @@ pub fn status_line_with(
     // Dropped whole, last priority first: key hint, budgets, context, then verify; sandbox stays.
     let items = [
         (1, format!(" {sandbox}")),
-        (4, paint(T_INACTIVE, &budgets.join(" · "))),
+        (4, paint(theme::t().label, &budgets.join(" · "))),
         (3, ctx),
         (2, verify),
         (5, view),
@@ -353,11 +353,11 @@ mod tests {
         let mut c = ContextStatus::default();
         let col = |c: &ContextStatus| c.text(0).unwrap().1;
         c.on_usage(50, 100, Some(50.0), false);
-        assert_eq!(col(&c), T_INACTIVE);
+        assert_eq!(col(&c), theme::t().label);
         c.on_usage(80, 100, Some(80.0), false);
-        assert_eq!(col(&c), YELLOW);
+        assert_eq!(col(&c), theme::t().warn);
         c.on_usage(95, 100, Some(95.0), false);
-        assert_eq!(col(&c), RED);
+        assert_eq!(col(&c), theme::t().err);
     }
 
     #[test]

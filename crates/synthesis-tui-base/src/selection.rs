@@ -9,8 +9,26 @@ use crate::keys::Key;
 use crate::text::{char_width, csi_len, is_js_space, strip_ansi};
 use std::borrow::Cow;
 
-const SELECT_ON: &str = "\x1b[38;2;245;245;245m\x1b[48;2;60;72;105m";
-const SELECT_OFF: &str = "\x1b[39m\x1b[49m";
+use std::cell::Cell;
+
+thread_local! {
+    static HIGHLIGHT: Cell<(&'static str, &'static str)> = const {
+        Cell::new(("\x1b[38;2;245;245;245m\x1b[48;2;60;72;105m", "\x1b[39m\x1b[49m"))
+    };
+}
+
+/// The sequences that start and end a selected cell on this thread; the render theme sets them.
+pub fn set_highlight(on_off: (&'static str, &'static str)) {
+    HIGHLIGHT.with(|h| h.set(on_off));
+}
+
+fn select_on() -> &'static str {
+    HIGHLIGHT.with(|h| h.get().0)
+}
+
+fn select_off() -> &'static str {
+    HIGHLIGHT.with(|h| h.get().1)
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
@@ -316,7 +334,7 @@ pub fn highlight_cells(line: &str, from: i64, to: i64) -> String {
                 cur.push_str(tok);
             }
             if on {
-                out.push_str(SELECT_ON);
+                out.push_str(select_on());
             }
             continue;
         }
@@ -327,10 +345,10 @@ pub fn highlight_cells(line: &str, from: i64, to: i64) -> String {
         }
         let inside = cell >= from && cell < to;
         if inside && !on {
-            out.push_str(SELECT_ON);
+            out.push_str(select_on());
             on = true;
         } else if !inside && on {
-            out.push_str(SELECT_OFF);
+            out.push_str(select_off());
             out.push_str(&cur);
             on = false;
         }
@@ -338,7 +356,7 @@ pub fn highlight_cells(line: &str, from: i64, to: i64) -> String {
         cell += char_width(ch) as i64;
     }
     if on {
-        out.push_str(SELECT_OFF);
+        out.push_str(select_off());
     }
     out
 }

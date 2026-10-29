@@ -37,22 +37,22 @@ pub(super) fn rows(it: &Item, w: usize, frame: usize, now: i64) -> Vec<Row> {
     }
     let mut head = vec![
         if it.streaming {
-            r(format!("{} ", spin(frame)), C_LIGHT)
+            r(format!("{} ", spin(frame)), c_light())
         } else {
-            r("✻ ", C_DIM)
+            r("✻ ", c_dim())
         },
-        r("Thinking", C_DIM),
+        r("Thinking", c_dim()),
     ];
     if let Some(ms) = duration(it, now) {
-        head.push(r(format!(" · {}", fmt_secs(ms)), C_DIM));
+        head.push(r(format!(" · {}", fmt_secs(ms)), c_dim()));
     }
     let mut rows: Vec<Row> = vec![vec![], head];
-    let gutter = [deco("│ ", C_SUBTLE)];
+    let gutter = [deco("│ ", c_subtle())];
     for ln in text.split('\n') {
         rows.extend(wrap(
             &[run_full(
                 ln.replace('\t', "  "),
-                C_SUBTLE,
+                c_subtle(),
                 false,
                 true,
                 false,

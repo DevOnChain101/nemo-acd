@@ -28,6 +28,7 @@ use crate::links::{OpenTarget, Opener, SystemOpener, hyperlink_line, hyperlinks_
 use crate::resume::Resume;
 use crate::status::SandboxStatus;
 use crate::tty::{SharedOut, Tty};
+use crate::tui_settings::TuiSettings;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExitReason {
@@ -97,6 +98,8 @@ pub struct Options {
     /// Shown as warnings in the pane from the first frame (sanitised on ingest); the matching
     /// `Notice` events arriving later are not shown twice.
     pub startup_notes: Vec<String>,
+    /// Theme and glyph set from the user settings (the CLI reads the file).
+    pub tui: TuiSettings,
     /// Default: the OS tool, then OSC 52.
     pub clipboard: Option<Vec<Box<dyn ClipboardSink>>>,
     /// Right-click paste. Default: the OS tool(s) for the platform.
@@ -140,6 +143,7 @@ impl Options {
             saved: vec![],
             resume: None,
             startup_notes: vec![],
+            tui: TuiSettings::default(),
             clipboard: None,
             paste_source: None,
             opener: None,
@@ -472,6 +476,7 @@ pub fn run_interactive(mut o: Options, tty: Tty) -> io::Result<Exit> {
         .map(|r| r.history.clone())
         .unwrap_or_default();
     let mut app = App::new(cfg_for(&o), &replay, clock());
+    app.render_cfg = o.tui.render_config(color, &o.env);
     if let Some(m) = &o.memory {
         app.set_memory_files(m.user_file.clone(), m.project_file.clone());
         app.set_note_preview(m.preview.clone());
@@ -962,6 +967,9 @@ pub struct OnceOptions {
     pub now: i64,
     pub color: ColorMode,
     pub startup_notes: Vec<String>,
+    pub tui: TuiSettings,
+    /// Read only for `SYNTHESIS_ASCII` and `TERM` (the glyph set).
+    pub env: Env,
 }
 
 /// `--once`: one frame to `out`, no raw mode, no input. The text is exactly the lines the
@@ -985,6 +993,7 @@ pub fn render_once(o: &OnceOptions, out: &mut impl Write) -> io::Result<()> {
         agent_defs: vec![],
     };
     let mut app = App::new(cfg, &o.events, o.now);
+    app.render_cfg = o.tui.render_config(o.color, &o.env);
     app.startup_notes(&o.startup_notes);
     let lines = app.render(o.cols, o.rows, o.now);
     for l in &lines {

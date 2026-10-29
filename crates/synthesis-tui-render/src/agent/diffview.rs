@@ -208,27 +208,27 @@ fn body_rows(d: &Diff, w: usize) -> Vec<Row> {
                     "@@ -{},{} +{},{} @@",
                     h.old_start, h.old_lines, h.new_start, h.new_lines
                 ),
-                C_SUBTLE,
+                c_subtle(),
             )]);
         }
         for l in &h.lines {
             let (mark, col) = match l.tag {
-                '+' => ("+", C_ADD),
-                '-' => ("−", C_BAD),
-                _ => (" ", C_DIM),
+                '+' => ("+", c_add()),
+                '-' => ("−", c_bad()),
+                _ => (" ", c_dim()),
             };
             let first = [
-                deco(&format!(" {} {} ", cell(l.old), cell(l.new)), C_SUBTLE),
+                deco(&format!(" {} {} ", cell(l.old), cell(l.new)), c_subtle()),
                 deco(&format!("{mark} "), col),
             ];
-            let rest = [deco(&" ".repeat(gutter_w + 2), C_TEXT)];
+            let rest = [deco(&" ".repeat(gutter_w + 2), c_text())];
             rows.extend(wrap(&[r(expand_tabs(&l.text), col)], avail, &first, &rest));
         }
     }
     if d.truncated {
         rows.push(vec![r(
             "… diff truncated (the rest of the change is not shown)",
-            C_SUBTLE,
+            c_subtle(),
         )]);
     }
     rows
@@ -269,14 +269,14 @@ fn summary(d: &Diff) -> String {
 /// and a footer for the rest. `None` when `v` is not a diff.
 pub(super) fn dialog_rows(v: &Value, w: usize, max: usize) -> Option<Vec<Row>> {
     let d = parse(v)?;
-    let mut rows = vec![vec![r(summary_counts(&d), C_SUBTLE)]];
+    let mut rows = vec![vec![r(summary_counts(&d), c_subtle())]];
     let all = body_rows(&d, w + 5);
     let hidden = all.len().saturating_sub(max);
     rows.extend(all.into_iter().take(max));
     if hidden > 0 {
         rows.push(vec![r(
             format!("… +{hidden} more lines (x shows the whole input)"),
-            C_SUBTLE,
+            c_subtle(),
         )]);
     }
     Some(rows)

@@ -8,6 +8,8 @@ pub mod dialogs;
 pub mod flow;
 pub mod folders;
 pub mod highlight;
+pub mod logo;
+mod logo_art;
 pub mod model;
 pub mod modelname;
 pub mod picker;

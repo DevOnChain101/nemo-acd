@@ -49,6 +49,8 @@ fn opts(events: Vec<Envelope>) -> OnceOptions {
         now: NOW,
         color: ColorMode::TrueColor,
         startup_notes: vec![],
+        tui: synthesis_tui::TuiSettings::default(),
+        env: synthesis_config::Env::from_pairs(Vec::<(String, String)>::new()),
     }
 }
 

@@ -32,7 +32,7 @@ use synthesis_tui_render::model::{
     self, Session, apply_event, parse_ts, session_from_events, session_phase,
 };
 use synthesis_tui_render::picker::{Picker, PickerItem};
-use synthesis_tui_render::theme::{self, T_ERROR, T_SUCCESS};
+use synthesis_tui_render::theme::{self, ConfigScope, RenderConfig};
 use synthesis_tui_render::util::basename;
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
@@ -261,6 +261,8 @@ pub(crate) type NotePreview = std::rc::Rc<dyn Fn(&str) -> String>;
 
 pub(crate) struct App {
     pub cfg: AppConfig,
+    /// Theme and glyph set, applied around every render call.
+    pub render_cfg: RenderConfig,
     pub quit: Option<ExitReason>,
     pub mode: Mode,
     pub model: String,
@@ -454,6 +456,7 @@ impl App {
         Self {
             mode: cfg.mode,
             model: cfg.model.clone(),
+            render_cfg: RenderConfig::default(),
             cfg,
             quit: None,
             chat,
@@ -2876,6 +2879,7 @@ impl App {
 
     /// One frame of `cols` x `rows` painted lines (the last one is the status line).
     pub fn render(&mut self, cols: u32, rows: u32, now: i64) -> Vec<String> {
+        let _scope = ConfigScope::new(self.render_cfg);
         self.size = (cols, rows);
         let (w, h) = (cols as usize, rows as usize);
         if (cols as i64) < MIN_COLS || (rows as i64) < MIN_ROWS + 1 {
@@ -3036,7 +3040,7 @@ impl App {
                 sel::apply_selection(&lines, Some(&sel::to_screen(&s, &g)), Some(&b)).into_owned();
         }
         if let Some(t) = &self.toast {
-            let color = if t.bad { T_ERROR } else { T_SUCCESS };
+            let color = if t.bad { theme::t().err } else { theme::t().ok };
             let last = lines.len() - 1;
             lines[last] = format!(
                 "{}\x1b[7m{}{}",

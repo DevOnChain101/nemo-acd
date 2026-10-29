@@ -83,6 +83,7 @@ fn once(a: &TuiArgs, env: &Env) -> Result<u8, String> {
         None => start_dir(a)?.to_string_lossy().into_owned(),
     };
     let (cols, rows) = synthesis_tui::size_from_env(env);
+    let (tui, tui_notes) = synthesis_tui::TuiSettings::load_user(&h.synthesis);
     let o = OnceOptions {
         cwd,
         session_id: resume
@@ -108,7 +109,10 @@ fn once(a: &TuiArgs, env: &Env) -> Result<u8, String> {
         startup_notes: sandbox_notices(a.common.sandbox_mode(), a.common.network)
             .into_iter()
             .chain(sandbox_default_notice(&a.common))
+            .chain(tui_notes)
             .collect(),
+        tui,
+        env: env.clone(),
     };
     // colour escapes belong to a terminal: into a pipe or file the frame is plain text
     let mut frame = Vec::new();
@@ -208,6 +212,9 @@ pub fn launch(a: TuiArgs, env: Env) -> Result<u8, String> {
         o.effort_tiers = effort_tiers;
         o.sandbox = sandbox;
         o.startup_notes = notices;
+        let (tui, tui_notes) = synthesis_tui::TuiSettings::load_user(&ph.synthesis);
+        o.tui = tui;
+        o.startup_notes.extend(tui_notes);
         o.memory = Some(notes.hook());
         o.startup_notes.extend(switch_note.take());
         switch_from = None;
