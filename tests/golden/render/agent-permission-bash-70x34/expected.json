@@ -24,7 +24,7 @@
     "> fix the flaky login test",
     "",
     "∴ Thought for 2s (ctrl+o to show)",
-    "◆ Nemo needs your permission  ↑/↓ choose · enter confirm · esc reject",
+    "◆ Synthesis needs your permission  ↑/↓ choose · enter confirm · esc reject",
     "╭─ Bash command ─────────────────────────────────────────────────────╮",
     "│   rm -rf build                                                     │",
     "│   Clean build                                                      │",
@@ -32,7 +32,7 @@
     "│ Do you want to proceed?                                            │",
     "│   1. Yes                                                           │",
     "│ ❯ 2. Yes, and don't ask again for Bash(rm:*)                       │",
-    "│   3. No, and tell Nemo what to do differently (esc)                │",
+    "│   3. No, and tell Synthesis what to do differently (esc)                │",
     "╰────────────────────────────────────────────────────────────────────╯",
     "⏸ manual mode on (shift+tab to cycle)       fake-sonnet · effort: auto"
   ],

@@ -4,8 +4,8 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use nemo_context::InstructionFile;
-use nemo_events::Redactor;
+use synthesis_context::InstructionFile;
+use synthesis_events::Redactor;
 
 const NOTE_CAP: usize = 2048;
 
@@ -18,14 +18,14 @@ pub struct Notes {
     pub loaded: Vec<String>,
 }
 
-/// User: `$NEMO_HOME/NEMO.md`. Project: the root's `NEMO.md` or `AGENTS.md` when one exists
-/// (the files the loader prefers), else `<root>/.nemo/NEMO.md`, which is loaded next to them.
+/// User: `$SYNTHESIS_HOME/SYNTHESIS.md`. Project: the root's `SYNTHESIS.md` or `AGENTS.md` when one exists
+/// (the files the loader prefers), else `<root>/.synthesis/SYNTHESIS.md`, which is loaded next to them.
 pub fn project_file(root: &Path) -> PathBuf {
-    ["NEMO.md", "AGENTS.md"]
+    ["SYNTHESIS.md", "AGENTS.md"]
         .iter()
         .map(|n| root.join(n))
         .find(|p| p.is_file())
-        .unwrap_or_else(|| root.join(".nemo").join("NEMO.md"))
+        .unwrap_or_else(|| root.join(".synthesis").join("SYNTHESIS.md"))
 }
 
 pub fn describe(files: &[InstructionFile]) -> Vec<String> {
@@ -36,7 +36,7 @@ pub fn describe(files: &[InstructionFile]) -> Vec<String> {
 }
 
 impl Notes {
-    pub fn hook(self) -> nemo_tui::MemoryHook {
+    pub fn hook(self) -> synthesis_tui::MemoryHook {
         let report = {
             let mut v = vec!["Instruction files loaded at start:".to_string()];
             v.extend(self.loaded.iter().cloned());
@@ -49,7 +49,7 @@ impl Notes {
             v
         };
         let shown = |p: &Path| p.display().to_string();
-        nemo_tui::MemoryHook {
+        synthesis_tui::MemoryHook {
             user_file: shown(&self.user),
             project_file: shown(&self.project),
             report: Box::new(move || report.clone()),
@@ -111,9 +111,10 @@ pub fn append_note(
     }
     let io = |e: std::io::Error| format!("{}: {e}", path.display());
     if let Some(root) = root {
-        let real = nemo_core::realpath_lenient(path).ok_or("a dangling symlink is in the way")?;
-        let real_root = nemo_core::canonicalize(root).map_err(io)?;
-        if !nemo_core::contains(&real_root, &real, nemo_core::PathPolicy::NATIVE) {
+        let real =
+            synthesis_core::realpath_lenient(path).ok_or("a dangling symlink is in the way")?;
+        let real_root = synthesis_core::canonicalize(root).map_err(io)?;
+        if !synthesis_core::contains(&real_root, &real, synthesis_core::PathPolicy::NATIVE) {
             return Err(format!("{} resolves outside the project", path.display()));
         }
         if real
@@ -160,21 +161,21 @@ mod tests {
     }
 
     #[test]
-    fn project_file_prefers_existing_nemo_then_agents_else_dot_nemo() {
+    fn project_file_prefers_existing_synthesis_then_agents_else_dot_synthesis() {
         let d = tempfile::tempdir().unwrap();
         let p = d.path();
-        assert_eq!(project_file(p), p.join(".nemo/NEMO.md"));
+        assert_eq!(project_file(p), p.join(".synthesis/SYNTHESIS.md"));
         std::fs::write(p.join("AGENTS.md"), "x").unwrap();
         assert_eq!(project_file(p), p.join("AGENTS.md"));
-        std::fs::write(p.join("NEMO.md"), "x").unwrap();
-        assert_eq!(project_file(p), p.join("NEMO.md"));
+        std::fs::write(p.join("SYNTHESIS.md"), "x").unwrap();
+        assert_eq!(project_file(p), p.join("SYNTHESIS.md"));
     }
 
     #[test]
     fn note_is_appended_on_its_own_line_with_secrets_masked() {
         let d = tempfile::tempdir().unwrap();
-        let f = d.path().join(".nemo/NEMO.md");
-        let root = nemo_core::canonicalize(d.path()).unwrap();
+        let f = d.path().join(".synthesis/SYNTHESIS.md");
+        let root = synthesis_core::canonicalize(d.path()).unwrap();
         assert_eq!(
             append_note(&f, Some(&root), "run cargo test\nfirst", &r()),
             Ok(false)
@@ -204,7 +205,7 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(&other, "target\n").unwrap();
         std::os::unix::fs::symlink(&other, root.join("AGENTS.md")).unwrap();
-        let root = nemo_core::canonicalize(&root).unwrap();
+        let root = synthesis_core::canonicalize(&root).unwrap();
         let e = append_note(&root.join("AGENTS.md"), Some(&root), "note", &r()).unwrap_err();
         assert!(e.contains("outside the project"), "{e}");
         assert_eq!(std::fs::read_to_string(&other).unwrap(), "target\n");
@@ -216,8 +217,8 @@ mod tests {
         assert_eq!(n, "see `@~/.ssh/id_rsa` and `@x.md` bye a@b");
         assert!(!masked);
         let d = tempfile::tempdir().unwrap();
-        let f = d.path().join("NEMO.md");
-        let root = nemo_core::canonicalize(d.path()).unwrap();
+        let f = d.path().join("SYNTHESIS.md");
+        let root = synthesis_core::canonicalize(d.path()).unwrap();
         append_note(&f, Some(&root), "@~/.env", &r()).unwrap();
         assert_eq!(std::fs::read_to_string(&f).unwrap(), "- `@~/.env`\n");
     }
@@ -227,7 +228,7 @@ mod tests {
     fn symlinks_and_git_targets_are_refused_and_nothing_is_created_outside() {
         use std::os::unix::fs::PermissionsExt;
         let d = tempfile::tempdir().unwrap();
-        let root = nemo_core::canonicalize(d.path()).unwrap().join("repo");
+        let root = synthesis_core::canonicalize(d.path()).unwrap().join("repo");
         std::fs::create_dir_all(root.join(".git")).unwrap();
         let other = d.path().join("other");
         std::fs::write(&other, "t\n").unwrap();
@@ -237,15 +238,16 @@ mod tests {
         let e = append_note(&root.join("AGENTS.md"), Some(&root), "n", &r()).unwrap_err();
         assert!(e.contains("symbolic link"), "{e}");
         // under .git/
-        let e = append_note(&root.join(".git/NEMO.md"), Some(&root), "n", &r()).unwrap_err();
+        let e = append_note(&root.join(".git/SYNTHESIS.md"), Some(&root), "n", &r()).unwrap_err();
         assert!(e.contains(".git"), "{e}");
         // a directory symlinked out of the project: refused BEFORE create_dir_all makes anything
         std::os::unix::fs::symlink(d.path().join("out"), root.join("esc")).unwrap();
-        let e = append_note(&root.join("esc/sub/NEMO.md"), Some(&root), "n", &r()).unwrap_err();
+        let e =
+            append_note(&root.join("esc/sub/SYNTHESIS.md"), Some(&root), "n", &r()).unwrap_err();
         assert!(e.contains("outside") || e.contains("dangling"), "{e}");
         assert!(!d.path().join("out").exists());
         // new files are private
-        let f = root.join(".nemo/NEMO.md");
+        let f = root.join(".synthesis/SYNTHESIS.md");
         append_note(&f, Some(&root), "n", &r()).unwrap();
         assert_eq!(
             std::fs::metadata(&f).unwrap().permissions().mode() & 0o777,

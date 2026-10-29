@@ -1,6 +1,6 @@
 {
   "agents": [],
-  "autoMemoryDir": "<HOME>/.nemo/projects/<SANITIZED_CWD>/memory",
+  "autoMemoryDir": "<HOME>/.synthesis/projects/<SANITIZED_CWD>/memory",
   "claudeDir": "<HOME>/.claude",
   "commands": [],
   "mcpServers": [],
@@ -24,7 +24,7 @@
   },
   "skills": [
     {
-      "name": "nemocode-config",
+      "name": "synthesis-config",
       "source": "built-in"
     },
     {
@@ -33,9 +33,9 @@
         "Grep"
       ],
       "description": "finds things",
-      "dir": "<TMP>/ws/.nemo/skills/scout",
+      "dir": "<TMP>/ws/.synthesis/skills/scout",
       "name": "scout",
-      "path": "<TMP>/ws/.nemo/skills/scout/SKILL.md",
+      "path": "<TMP>/ws/.synthesis/skills/scout/SKILL.md",
       "source": "project"
     }
   ],

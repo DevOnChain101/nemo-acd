@@ -1,7 +1,7 @@
-//! `nemo import claude`: COPY/CONVERT a Claude Code setup into Nemo-owned files.
+//! `synth import claude`: COPY/CONVERT a Claude Code setup into Synthesis-owned files.
 //!
 //! Claude files are only read here, never at runtime (docs/IMPORT.md). Every path derives from
-//! the injected `Env` (HOME / NEMO_HOME) or from `--from` / `--project-dir`; nothing else is
+//! the injected `Env` (HOME / SYNTHESIS_HOME) or from `--from` / `--project-dir`; nothing else is
 //! touched. Everything is computed in memory first (a malformed source or target aborts before
 //! the first write), then written atomically with a timestamped backup of each changed file.
 //! Credentials are never copied: literal secrets in MCP entries become `${VAR}` references,
@@ -12,9 +12,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use clap::{Args, Subcommand, ValueEnum};
-use nemo_config::{Env, is_secret_shaped};
-use nemo_settings::is_secret_env_key;
 use serde_json::{Map, Value, json};
+use synthesis_config::{Env, is_secret_shaped};
+use synthesis_settings::is_secret_env_key;
 
 const MAX_TEXT: u64 = 1 << 20;
 /// `~/.claude.json` also holds caches and history: allow it to be large.
@@ -32,8 +32,8 @@ const HOOK_EVENTS: [&str; 9] = [
     "Notification",
     "PreCompact",
 ];
-/// Tool names Nemo's toolbox knows (rules may also name `mcp__*` / `browser_*`).
-const NEMO_TOOLS: [&str; 16] = [
+/// Tool names Synthesis's toolbox knows (rules may also name `mcp__*` / `browser_*`).
+const SYNTHESIS_TOOLS: [&str; 16] = [
     "Bash",
     "BashOutput",
     "KillShell",
@@ -83,7 +83,7 @@ pub enum ScopeSel {
 pub struct ClaudeArgs {
     #[arg(long, value_enum, default_value = "all")]
     scope: ScopeSel,
-    /// Project to import into `<DIR>/.nemo` (needed for the project scope).
+    /// Project to import into `<DIR>/.synthesis` (needed for the project scope).
     #[arg(long)]
     project_dir: Option<PathBuf>,
     /// Claude config directory (default: $HOME/.claude; `.claude.json` is read from its parent).
@@ -99,7 +99,7 @@ pub struct ClaudeArgs {
     /// (default: all but memory).
     #[arg(long, value_delimiter = ',')]
     only: Vec<String>,
-    /// Merge into existing Nemo files, keeping their values (default).
+    /// Merge into existing Synthesis files, keeping their values (default).
     #[arg(long, conflicts_with_all = ["overwrite", "skip_existing"])]
     merge: bool,
     /// Replace what the import manages; backups are still made.
@@ -221,7 +221,7 @@ struct Imp {
 
 /// Where one scope's files go.
 struct Target {
-    /// `$NEMO_HOME` or `<project>/.nemo`.
+    /// `$SYNTHESIS_HOME` or `<project>/.synthesis`.
     root: PathBuf,
     user: bool,
 }
@@ -336,7 +336,7 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let dir = path.parent().ok_or("no parent directory")?;
     std::fs::create_dir_all(dir).map_err(e)?;
     let tmp = dir.join(format!(
-        ".{}.nemo-import-tmp",
+        ".{}.synthesis-import-tmp",
         path.file_name().and_then(|n| n.to_str()).unwrap_or("f")
     ));
     {
@@ -345,7 +345,7 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
         o.write(true).create(true).truncate(true);
         #[cfg(unix)]
         {
-            // settings/nemo.json may hold env or headers: owner-only, like every file we write
+            // settings/synthesis.json may hold env or headers: owner-only, like every file we write
             use std::os::unix::fs::OpenOptionsExt;
             o.mode(0o600);
         }
@@ -450,7 +450,7 @@ fn refs(v: &str) -> Vec<String> {
     out
 }
 
-/// Fits a Claude MCP entry into Nemo's closed `config.json/v1` server schema (a key outside it
+/// Fits a Claude MCP entry into Synthesis's closed `config.json/v1` server schema (a key outside it
 /// makes the whole file invalid): unknown keys are dropped by name, `disabled` becomes `enabled`.
 fn conform_server(cfg: &Value) -> (Value, Vec<String>) {
     const FIELDS: [&str; 8] = [
@@ -480,7 +480,7 @@ fn conform_server(cfg: &Value) -> (Value, Vec<String>) {
                 }
                 _ if o.contains_key("url") => {
                     notes.push(format!(
-                        "transport type {} is unknown to Nemo; treated as http",
+                        "transport type {} is unknown to Synthesis; treated as http",
                         clean(&v.to_string())
                     ));
                     out.insert(k.clone(), json!("http"));
@@ -513,7 +513,7 @@ fn conform_server(cfg: &Value) -> (Value, Vec<String>) {
     }
     if !dropped.is_empty() {
         notes.push(format!(
-            "keys outside Nemo's MCP schema dropped: {}",
+            "keys outside Synthesis's MCP schema dropped: {}",
             clean(&dropped.join(", "))
         ));
     }
@@ -653,9 +653,9 @@ fn has_literal_secret(cfg: &Value) -> bool {
 // ---------------------------------------------------------------------------------------------
 // tool names, rules, frontmatter
 
-/// Claude tool name to Nemo's tool name (`None`: Nemo has no such tool).
+/// Claude tool name to Synthesis's tool name (`None`: Synthesis has no such tool).
 fn map_tool(name: &str) -> Option<&'static str> {
-    NEMO_TOOLS
+    SYNTHESIS_TOOLS
         .iter()
         .find(|t| **t == name)
         .copied()
@@ -715,7 +715,7 @@ fn translate_tools(v: &str, dropped: &mut Vec<String>) -> String {
     if bracket { format!("[{j}]") } else { j }
 }
 
-/// Rewrites the tool lists of a `---` frontmatter and reports fields Nemo does not use.
+/// Rewrites the tool lists of a `---` frontmatter and reports fields Synthesis does not use.
 fn translate_fm(
     text: &str,
     tool_keys: &[&str],
@@ -763,13 +763,13 @@ fn translate_fm(
     }
     if !dropped.is_empty() {
         notes.push(format!(
-            "{what}: tools with no Nemo equivalent dropped: {}",
+            "{what}: tools with no Synthesis equivalent dropped: {}",
             clean(&dropped.join(", "))
         ));
     }
     if !unused.is_empty() {
         notes.push(format!(
-            "{what}: fields Nemo does not use (kept in the file): {}",
+            "{what}: fields Synthesis does not use (kept in the file): {}",
             clean(&unused.join(", "))
         ));
     }
@@ -797,7 +797,7 @@ fn strip_fm(text: &str) -> (&str, bool) {
     (text, false)
 }
 
-/// Why a Claude permission rule cannot be carried over (`None`: copied verbatim; Nemo's rule
+/// Why a Claude permission rule cannot be carried over (`None`: copied verbatim; Synthesis's rule
 /// engine is a port of Claude's, the `//`, `~/` and `/` path forms mean the same).
 fn bad_rule(r: &str) -> Option<String> {
     if r.is_empty() {
@@ -807,12 +807,12 @@ fn bad_rule(r: &str) -> Option<String> {
     if r.contains('(') && (!r.ends_with(')') || r.ends_with("()")) {
         return Some("malformed rule".into());
     }
-    let known = NEMO_TOOLS.contains(&tool)
+    let known = SYNTHESIS_TOOLS.contains(&tool)
         || RULE_ONLY_TOOLS.contains(&tool)
         || tool.starts_with("mcp__")
         || tool.starts_with("browser_")
         || tool == "*";
-    (!known).then(|| format!("tool \"{}\" does not exist in Nemo", clean(tool)))
+    (!known).then(|| format!("tool \"{}\" does not exist in Synthesis", clean(tool)))
 }
 
 fn is_broad(r: &str) -> bool {
@@ -1098,13 +1098,13 @@ impl Imp {
             .into_iter()
             .filter(|p| p.extension().is_some_and(|e| e == "md"))
             .collect();
-        let target = project_dir.map_or(t.root.join("NEMO.md"), |p| p.join("NEMO.md"));
+        let target = project_dir.map_or(t.root.join("SYNTHESIS.md"), |p| p.join("SYNTHESIS.md"));
         let mut skip_note = None;
         if let Some(p) = project_dir {
-            // Nemo reads the project's CLAUDE.md and CLAUDE.local.md by itself; only
-            // .claude/rules need a Nemo-owned file (NEMO.md wins over CLAUDE.md, so it carries
+            // Synthesis reads the project's CLAUDE.md and CLAUDE.local.md by itself; only
+            // .claude/rules need a Synthesis-owned file (SYNTHESIS.md wins over CLAUDE.md, so it carries
             // the base text too).
-            let winner = ["NEMO.md", "AGENTS.md"].into_iter().find(|n| {
+            let winner = ["SYNTHESIS.md", "AGENTS.md"].into_iter().find(|n| {
                 read_text(&p.join(n))
                     .ok()
                     .flatten()
@@ -1117,14 +1117,14 @@ impl Imp {
                     let n = winner
                         .map(|w| {
                             vec![format!(
-                                "{w} exists and wins: this CLAUDE.md is not loaded by Nemo"
+                                "{w} exists and wins: this CLAUDE.md is not loaded by Synthesis"
                             )]
                         })
                         .unwrap_or_default();
                     self.note(
                         Kind::Instructions,
                         &b.to_string_lossy(),
-                        "(loaded by Nemo as is)",
+                        "(loaded by Synthesis as is)",
                         Act::Unchanged,
                         n,
                     );
@@ -1135,7 +1135,7 @@ impl Imp {
                 self.note(
                     Kind::Instructions,
                     &local.to_string_lossy(),
-                    "(loaded by Nemo as is)",
+                    "(loaded by Synthesis as is)",
                     Act::Unchanged,
                     vec![],
                 );
@@ -1145,7 +1145,7 @@ impl Imp {
             }
             if let Some(w) = winner {
                 skip_note = Some(format!(
-                    "{w} already exists; add `@.nemo/rules/<file>` lines to it by hand"
+                    "{w} already exists; add `@.synthesis/rules/<file>` lines to it by hand"
                 ));
             }
         } else if base.is_none() && rule_files.is_empty() {
@@ -1165,7 +1165,7 @@ impl Imp {
             let (stripped, has_paths) = strip_fm(&text);
             if has_paths {
                 notes.push(format!(
-                    "rule {} is path-scoped in Claude; Nemo loads it for every task",
+                    "rule {} is path-scoped in Claude; Synthesis loads it for every task",
                     clean(&r.to_string_lossy())
                 ));
             }
@@ -1179,7 +1179,7 @@ impl Imp {
                 vec![],
             );
             imports += &if project_dir.is_some() {
-                format!("@.nemo/rules/{rel}\n")
+                format!("@.synthesis/rules/{rel}\n")
             } else {
                 format!("@rules/{rel}\n")
             };
@@ -1190,7 +1190,8 @@ impl Imp {
         let src = base.as_ref().map_or(rules_dir.clone(), |b| b.0.clone());
         if body.len() > 32 * 1024 {
             notes.push(
-                "larger than Nemo's 32 KiB instruction cap: the tail is cut when loaded".into(),
+                "larger than Synthesis's 32 KiB instruction cap: the tail is cut when loaded"
+                    .into(),
             );
         }
         if let Some(n) = skip_note {
@@ -1205,7 +1206,7 @@ impl Imp {
             return Ok(());
         }
         let header = format!(
-            "{HEADER_PREFIX}{} on {} by nemo import claude -->\n",
+            "{HEADER_PREFIX}{} on {} by synth import claude -->\n",
             clean(&src.to_string_lossy()),
             self.date
         );
@@ -1256,10 +1257,10 @@ impl Imp {
         }
         let mut notes = vec![];
         if let Some(m) = raw.get("model").and_then(Value::as_str) {
-            notes.push(format!("model \"{}\" noted, not imported: use NEMO_MODEL or `model` in nemo.json (Nemo aliases opus|sonnet|haiku|fable exist)", clean(m)));
+            notes.push(format!("model \"{}\" noted, not imported: use SYNTHESIS_MODEL or `model` in synthesis.json (Synthesis aliases opus|sonnet|haiku|fable exist)", clean(m)));
         }
         if raw.get("statusLine").is_some() {
-            notes.push("statusLine not imported (Nemo has its own status line)".into());
+            notes.push("statusLine not imported (Synthesis has its own status line)".into());
         }
         let ignored: Vec<&str> = raw
             .as_object()
@@ -1270,7 +1271,7 @@ impl Imp {
             .collect();
         if !ignored.is_empty() {
             notes.push(format!(
-                "other settings keys not imported (no Nemo equivalent, or credential-related): {}",
+                "other settings keys not imported (no Synthesis equivalent, or credential-related): {}",
                 clean(&ignored.join(", "))
             ));
         }
@@ -1286,7 +1287,7 @@ impl Imp {
         Ok(())
     }
 
-    /// `.nemo/.gitignore` lists settings.local.json (as Nemo's own "allow always" does).
+    /// `.synthesis/.gitignore` lists settings.local.json (as Synthesis's own "allow always" does).
     fn gitignore_local(&mut self, dst: &Path) -> Result<(), String> {
         let gi = dst.with_file_name(".gitignore");
         let cur = read_text(&gi)?.unwrap_or_default();
@@ -1360,7 +1361,7 @@ impl Imp {
             if ok {
                 mode = Some(m.to_string());
             } else if m == "bypassPermissions" || m == "auto" {
-                notes.push(format!("defaultMode \"{m}\" NOT imported (mapped to \"default\"); Nemo never takes it from settings"));
+                notes.push(format!("defaultMode \"{m}\" NOT imported (mapped to \"default\"); Synthesis never takes it from settings"));
             } else {
                 notes.push(format!(
                     "defaultMode \"{}\" is not allowed here, left unset",
@@ -1432,7 +1433,7 @@ impl Imp {
         for (ev, gs) in h {
             if !HOOK_EVENTS.contains(&ev.as_str()) {
                 notes.push(format!(
-                    "hook event {} is not supported by Nemo, skipped",
+                    "hook event {} is not supported by Synthesis, skipped",
                     clean(ev)
                 ));
                 continue;
@@ -1639,7 +1640,7 @@ impl Imp {
             let mut notes = vec![];
             if std::mem::take(&mut first) {
                 notes.push(
-                    "Nemo does not run custom slash commands yet; files are staged in commands/"
+                    "Synthesis does not run custom slash commands yet; files are staged in commands/"
                         .into(),
                 );
             }
@@ -1711,8 +1712,13 @@ impl Imp {
         Ok(())
     }
 
-    fn memory(&mut self, from: &Path, project_dir: &Path, nemo_home: &Path) -> Result<(), String> {
-        let key = nemo_session::node::sanitize_path(&project_dir.to_string_lossy());
+    fn memory(
+        &mut self,
+        from: &Path,
+        project_dir: &Path,
+        synthesis_home: &Path,
+    ) -> Result<(), String> {
+        let key = synthesis_session::node::sanitize_path(&project_dir.to_string_lossy());
         let src = from.join("projects").join(&key).join("memory");
         let mut first = true;
         for f in list(&src) {
@@ -1727,24 +1733,24 @@ impl Imp {
             } else {
                 vec![]
             };
-            let dst = nemo_home
+            let dst = synthesis_home
                 .join("projects")
                 .join(crate::ctx::auto_memory_key(project_dir))
                 .join("memory")
                 .join(&f);
-            self.put_file(Kind::Memory, &src.join(&f), &dst, nemo_home, b, notes);
+            self.put_file(Kind::Memory, &src.join(&f), &dst, synthesis_home, b, notes);
         }
         Ok(())
     }
 
     // --- MCP ------------------------------------------------------------------------------------
 
-    /// `servers`: Claude-shape map. `ptr`: where it goes in nemo.json (user-owned file).
+    /// `servers`: Claude-shape map. `ptr`: where it goes in synthesis.json (user-owned file).
     fn mcp_servers(
         &mut self,
         servers: &Value,
         src: &str,
-        nemo_json: &Path,
+        synthesis_json: &Path,
         ptr: &[&str],
         root: &Path,
     ) -> Result<(), String> {
@@ -1769,7 +1775,7 @@ impl Imp {
             notes.extend(more);
             for v in &vars {
                 notes.push(format!("literal secret replaced by ${{{v}}}"));
-                self.todo.push(format!("export {v} (replaces a literal secret of MCP server \"{}\") and list it in nemo.mcp.env_passthrough of the user settings.json", clean(name)));
+                self.todo.push(format!("export {v} (replaces a literal secret of MCP server \"{}\") and list it in synthesis.mcp.env_passthrough of the user settings.json", clean(name)));
             }
             if let Some(h) = server_hash(name, &red, "user") {
                 notes.push(format!("definition hash {h}"));
@@ -1779,7 +1785,7 @@ impl Imp {
                 .filter(|v| !vars.contains(v))
             {
                 let line = format!(
-                    "export {v} and list it in nemo.mcp.env_passthrough of the user settings.json (MCP servers only see allowlisted variables)"
+                    "export {v} and list it in synthesis.mcp.env_passthrough of the user settings.json (MCP servers only see allowlisted variables)"
                 );
                 if !self.todo.contains(&line) {
                     self.todo.push(line);
@@ -1789,7 +1795,7 @@ impl Imp {
             p.push(name);
             let new = red.clone();
             let mut kept_existing = false;
-            let act = self.jedit(nemo_json, &p, |n| {
+            let act = self.jedit(synthesis_json, &p, |n| {
                 if n.is_null() || overwrite {
                     *n = new;
                 } else if *n != new {
@@ -1800,7 +1806,7 @@ impl Imp {
                 notes.push("a different server of this name exists; kept (use --overwrite)".into());
             }
             if matches!(act, Act::Create | Act::Update) {
-                self.jedit(nemo_json, &["$schema"], |n| {
+                self.jedit(synthesis_json, &["$schema"], |n| {
                     if n.is_null() {
                         *n = json!("config.json/v1");
                     }
@@ -1809,13 +1815,13 @@ impl Imp {
             if act != Act::Skip && !kept_existing {
                 self.record(
                     root,
-                    &format!("nemo.json#mcp/{}/{}", ptr.len(), clean(name)),
+                    &format!("synthesis.json#mcp/{}/{}", ptr.len(), clean(name)),
                     Kind::Mcp,
                     src,
                     None,
                 );
             }
-            let tgt = format!("{} [{}]", nemo_json.display(), ptr.join("."));
+            let tgt = format!("{} [{}]", synthesis_json.display(), ptr.join("."));
             self.note(
                 Kind::Mcp,
                 &label,
@@ -1827,7 +1833,7 @@ impl Imp {
         Ok(())
     }
 
-    /// Project `.mcp.json` is read by Nemo itself (hash approval); only report and warn.
+    /// Project `.mcp.json` is read by Synthesis itself (hash approval); only report and warn.
     fn mcp_project_file(&mut self, p: &Path) -> Result<(), String> {
         let Some(v) = read_obj(p, MAX_TEXT)? else {
             return Ok(());
@@ -1846,7 +1852,7 @@ impl Imp {
             self.note(
                 Kind::Mcp,
                 &format!("{} [{}]", p.display(), clean(name)),
-                "(read by Nemo as is; needs approval)",
+                "(read by Synthesis as is; needs approval)",
                 Act::Unchanged,
                 notes,
             );
@@ -1900,7 +1906,7 @@ struct Cx<'a> {
 }
 
 fn server_hash(name: &str, cfg: &Value, scope: &str) -> Option<String> {
-    nemo_mcp::parse_claude_servers(&json!({ name: cfg.clone() }), Some(scope))
+    synthesis_mcp::parse_claude_servers(&json!({ name: cfg.clone() }), Some(scope))
         .0
         .first()
         .map(|s| crate::mcp::definition_hash(s)[..24].to_string())
@@ -1933,7 +1939,7 @@ fn claude(env: &Env, a: &ClaudeArgs) -> Result<u8, String> {
     let project = match (&a.project_dir, a.scope) {
         (_, ScopeSel::User) => None,
         (Some(p), _) => Some(
-            nemo_core::canonicalize(p)
+            synthesis_core::canonicalize(p)
                 .map_err(|e| format!("--project-dir {}: {e}", p.display()))?,
         ),
         (None, ScopeSel::Project) => return Err("--scope project needs --project-dir DIR".into()),
@@ -1978,9 +1984,9 @@ fn claude(env: &Env, a: &ClaudeArgs) -> Result<u8, String> {
         .map(|p| p.join(".claude.json"))
         .unwrap_or_default();
     let cj = read_obj(&claude_json, MAX_CLAUDE_JSON)?;
-    let nemo_json = h.nemo.join("nemo.json");
+    let synthesis_json = h.synthesis.join("synthesis.json");
     let user_t = Target {
-        root: h.nemo.clone(),
+        root: h.synthesis.clone(),
         user: true,
     };
 
@@ -1990,7 +1996,7 @@ fn claude(env: &Env, a: &ClaudeArgs) -> Result<u8, String> {
         }
         imp.settings(
             &from.join("settings.json"),
-            &h.nemo.join("settings.json"),
+            &h.synthesis.join("settings.json"),
             &user_t,
             false,
         )?;
@@ -2009,16 +2015,16 @@ fn claude(env: &Env, a: &ClaudeArgs) -> Result<u8, String> {
             imp.mcp_servers(
                 m,
                 &claude_json.to_string_lossy(),
-                &nemo_json,
+                &synthesis_json,
                 &["mcpServers"],
-                &h.nemo,
+                &h.synthesis,
             )?;
         }
     }
     let mut project_note = false;
     if let Some(p) = &project {
         let t = Target {
-            root: p.join(".nemo"),
+            root: p.join(".synthesis"),
             user: false,
         };
         let pc = p.join(".claude");
@@ -2054,7 +2060,7 @@ fn claude(env: &Env, a: &ClaudeArgs) -> Result<u8, String> {
                 .and_then(|m| {
                     m.iter().find(|(k, _)| {
                         Path::new(k) == p.as_path()
-                            || nemo_core::canonicalize(k).is_ok_and(|c| c == *p)
+                            || synthesis_core::canonicalize(k).is_ok_and(|c| c == *p)
                     })
                 })
                 .and_then(|(k, v)| v.get("mcpServers").map(|s| (k.clone(), s.clone())));
@@ -2063,15 +2069,15 @@ fn claude(env: &Env, a: &ClaudeArgs) -> Result<u8, String> {
                 imp.mcp_servers(
                     &s,
                     &src,
-                    &nemo_json,
+                    &synthesis_json,
                     &["projects", &k, "mcpServers"],
-                    &h.nemo,
+                    &h.synthesis,
                 )?;
             }
             imp.mcp_project_file(&p.join(".mcp.json"))?;
         }
         if imp.cats.contains(&Kind::Memory) {
-            imp.memory(&from, p, &h.nemo)?;
+            imp.memory(&from, p, &h.synthesis)?;
         }
     } else if a.scope == ScopeSel::All {
         project_note = true;
@@ -2081,7 +2087,7 @@ fn claude(env: &Env, a: &ClaudeArgs) -> Result<u8, String> {
     let changes = imp.changes();
 
     out!(
-        "nemo import claude: {} from {}",
+        "synth import claude: {} from {}",
         if a.apply { "APPLY" } else { "DRY RUN" },
         clean(&from.to_string_lossy())
     );
@@ -2146,12 +2152,12 @@ fn claude(env: &Env, a: &ClaudeArgs) -> Result<u8, String> {
     Ok(0)
 }
 
-/// `nemo doctor`: what imports left behind (counts and paths only).
-pub fn doctor_report(nemo_home: &Path, project_root: &Path) {
+/// `synth doctor`: what imports left behind (counts and paths only).
+pub fn doctor_report(synthesis_home: &Path, project_root: &Path) {
     let mut any = false;
     for (label, root) in [
-        ("user", nemo_home.to_path_buf()),
-        ("project", project_root.join(".nemo")),
+        ("user", synthesis_home.to_path_buf()),
+        ("project", project_root.join(".synthesis")),
     ] {
         let Ok(Some(v)) = read_obj(&root.join("imports").join("claude.json"), MAX_TEXT) else {
             continue;
@@ -2176,14 +2182,19 @@ pub fn doctor_report(nemo_home: &Path, project_root: &Path) {
             list.join(", ")
         );
     }
-    let proj = ["NEMO.md", "AGENTS.md", "CLAUDE.md", ".claude/CLAUDE.md"]
-        .iter()
-        .map(|n| project_root.join(n))
-        .find(|p| std::fs::read_to_string(p).is_ok_and(|s| !s.trim().is_empty()));
+    let proj = [
+        "SYNTHESIS.md",
+        "AGENTS.md",
+        "CLAUDE.md",
+        ".claude/CLAUDE.md",
+    ]
+    .iter()
+    .map(|n| project_root.join(n))
+    .find(|p| std::fs::read_to_string(p).is_ok_and(|s| !s.trim().is_empty()));
     out!(
         "instruction files: user {}, project {}{}",
-        if nemo_home.join("NEMO.md").is_file() {
-            "NEMO.md"
+        if synthesis_home.join("SYNTHESIS.md").is_file() {
+            "SYNTHESIS.md"
         } else {
             "none"
         },

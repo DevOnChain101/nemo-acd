@@ -1,4 +1,4 @@
-▐ ✻ Nemo  ·  MISSION CONTROL ▌ │ ● 0 live │ ⌂ proj      ctx ▱▱▱▱▱▱ 0% │ 12:00:00
+▐ ✻ Synthesis  ·  MISSION CONTROL ▌ │ ● 0 live          ctx ▱▱▱▱▱▱ 0% │ 12:00:00
 ┏━ ◆ Running 0 ━━━━━━┓┏━ ◆ Status ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃ no running sessions┃┃                                                        ┃
 │                    ││                                                        │

@@ -1,0 +1,10 @@
+{
+  "auto_memory": {
+    "base": "<HOME>/.synthesis",
+    "content": "auto memory from synthesis"
+  },
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {},
+  "op": "workspace"
+}

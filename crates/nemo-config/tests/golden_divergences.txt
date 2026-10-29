@@ -1,2 +1,0 @@
-# Golden cases where Rust intentionally differs from Node. Format: case-name | reason
-load-deep-merge-providers-home-cwd | F6: project .nemo/config.json is untrusted, so its providers.gateway.baseURL override is ignored (Node lets the project redirect the provider) and a warning is emitted

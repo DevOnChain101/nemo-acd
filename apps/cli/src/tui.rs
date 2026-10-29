@@ -1,15 +1,15 @@
-//! `nemo` / `nemo tui`: the interactive app over the same harness wiring as `nemo run`.
+//! `synth` / `synth tui`: the interactive app over the same harness wiring as `synth run`.
 
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
 use clap::Args;
-use nemo_config::Env;
-use nemo_core::TaskStatus;
-use nemo_harness::TaskOutcome;
-use nemo_tui::{ExitReason, OnceOptions, Options, Tty, load_resume};
-use nemo_tui_base::Platform;
-use nemo_tui_base::sgr::ColorMode;
+use synthesis_config::Env;
+use synthesis_core::TaskStatus;
+use synthesis_harness::TaskOutcome;
+use synthesis_tui::{ExitReason, OnceOptions, Options, Tty, load_resume};
+use synthesis_tui_base::Platform;
+use synthesis_tui_base::sgr::ColorMode;
 
 use crate::homes;
 use crate::run::{
@@ -32,21 +32,21 @@ pub struct TuiArgs {
     pub common: Common,
 }
 
-const USAGE: &str = "nemo: the interactive app needs a terminal on stdin and stdout.\nUsage: nemo --cwd DIR [--resume ID] [--once] [--worktree] [--sandbox MODE] [--network MODE] ...\n       nemo run --cwd DIR --prompt TEXT   (headless; events as JSONL)\n       nemo --help";
+const USAGE: &str = "synth: the interactive app needs a terminal on stdin and stdout.\nUsage: synth --cwd DIR [--resume ID] [--once] [--worktree] [--sandbox MODE] [--network MODE] ...\n       synth run --cwd DIR --prompt TEXT   (headless; events as JSONL)\n       synth --help";
 
 fn start_dir(a: &TuiArgs) -> Result<PathBuf, String> {
     // The workspace is always explicit (clippy.toml forbids reading the process cwd).
     let d = a
         .cwd
         .as_ref()
-        .ok_or("pass --cwd DIR: nemo never assumes the process working directory")?;
-    nemo_core::canonicalize(d).map_err(|e| format!("--cwd {}: {e}", d.display()))
+        .ok_or("pass --cwd DIR: synthesis never assumes the process working directory")?;
+    synthesis_core::canonicalize(d).map_err(|e| format!("--cwd {}: {e}", d.display()))
 }
 
 /// Canonical project root of `cwd`.
 fn root_of(cwd: &Path) -> PathBuf {
-    let r = nemo_settings::find_project_root(cwd);
-    nemo_core::canonicalize(&r).unwrap_or(r)
+    let r = synthesis_settings::find_project_root(cwd);
+    synthesis_core::canonicalize(&r).unwrap_or(r)
 }
 
 /// `--trust-project` / `--approve-mcp` were granted for ONE project root. After OpenFolder or
@@ -56,8 +56,8 @@ fn common_for(c: &Common, granted: &Path, cwd: &Path) -> Common {
     let mut c = c.clone();
     if c.trust_project && root_of(cwd) != granted {
         eprintln!(
-            "nemo: project root changed; --trust-project and --approve-mcp apply only to {}, so this project is untrusted",
-            nemo_harness::sanitize_for_display(&granted.display().to_string())
+            "synth: project root changed; --trust-project and --approve-mcp apply only to {}, so this project is untrusted",
+            synthesis_harness::sanitize_for_display(&granted.display().to_string())
         );
         c.trust_project = false;
         c.approve_mcp.clear();
@@ -76,13 +76,13 @@ fn once(a: &TuiArgs, env: &Env) -> Result<u8, String> {
     let resume = a
         .resume
         .as_deref()
-        .map(|id| load_resume(&h.nemo, id))
+        .map(|id| load_resume(&h.synthesis, id))
         .transpose()?;
     let cwd = match &resume {
         Some(r) => r.record.cwd.clone(),
         None => start_dir(a)?.to_string_lossy().into_owned(),
     };
-    let (cols, rows) = nemo_tui::size_from_env(env);
+    let (cols, rows) = synthesis_tui::size_from_env(env);
     let o = OnceOptions {
         cwd,
         session_id: resume
@@ -97,9 +97,9 @@ fn once(a: &TuiArgs, env: &Env) -> Result<u8, String> {
             .map(|r| r.record.budget.clone())
             .unwrap_or_default(),
         sandbox: sandbox_status(a.common.sandbox_mode(), false),
-        mode: nemo_permissions::Mode::Default,
+        mode: synthesis_permissions::Mode::Default,
         events: resume.map(|r| r.events).unwrap_or_default(),
-        saved: nemo_tui::list_saved(&h.nemo, None).unwrap_or_default(),
+        saved: synthesis_tui::list_saved(&h.synthesis, None).unwrap_or_default(),
         cols,
         rows,
         now: now_ms(),
@@ -112,12 +112,12 @@ fn once(a: &TuiArgs, env: &Env) -> Result<u8, String> {
     };
     // colour escapes belong to a terminal: into a pipe or file the frame is plain text
     let mut frame = Vec::new();
-    let res = nemo_tui::render_once(&o, &mut frame).and_then(|()| {
+    let res = synthesis_tui::render_once(&o, &mut frame).and_then(|()| {
         let text = String::from_utf8_lossy(&frame);
         let text = if std::io::stdout().is_terminal() {
             text.into_owned()
         } else {
-            nemo_tui_base::text::strip_ansi(&text)
+            synthesis_tui_base::text::strip_ansi(&text)
         };
         std::io::Write::write_all(&mut std::io::stdout(), text.as_bytes())
     });
@@ -141,7 +141,7 @@ pub fn launch(a: TuiArgs, env: Env) -> Result<u8, String> {
     let mut resume = a
         .resume
         .as_deref()
-        .map(|id| load_resume(&h.nemo, id))
+        .map(|id| load_resume(&h.synthesis, id))
         .transpose()?;
     // `/model NAME` restarts on the same session with that model; a model that cannot be built
     // falls back to the one in use, with a note.
@@ -173,7 +173,7 @@ pub fn launch(a: TuiArgs, env: Env) -> Result<u8, String> {
                     "/model: could not switch ({e}); staying on the previous model"
                 ));
                 model = prev;
-                resume = load_resume(&h.nemo, &sid).ok();
+                resume = load_resume(&h.synthesis, &sid).ok();
                 continue;
             }
         };
@@ -215,9 +215,9 @@ pub fn launch(a: TuiArgs, env: Env) -> Result<u8, String> {
             let m = m.clone();
             o.mcp_report = Some(Box::new(move || mcp_lines(&m)));
         }
-        o.saved = nemo_tui::list_saved(&ph.nemo, None).unwrap_or_default();
+        o.saved = synthesis_tui::list_saved(&ph.synthesis, None).unwrap_or_default();
         o.resume = resume.take();
-        let exit = nemo_tui::run_interactive(o, Tty::stdio(&env)).map_err(|e| e.to_string());
+        let exit = synthesis_tui::run_interactive(o, Tty::stdio(&env)).map_err(|e| e.to_string());
         // The harness ends the session whatever the UI returned.
         let outcome = exit
             .as_ref()
@@ -229,7 +229,7 @@ pub fn launch(a: TuiArgs, env: Env) -> Result<u8, String> {
                 reason: "closed".into(),
                 verification_report_id: None,
                 final_text: String::new(),
-                usage: nemo_events::Usage {
+                usage: synthesis_events::Usage {
                     input_tokens: 0,
                     output_tokens: 0,
                     cache_read_input_tokens: None,
@@ -246,17 +246,18 @@ pub fn launch(a: TuiArgs, env: Env) -> Result<u8, String> {
             tokio.block_on(m.close());
         }
         if let Some(w) = &worktree {
-            eprintln!("nemo: {}", w.finish(a.common.cleanup_worktree));
+            eprintln!("synth: {}", w.finish(a.common.cleanup_worktree));
         }
         drop(harness);
         match exit?.reason {
             ExitReason::OpenFolder(p) => {
-                cwd = nemo_core::canonicalize(&p).map_err(|e| format!("{}: {e}", p.display()))?;
+                cwd = synthesis_core::canonicalize(&p)
+                    .map_err(|e| format!("{}: {e}", p.display()))?;
             }
-            ExitReason::Resume(id) => resume = Some(load_resume(&ph.nemo, &id)?),
+            ExitReason::Resume(id) => resume = Some(load_resume(&ph.synthesis, &id)?),
             ExitReason::SwitchModel(m) => {
                 switch_from = Some((model.replace(m), sid.clone()));
-                resume = load_resume(&ph.nemo, &sid).ok();
+                resume = load_resume(&ph.synthesis, &sid).ok();
             }
             ExitReason::Quit | ExitReason::InputClosed => return Ok(0),
         }
@@ -264,8 +265,8 @@ pub fn launch(a: TuiArgs, env: Env) -> Result<u8, String> {
 }
 
 /// `/mcp`: one block per server with state, tools and the last error.
-fn mcp_lines(m: &nemo_mcp::McpManager) -> Vec<String> {
-    use nemo_harness::sanitize_for_display as clean;
+fn mcp_lines(m: &synthesis_mcp::McpManager) -> Vec<String> {
+    use synthesis_harness::sanitize_for_display as clean;
     let status = m.status();
     if status.is_empty() {
         return vec!["MCP: no servers are configured for this session".into()];
@@ -293,7 +294,7 @@ fn mcp_lines(m: &nemo_mcp::McpManager) -> Vec<String> {
                 clean(t.description.lines().next().unwrap_or(""))
             ));
         }
-        if matches!(s.state, nemo_mcp::ServerState::Failed) {
+        if matches!(s.state, synthesis_mcp::ServerState::Failed) {
             v.extend(
                 m.stderr_tail(&s.name)
                     .iter()
@@ -331,12 +332,12 @@ mod tests {
             json!({"mcpServers": {"proj": srv}}).to_string(),
         );
         w(
-            ".nemo/config.json",
+            ".synthesis/config.json",
             json!({"$schema": "config.json/v1", "mcp": {"cfg": srv}}).to_string(),
         );
-        w(".nemo/settings.json", json!({"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": format!("touch {}", marker.display())}]}]}, "enableAllProjectMcpServers": true}).to_string());
+        w(".synthesis/settings.json", json!({"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": format!("touch {}", marker.display())}]}]}, "enableAllProjectMcpServers": true}).to_string());
         w(
-            ".nemo/agents/evil.md",
+            ".synthesis/agents/evil.md",
             "---\nname: evil\ndescription: d\n---\nbody".into(),
         );
     }
@@ -344,7 +345,7 @@ mod tests {
     #[test]
     fn trust_does_not_follow_a_relaunch_to_another_project() {
         let d = tempfile::tempdir().unwrap();
-        let root = nemo_core::canonicalize(d.path()).unwrap();
+        let root = synthesis_core::canonicalize(d.path()).unwrap();
         let (a, b) = (root.join("a"), root.join("b"));
         let (ma, mb) = (root.join("marker-a"), root.join("marker-b"));
         for (r, m) in [(&a, &ma), (&b, &mb)] {
@@ -368,8 +369,8 @@ mod tests {
         let env = Env::from_pairs([
             ("HOME", root.to_string_lossy().into_owned()),
             (
-                "NEMO_HOME",
-                root.join("nemo").to_string_lossy().into_owned(),
+                "SYNTHESIS_HOME",
+                root.join("synthesis").to_string_lossy().into_owned(),
             ),
             ("PATH", std::env::var("PATH").unwrap_or_default()),
         ]);

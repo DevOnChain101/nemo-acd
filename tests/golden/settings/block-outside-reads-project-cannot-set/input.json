@@ -1,11 +1,11 @@
 {
   "files": {
-    "<NEMO_HOME>/settings.json": {
+    "<SYNTHESIS_HOME>/settings.json": {
       "permissions": {
         "blockReadsOutsideWorkingDirectories": "true"
       }
     },
-    "<TMP>/ws/.nemo/settings.json": {
+    "<TMP>/ws/.synthesis/settings.json": {
       "permissions": {
         "blockReadsOutsideWorkingDirectories": true
       }

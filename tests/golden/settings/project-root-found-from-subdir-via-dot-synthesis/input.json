@@ -1,0 +1,15 @@
+{
+  "cwd": "<TMP>/ws/pkg/sub",
+  "env": {},
+  "files": {
+    "<TMP>/ws/.synthesis/settings.json": {
+      "permissions": {
+        "allow": [
+          "Root"
+        ]
+      }
+    },
+    "<TMP>/ws/pkg/sub/keep": ""
+  },
+  "op": "workspace"
+}

@@ -1,6 +1,6 @@
 {
   "files": {
-    "<NEMO_HOME>/settings.json": {
+    "<SYNTHESIS_HOME>/settings.json": {
       "autoMode": {
         "allow": [
           "a"
@@ -18,7 +18,7 @@
         "useAutoModeDuringPlan": "no"
       }
     },
-    "<TMP>/ws/.nemo/settings.json": {
+    "<TMP>/ws/.synthesis/settings.json": {
       "autoMode": {
         "allow": [
           "PROJECT"

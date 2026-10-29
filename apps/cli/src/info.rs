@@ -4,11 +4,11 @@ use std::ffi::OsString;
 use std::path::Path;
 
 use clap::Args;
-use nemo_config::{Config, Env, ProjectTrust, list_models, resolve_credential};
-use nemo_harness::sanitize_for_display as san;
-use nemo_providers::{NetSettings, ProviderSpec, RetryPolicy};
-use nemo_sandbox::SandboxBackend;
 use serde_json::json;
+use synthesis_config::{Config, Env, ProjectTrust, list_models, resolve_credential};
+use synthesis_harness::sanitize_for_display as san;
+use synthesis_providers::{NetSettings, ProviderSpec, RetryPolicy};
+use synthesis_sandbox::SandboxBackend;
 use tokio_util::sync::CancellationToken;
 
 use crate::{homes, load_config};
@@ -16,11 +16,13 @@ use crate::{homes, load_config};
 pub fn auth_status(env: &Env, cwd: Option<&Path>) -> Result<u8, String> {
     let h = homes(env)?;
     let cfg = load_config(env, &h, cwd, ProjectTrust::Untrusted)?;
-    let flat = env.get_nonempty("NEMO_PROVIDER").unwrap_or("anthropic");
-    out!("NEMO_HOME: {}", h.nemo.display());
-    out!("flat NEMO_API_KEY / NEMO_AUTH_TOKEN apply to provider: {flat}");
+    let flat = env
+        .get_nonempty("SYNTHESIS_PROVIDER")
+        .unwrap_or("anthropic");
+    out!("SYNTHESIS_HOME: {}", h.synthesis.display());
+    out!("flat SYNTHESIS_API_KEY / SYNTHESIS_AUTH_TOKEN apply to provider: {flat}");
     for (id, p) in &cfg.providers {
-        match resolve_credential(id, Some(p), &h.nemo, env) {
+        match resolve_credential(id, Some(p), &h.synthesis, env) {
             Some(c) => out!("{id}: {} (source: {})", c.masked(), c.source),
             None if p.is_no_auth() => out!("{id}: no authentication required"),
             None => out!("{id}: not configured"),
@@ -57,7 +59,7 @@ pub fn models(env: &Env, a: &ModelsArgs) -> Result<u8, String> {
             .iter()
             .filter(|(_, p)| p.discover != Some(false))
         {
-            let cred = resolve_credential(id, Some(p), &h.nemo, env);
+            let cred = resolve_credential(id, Some(p), &h.synthesis, env);
             let found = ProviderSpec::from_config(id, p, cred.as_ref())
                 .and_then(|s| s.connect(env, &NetSettings::default(), RetryPolicy::default()))
                 .map(|prov| {
@@ -73,7 +75,7 @@ pub fn models(env: &Env, a: &ModelsArgs) -> Result<u8, String> {
                     }
                 }
                 Ok(Err(e)) | Err(e) => {
-                    eprintln!("nemo: {id}: model discovery failed: {}", e.message())
+                    eprintln!("synth: {id}: model discovery failed: {}", e.message())
                 }
             }
         }
@@ -106,7 +108,7 @@ fn guarantees(b: &dyn SandboxBackend) -> String {
 
 /// Per-mode guarantee of one backend, e.g. `deny=Weak loopback=None allow=Strong`.
 fn network_support(b: &dyn SandboxBackend) -> String {
-    use nemo_sandbox::NetworkPolicy::{Allow, Deny, Loopback};
+    use synthesis_sandbox::NetworkPolicy::{Allow, Deny, Loopback};
     [("deny", Deny), ("loopback", Loopback), ("allow", Allow)]
         .iter()
         .map(|(n, m)| format!("{n}={:?}", b.network_guarantee(m)))
@@ -148,13 +150,13 @@ fn git_version(env: &Env) -> Option<String> {
 pub fn doctor(env: &Env, cwd: Option<&Path>) -> Result<u8, String> {
     let mut code = 0;
     out!(
-        "nemo {} on {} {}",
+        "synth {} on {} {}",
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS,
         std::env::consts::ARCH
     );
     let get = |k: &str| env.get(k).map(OsString::from);
-    let sh = nemo_terminal::resolve_shell(cfg!(windows), &get, &|p: &Path| p.exists());
+    let sh = synthesis_terminal::resolve_shell(cfg!(windows), &get, &|p: &Path| p.exists());
     out!(
         "shell: {} kind={:?} is_posix={}{}",
         sh.program.display(),
@@ -163,15 +165,15 @@ pub fn doctor(env: &Env, cwd: Option<&Path>) -> Result<u8, String> {
         sh.note.map(|n| format!(" ({n})")).unwrap_or_default()
     );
 
-    let best = nemo_sandbox::detect();
-    // The exact preflight `nemo run` does under --sandbox enforce, on the standard policy for
+    let best = synthesis_sandbox::detect();
+    // The exact preflight `synth run` does under --sandbox enforce, on the standard policy for
     // this workspace (default network deny), not just "does a backend exist".
     let root = std::fs::canonicalize(cwd.unwrap_or(Path::new("."))).unwrap_or_else(|_| ".".into());
-    let policy = nemo_sandbox::SandboxPolicy::standard(&root, &std::env::temp_dir());
+    let policy = synthesis_sandbox::SandboxPolicy::standard(&root, &std::env::temp_dir());
     let ready = crate::run::sandbox_preflight(&*best, Some(&policy));
-    out!("sandbox for tool commands (`nemo run --sandbox enforce|best-effort|off`):");
+    out!("sandbox for tool commands (`synth run --sandbox enforce|best-effort|off`):");
     out!(
-        "  default mode: enforce; `nemo run` {}",
+        "  default mode: enforce; `synth run` {}",
         if ready.is_ok() {
             "will confine commands"
         } else {
@@ -187,13 +189,13 @@ pub fn doctor(env: &Env, cwd: Option<&Path>) -> Result<u8, String> {
             "  hint: only Landlock is usable. It cannot make read-only paths (.git/hooks, .git/config) inside the writable workspace, so --sandbox enforce needs a working bubblewrap (see the bwrap line below)."
         );
     }
-    out!("  selected {}", guarantees(&*nemo_sandbox::detect()));
+    out!("  selected {}", guarantees(&*synthesis_sandbox::detect()));
     out!(
-        "  network (`nemo run --network deny|loopback|allow`, default deny): {}",
+        "  network (`synth run --network deny|loopback|allow`, default deny): {}",
         network_support(&*best)
     );
     #[cfg(target_os = "macos")]
-    if let Some(b) = nemo_sandbox::SeatbeltBackend::detect() {
+    if let Some(b) = synthesis_sandbox::SeatbeltBackend::detect() {
         out!(
             "  seatbelt available: true; network {}",
             network_support(&b)
@@ -203,10 +205,10 @@ pub fn doctor(env: &Env, cwd: Option<&Path>) -> Result<u8, String> {
     }
     #[cfg(target_os = "linux")]
     for l in linux_backend_lines(
-        nemo_sandbox::LinuxLandlockBackend::detect().map(|b| network_support(&b)),
-        nemo_sandbox::bwrap_probe()
+        synthesis_sandbox::LinuxLandlockBackend::detect().map(|b| network_support(&b)),
+        synthesis_sandbox::bwrap_probe()
             .as_ref()
-            .map(|_| network_support(&nemo_sandbox::BwrapBackend::detect().unwrap())),
+            .map(|_| network_support(&synthesis_sandbox::BwrapBackend::detect().unwrap())),
     ) {
         out!("{l}");
     }
@@ -214,7 +216,7 @@ pub fn doctor(env: &Env, cwd: Option<&Path>) -> Result<u8, String> {
         "  loopback: macOS exposes HOST loopback services; bwrap = private loopback; landlock/windows unsupported"
     );
 
-    match nemo_browser::discover(env, nemo_browser::Os::current(), &|p| p.exists()) {
+    match synthesis_browser::discover(env, synthesis_browser::Os::current(), &|p| p.exists()) {
         Ok(p) => out!("browser: {}", p.display()),
         Err(e) => out!("browser: not found ({e})"),
     }
@@ -242,10 +244,13 @@ pub fn doctor(env: &Env, cwd: Option<&Path>) -> Result<u8, String> {
 
     let h = homes(env)?;
     out!(
-        "NEMO_HOME: {} (exists: {})",
-        h.nemo.display(),
-        h.nemo.is_dir()
+        "SYNTHESIS_HOME: {} (exists: {})",
+        h.synthesis.display(),
+        h.synthesis.is_dir()
     );
+    for l in legacy_notes(env, &h, std::env::current_exe().ok().as_deref()) {
+        out!("{l}");
+    }
     match load_config(env, &h, cwd, ProjectTrust::Untrusted) {
         Ok(cfg) => {
             report_config(&cfg);
@@ -259,6 +264,49 @@ pub fn doctor(env: &Env, cwd: Option<&Path>) -> Result<u8, String> {
     Ok(code)
 }
 
+/// Hints for people coming from the earlier "Nemo" builds, and a PATH shadowing warning. Nothing
+/// legacy is ever read: the old `~/.nemo` and `NEMO_*` are only detected (names, never values).
+fn legacy_notes(env: &Env, h: &crate::Homes, current_exe: Option<&Path>) -> Vec<String> {
+    let mut v = Vec::new();
+    let mut old: Vec<&str> = env
+        .iter()
+        .map(|(k, _)| k)
+        .filter(|k| k.to_ascii_uppercase().starts_with("NEMO_"))
+        .collect();
+    old.sort_unstable();
+    if !old.is_empty() {
+        v.push(format!(
+            "warning: ignored legacy variables (Synthesis reads SYNTHESIS_* only): {}; rename each NEMO_X to SYNTHESIS_X",
+            old.join(", ")
+        ));
+    }
+    let old_home = h.user.join(".nemo");
+    if old_home.is_dir() && !h.synthesis.exists() {
+        v.push(format!(
+            "note: {} exists and {} does not. Synthesis never reads the old location. To migrate, review and run:\n  cp -R {} {}   (Windows: Copy-Item -Recurse)\nthen inside the copy rename nemo.json to synthesis.json and NEMO.md to SYNTHESIS.md, the \"nemo\" key of settings.json to \"synthesis\", and in each project .nemo to .synthesis",
+            old_home.display(),
+            h.synthesis.display(),
+            old_home.display(),
+            h.synthesis.display()
+        ));
+    }
+    let first = env.get_nonempty("PATH").and_then(|p| {
+        std::env::split_paths(p)
+            .flat_map(|d| [d.join("synth"), d.join("synth.exe")])
+            .find(|c| c.is_file())
+    });
+    if let (Some(first), Some(me)) = (first, current_exe)
+        && std::fs::canonicalize(&first).ok() != std::fs::canonicalize(me).ok()
+    {
+        v.push(format!(
+            "warning: `synth` on PATH resolves to {}, not this executable ({})",
+            first.display(),
+            me.display()
+        ));
+    }
+    v
+}
+
 fn report_config(cfg: &Config) {
     out!(
         "config: ok, {} provider(s), default model: {}",
@@ -270,16 +318,16 @@ fn report_config(cfg: &Config) {
     }
 }
 
-/// Settings, MCP, skills and agents as the next `nemo run` would see them for `cwd` with an
+/// Settings, MCP, skills and agents as the next `synth run` would see them for `cwd` with an
 /// untrusted project. Counts and names only, never a value.
 fn report_discovery(env: &Env, h: &crate::Homes, cfg: &Config, cwd: Option<&Path>) {
-    use nemo_settings::{LoadContext, load_settings};
-    let none = h.nemo.join("no-project");
+    use synthesis_settings::{LoadContext, load_settings};
+    let none = h.synthesis.join("no-project");
     let cwd = cwd.unwrap_or(&none);
     let st = load_settings(
         &LoadContext {
             cwd,
-            nemo_home: &h.nemo,
+            synthesis_home: &h.synthesis,
             user_home: &h.user,
             env,
         },
@@ -293,10 +341,10 @@ fn report_discovery(env: &Env, h: &crate::Homes, cfg: &Config, cwd: Option<&Path
         )
     };
     out!("settings.json:");
-    out!("  user file: {}", file(h.nemo.join("settings.json")));
+    out!("  user file: {}", file(h.synthesis.join("settings.json")));
     out!(
         "  project file: {}",
-        file(st.project_root.join(".nemo").join("settings.json"))
+        file(st.project_root.join(".synthesis").join("settings.json"))
     );
     let p = &st.permissions;
     out!(
@@ -322,15 +370,15 @@ fn report_discovery(env: &Env, h: &crate::Homes, cfg: &Config, cwd: Option<&Path
             format!(": {}", san(&st.env_refused.join(", ")))
         }
     );
-    let v = crate::verify_cfg::parse(&st.nemo.verification);
+    let v = crate::verify_cfg::parse(&st.synthesis.verification);
     out!(
-        "  nemo section: verification {} key(s), {} required check(s)",
-        st.nemo.verification.len(),
+        "  synthesis section: verification {} key(s), {} required check(s)",
+        st.synthesis.verification.len(),
         v.checks.len()
     );
-    let (ac, ac_diag) = crate::ctx::read_auto_compact(&h.nemo.join("settings.json"));
+    let (ac, ac_diag) = crate::ctx::read_auto_compact(&h.synthesis.join("settings.json"));
     out!(
-        "  context: auto_compact {}, threshold {} of the model window (nemo.context.auto_compact / auto_compact_threshold in the user settings.json)",
+        "  context: auto_compact {}, threshold {} of the model window (synthesis.context.auto_compact / auto_compact_threshold in the user settings.json)",
         if ac.enabled { "on" } else { "off" },
         ac.threshold
     );
@@ -344,7 +392,7 @@ fn report_discovery(env: &Env, h: &crate::Homes, cfg: &Config, cwd: Option<&Path
         plan.servers.len(),
         plan.skipped.len()
     );
-    let pass = crate::mcp::read_passthrough(&h.nemo.join("settings.json"));
+    let pass = crate::mcp::read_passthrough(&h.synthesis.join("settings.json"));
     for s in &plan.servers {
         out!(
             "  {} [{}] {}",
@@ -369,7 +417,7 @@ fn report_discovery(env: &Env, h: &crate::Homes, cfg: &Config, cwd: Option<&Path
     );
 
     let root = &st.project_root;
-    let skills = nemo_tools::discover_skills(env, root);
+    let skills = synthesis_tools::discover_skills(env, root);
     let proj = skills.iter().filter(|s| !s.trusted).count();
     out!(
         "skills: {} ({} untrusted project skill(s))",
@@ -387,19 +435,44 @@ fn report_discovery(env: &Env, h: &crate::Homes, cfg: &Config, cwd: Option<&Path
             }
         );
     }
-    let ag = crate::agents::load(&h.nemo, root, ProjectTrust::Untrusted);
+    let ag = crate::agents::load(&h.synthesis, root, ProjectTrust::Untrusted);
     out!(
         "agents: {} user, {} project definition(s) ({} project not loaded: project untrusted)",
         ag.user,
         ag.project,
         ag.skipped.len()
     );
-    crate::import::doctor_report(&h.nemo, root);
+    crate::import::doctor_report(&h.synthesis, root);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_notes_detect_old_home_vars_and_path_shadowing() {
+        let d = tempfile::tempdir().unwrap();
+        let (user, bin) = (d.path().join("u"), d.path().join("bin"));
+        std::fs::create_dir_all(user.join(".nemo")).unwrap();
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(bin.join("synth"), "").unwrap();
+        let h = crate::Homes {
+            synthesis: user.join(".synthesis"),
+            user,
+        };
+        let path = bin.to_str().unwrap();
+        let env = Env::from_pairs([("NEMO_API_KEY", "secret-value"), ("PATH", path)]);
+        let v = legacy_notes(&env, &h, Some(&d.path().join("other"))).join("\n");
+        assert!(
+            v.contains("NEMO_API_KEY") && !v.contains("secret-value"),
+            "{v}"
+        );
+        assert!(v.contains("cp -R") && v.contains("resolves to"), "{v}");
+        // this executable is the first on PATH, the new home exists, no legacy variables: silent
+        std::fs::create_dir_all(&h.synthesis).unwrap();
+        let env = Env::from_pairs([("PATH", path)]);
+        assert!(legacy_notes(&env, &h, Some(&bin.join("synth"))).is_empty());
+    }
 
     #[test]
     fn doctor_lines_show_the_probe_failure_and_remedy() {

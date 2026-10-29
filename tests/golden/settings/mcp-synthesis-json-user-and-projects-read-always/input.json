@@ -1,0 +1,26 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<HOME>/.synthesis/synthesis.json": {
+      "mcpServers": {
+        "nu": {
+          "url": "https://n.example.test/x#frag"
+        }
+      },
+      "projects": {
+        "<TMP>/ws": {
+          "disabledMcpServers": [
+            "nu"
+          ],
+          "mcpServers": {
+            "nl": {
+              "command": "x"
+            }
+          }
+        }
+      }
+    }
+  },
+  "op": "workspace"
+}

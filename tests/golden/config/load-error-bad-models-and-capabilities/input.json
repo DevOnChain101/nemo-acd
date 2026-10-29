@@ -2,7 +2,7 @@
   "cwd": "<TMP>/ws",
   "env": {},
   "files": {
-    "<NEMO_HOME>/nemo.json": {
+    "<SYNTHESIS_HOME>/synthesis.json": {
       "$schema": "config.json/v1",
       "providers": {
         "p": {
@@ -25,6 +25,6 @@
       }
     }
   },
-  "home": "<NEMO_HOME>",
+  "home": "<SYNTHESIS_HOME>",
   "op": "loadConfig"
 }

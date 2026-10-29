@@ -1,5 +1,5 @@
 //! Lost-update scenario of Confluence/Jira style MCP servers, end to end through the real binary
-//! with a scripted model and `nemo-mcp/examples/atlassian_like_server` (feature `test-provider`).
+//! with a scripted model and `synthesis-mcp/examples/atlassian_like_server` (feature `test-provider`).
 //!
 //! The server mimics the Atlassian semantics: `updatePage` REPLACES the whole body and only checks
 //! that `version.number` is current+1. A model that never fetches first therefore destroys the
@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 fn server() -> PathBuf {
     static P: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
     P.get_or_init(|| {
-        let exe = Path::new(env!("CARGO_BIN_EXE_nemo"));
+        let exe = Path::new(env!("CARGO_BIN_EXE_synth"));
         let profile = exe.parent().unwrap();
         let p = profile.join("examples").join("atlassian_like_server");
         if !p.exists() {
@@ -23,7 +23,7 @@ fn server() -> PathBuf {
             c.args([
                 "build",
                 "-p",
-                "nemo-mcp",
+                "synthesis-mcp",
                 "--example",
                 "atlassian_like_server",
             ]);
@@ -46,18 +46,22 @@ impl Rig {
     fn new(flags: &[&str], settings: Value) -> Self {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join("ws")).unwrap();
-        std::fs::create_dir_all(dir.path().join("nemo")).unwrap();
+        std::fs::create_dir_all(dir.path().join("synthesis")).unwrap();
         let cfg = json!({"$schema": "config.json/v1",
             "mcpServers": {"atl": {"command": server(), "args": flags}}});
-        std::fs::write(dir.path().join("nemo/nemo.json"), cfg.to_string()).unwrap();
-        std::fs::write(dir.path().join("nemo/settings.json"), settings.to_string()).unwrap();
+        std::fs::write(dir.path().join("synthesis/synthesis.json"), cfg.to_string()).unwrap();
+        std::fs::write(
+            dir.path().join("synthesis/settings.json"),
+            settings.to_string(),
+        )
+        .unwrap();
         Rig { dir }
     }
 
     fn run(&self, script: Value) -> (Output, Vec<Value>, String) {
         let s = self.dir.path().join("script.json");
         std::fs::write(&s, script.to_string()).unwrap();
-        let o = Command::new(env!("CARGO_BIN_EXE_nemo"))
+        let o = Command::new(env!("CARGO_BIN_EXE_synth"))
             .args(["run", "--cwd"])
             .arg(self.dir.path().join("ws"))
             .arg("--provider")
@@ -66,7 +70,7 @@ impl Rig {
             .env_clear()
             .env("PATH", std::env::var_os("PATH").unwrap_or_default())
             .env("HOME", self.dir.path())
-            .env("NEMO_HOME", self.dir.path().join("nemo"))
+            .env("SYNTHESIS_HOME", self.dir.path().join("synthesis"))
             .stdin(Stdio::null())
             .output()
             .unwrap();
@@ -75,7 +79,7 @@ impl Rig {
             .map(|l| serde_json::from_str(l).unwrap())
             .collect();
         let mut mirror = String::new();
-        for d in std::fs::read_dir(self.dir.path().join("nemo/projects"))
+        for d in std::fs::read_dir(self.dir.path().join("synthesis/projects"))
             .unwrap()
             .flatten()
         {

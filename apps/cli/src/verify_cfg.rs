@@ -1,9 +1,9 @@
-//! `nemo.verification` of settings.json (schema: docs/specs/config.md §6) -> gate configuration.
-//! nemo-settings only carries the raw object; unknown or invalid entries are ignored with a
+//! `synthesis.verification` of settings.json (schema: docs/specs/config.md §6) -> gate configuration.
+//! synthesis-settings only carries the raw object; unknown or invalid entries are ignored with a
 //! diagnostic that names the key, never the value.
 
-use nemo_verification::{Criterion, GateConfig, InferredOnlyPolicy};
 use serde_json::{Map, Value};
+use synthesis_verification::{Criterion, GateConfig, InferredOnlyPolicy};
 
 #[derive(Debug, Default)]
 pub struct VerificationSettings {
@@ -31,19 +31,19 @@ pub fn parse(m: &Map<String, Value>) -> VerificationSettings {
                 Some("cap_unverified") => v.inferred_only = InferredOnlyPolicy::CapUnverified,
                 Some("allow_passed") => v.inferred_only = InferredOnlyPolicy::AllowPassed,
                 _ => v.diagnostics.push(
-                    "nemo.verification.inferred_only must be \"cap_unverified\" or \"allow_passed\", ignored".into(),
+                    "synthesis.verification.inferred_only must be \"cap_unverified\" or \"allow_passed\", ignored".into(),
                 ),
             },
             "max_attempts" => match x.as_u64().filter(|n| (1..=100).contains(n)) {
                 Some(n) => v.max_attempts = Some(n as u32),
                 None => v
                     .diagnostics
-                    .push("nemo.verification.max_attempts must be an integer 1..100, ignored".into()),
+                    .push("synthesis.verification.max_attempts must be an integer 1..100, ignored".into()),
             },
             "checks" => parse_checks(x, &mut v),
             other => v
                 .diagnostics
-                .push(format!("nemo.verification.{other}: unknown key, ignored")),
+                .push(format!("synthesis.verification.{other}: unknown key, ignored")),
         }
     }
     v
@@ -52,7 +52,7 @@ pub fn parse(m: &Map<String, Value>) -> VerificationSettings {
 fn parse_checks(x: &Value, v: &mut VerificationSettings) {
     let Some(list) = x.as_array() else {
         v.diagnostics
-            .push("nemo.verification.checks must be an array, ignored".into());
+            .push("synthesis.verification.checks must be an array, ignored".into());
         return;
     };
     for (i, c) in list.iter().enumerate() {
@@ -63,7 +63,7 @@ fn parse_checks(x: &Value, v: &mut VerificationSettings) {
             .filter(|s| !s.is_empty() && s.len() <= 4096 && !s.contains('\0'));
         let Some(cmd) = cmd else {
             v.diagnostics.push(format!(
-                "nemo.verification.checks[{i}] needs a non-empty \"command\", ignored"
+                "synthesis.verification.checks[{i}] needs a non-empty \"command\", ignored"
             ));
             continue;
         };

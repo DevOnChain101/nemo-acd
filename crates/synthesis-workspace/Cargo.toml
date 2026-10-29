@@ -1,0 +1,20 @@
+[package]
+name = "synthesis-workspace"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+synthesis-config = { path = "../synthesis-config" }
+synthesis-core = { path = "../synthesis-core" }
+synthesis-session = { path = "../synthesis-session" }
+serde = { version = "1.0.229", features = ["derive"] }
+sha2 = "0.10"
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+tempfile = "3"

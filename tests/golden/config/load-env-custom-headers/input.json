@@ -1,10 +1,10 @@
 {
   "cwd": "<TMP>/ws",
   "env": {
-    "NEMO_BASE_URL": "https://p.example.test",
-    "NEMO_CUSTOM_HEADERS": "X-One: 1\r\nX-Two:two\nbad line\nx-one:  override  "
+    "SYNTHESIS_BASE_URL": "https://p.example.test",
+    "SYNTHESIS_CUSTOM_HEADERS": "X-One: 1\r\nX-Two:two\nbad line\nx-one:  override  "
   },
   "files": {},
-  "home": "<NEMO_HOME>",
+  "home": "<SYNTHESIS_HOME>",
   "op": "loadConfig"
 }

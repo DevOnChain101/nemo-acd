@@ -1,6 +1,6 @@
 {
   "agents": [],
-  "autoMemoryDir": "<HOME>/.nemo/projects/<SANITIZED_CWD>/memory",
+  "autoMemoryDir": "<HOME>/.synthesis/projects/<SANITIZED_CWD>/memory",
   "claudeDir": "<HOME>/.claude",
   "commands": [],
   "mcpServers": [],
@@ -29,7 +29,7 @@
   },
   "skills": [
     {
-      "name": "nemocode-config",
+      "name": "synthesis-config",
       "source": "built-in"
     }
   ],

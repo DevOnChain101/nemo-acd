@@ -1,0 +1,16 @@
+{
+  "files": {
+    "<SYNTHESIS_HOME>/settings.json": {
+      "env": {
+        "A": "1"
+      }
+    },
+    "<TMP>/ws/.synthesis/settings.json": {
+      "env": {
+        "B": "2"
+      }
+    }
+  },
+  "op": "synthesisEnv",
+  "scope": "user"
+}

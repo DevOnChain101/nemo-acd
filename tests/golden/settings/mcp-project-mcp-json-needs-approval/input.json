@@ -2,7 +2,7 @@
   "cwd": "<TMP>/ws",
   "env": {},
   "files": {
-    "<HOME>/.nemo/nemo.json": {
+    "<HOME>/.synthesis/synthesis.json": {
       "claude": {
         "readUserConfig": true
       }

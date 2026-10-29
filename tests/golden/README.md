@@ -3,7 +3,13 @@
 Spec: `docs/specs/eval-and-golden.md` section B. The Node CLI (`~/Vibe/nemo-cli`, read-only) is the capture source, not an authority: these files are
 regression snapshots of its behaviour, approved by the owner on 2026-10-29. A divergence is a decision to record (allow-list + reason), not automatically a Rust bug. Layout: `tests/golden/<area>/<case_id>/{input.json,expected.json,meta.json}`.
 
-## Regenerate
+## Rename to Synthesis (2026-10-30)
+
+The product was renamed Nemo to Synthesis (owner decision). The inputs and expected files of ALL areas were transformed with the same mapping (`NEMO_HOME` to `SYNTHESIS_HOME`, `.nemo/` to `.synthesis/`, `nemo.json` to `synthesis.json`, `NEMO.md` to `SYNTHESIS.md`, `"nemo"` settings key to `"synthesis"`, wordmark `Nemo` to `Synthesis`, bundled skill `nemocode-config` to `synthesis-config`, case directory names likewise, placeholders `<NEMO_HOME>` to `<SYNTHESIS_HOME>`). This is an owner-approved divergence from the Node captures: the snapshots are regression-only now. 29 render cases were regenerated from the Rust output on 2026-10-30 (the longer wordmark changes widths, wrapping and which header chips fit; 65 rows, all reviewed): run `SYNTHESIS_UPDATE_GOLDEN=1 cargo test -p synthesis-tui-render --test golden -- --nocapture`. It rewrites `expected.{json,txt,ansi.json}` of a failing case ONLY when the text is unchanged once the product name, whitespace and box drawing are ignored (or only text was dropped), or the case is in `REVIEWED_RENAME_DIFFS` in `crates/synthesis-tui-render/tests/golden.rs` (hand-checked), skips cases listed in `golden_divergences.txt`, and prints the rewritten and the unexplained cases (unexplained ones still fail). The other golden harnesses (config, permissions, providers, session, tools, tui-base, settings) pass unchanged after the transform and have no update mode. Cases listed in a divergence list that show the product name also differ by the rename; their reasons describe only the Node divergence.
+
+`tools/golden-capture` (untouched, it reads the Node repo with the old names) can NOT regenerate these snapshots any more: its output would use `NEMO_*`/`.nemo`. Treat the files as maintained by hand plus the update mode above. The section below documents the original capture.
+
+## Regenerate (original Node capture, no longer reproduces these files)
 
 ```
 node tools/golden-capture/capture.js [--out DIR] [--areas config,permissions,...] [--real-date]
@@ -55,7 +61,7 @@ through the Bash tool's shell; `results[].ms` is dropped. Captured on darwin; mu
 
 ## Placeholders and normalisation
 
-Inputs may contain `<TMP>` (sandbox root; layout `<TMP>/home`, `<TMP>/nemo_home`, `<TMP>/ws` = cwd, `<TMP>/outside`), `<HOME>`, `<NEMO_HOME>`.
+Inputs may contain `<TMP>` (sandbox root; layout `<TMP>/home`, `<TMP>/synthesis_home`, `<TMP>/ws` = cwd, `<TMP>/outside`), `<HOME>`, `<SYNTHESIS_HOME>` (was `<NEMO_HOME>` in the Node capture).
 A Rust test must expand them to its own temp dir (realpath it) before running and apply the same replacement, longest root first, to its
 output before comparing. In `expected.json` UUIDs become `<UUID>` and ISO-8601 `...Z` timestamps `<TS>`. Objects have sorted keys, `Map` is an
 object, `Set` a sorted array, `undefined` fields are absent, 2-space JSON, LF.
@@ -80,7 +86,7 @@ lines sorted (`sort_lines`); compare as a set. Glob order depends on mtimes, so 
 - TUI loop (`app.js` key handling, mouse, Screen diffing/resize repaint), live animation over time (only single frames at pinned `frame` values are captured), watcher-fed live session lists.
 - Render: the topology/flow canvas is only captured inside whole `renderFrame` cases (no separate `flow.js` unit), the workspace box/`state.workspaces`, sub-agent docked beside the topology (`chatAgent` != main), the activity-panel click maps (`activityHits`), selection highlight overlay, image thumbnails (`thumb`), the 256-colour render of whole frames, and `pickers.js` (`open*Picker` build items from live agent/config/network state).
 - Subagents, the transcript watcher (`SessionWatcher`, timers, fs events; `loadTranscriptSession` is captured with `agents:false`).
-- Hooks: timeouts/kill-tree, spawn failures, `Hooks` wired into the agent loop (`native-hook-events`), `import-claude-hooks` conversion. Settings: `nemo import claude` writers, `agents`/`skills` edge parsing beyond the cases listed, `~/.codex`.
+- Hooks: timeouts/kill-tree, spawn failures, `Hooks` wired into the agent loop (`native-hook-events`), `import-claude-hooks` conversion. Settings: `synth import claude` writers, `agents`/`skills` edge parsing beyond the cases listed, `~/.codex`.
 - Real SDK transport, SSE parsing, retries, auth/credential resolution (`auth.js`, keychain/plaintext `auth.json`).
 - Windows/Linux outputs: everything here was captured on one platform (see `meta.json.platform`). Path-sensitive areas (config paths,
   permissions case-fold/`\`/UNC, Bash tool text in schemas) must be re-captured on win32/linux before being treated as the 3-OS spec.

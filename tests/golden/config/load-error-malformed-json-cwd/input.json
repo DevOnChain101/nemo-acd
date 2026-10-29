@@ -2,8 +2,8 @@
   "cwd": "<TMP>/ws",
   "env": {},
   "files": {
-    "<TMP>/ws/.nemo/config.json": "not json"
+    "<TMP>/ws/.synthesis/config.json": "not json"
   },
-  "home": "<NEMO_HOME>",
+  "home": "<SYNTHESIS_HOME>",
   "op": "loadConfig"
 }

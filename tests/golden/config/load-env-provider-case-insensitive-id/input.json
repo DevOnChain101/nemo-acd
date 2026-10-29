@@ -1,11 +1,11 @@
 {
   "cwd": "<TMP>/ws",
   "env": {
-    "NEMO_BASE_URL": "https://other.example.test/v1",
-    "NEMO_PROVIDER": "corp"
+    "SYNTHESIS_BASE_URL": "https://other.example.test/v1",
+    "SYNTHESIS_PROVIDER": "corp"
   },
   "files": {
-    "<NEMO_HOME>/nemo.json": {
+    "<SYNTHESIS_HOME>/synthesis.json": {
       "$schema": "config.json/v1",
       "providers": {
         "Corp": {
@@ -15,6 +15,6 @@
       }
     }
   },
-  "home": "<NEMO_HOME>",
+  "home": "<SYNTHESIS_HOME>",
   "op": "loadConfig"
 }

@@ -6,6 +6,6 @@
     "OPENAI_API_KEY": "y"
   },
   "files": {},
-  "home": "<NEMO_HOME>",
+  "home": "<SYNTHESIS_HOME>",
   "op": "loadConfig"
 }

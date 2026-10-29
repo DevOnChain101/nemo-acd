@@ -2,7 +2,7 @@
   "cwd": "<TMP>/ws",
   "env": {},
   "files": {
-    "<HOME>/.nemo/nemo.json": {
+    "<HOME>/.synthesis/synthesis.json": {
       "claude": {
         "readUserConfig": true
       }
@@ -27,7 +27,7 @@
         }
       }
     },
-    "<TMP>/ws/.nemo/settings.json": {
+    "<TMP>/ws/.synthesis/settings.json": {
       "enableAllProjectMcpServers": true
     }
   },

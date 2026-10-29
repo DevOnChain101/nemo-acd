@@ -1,6 +1,6 @@
 {
   "agents": [],
-  "autoMemoryDir": "<HOME>/.nemo/projects/<SANITIZED_CWD>/memory",
+  "autoMemoryDir": "<HOME>/.synthesis/projects/<SANITIZED_CWD>/memory",
   "claudeDir": "<HOME>/.claude",
   "commands": [
     {
@@ -10,7 +10,7 @@
       "description": "Commit everything.",
       "model": null,
       "name": "git:commit",
-      "path": "<TMP>/ws/.nemo/commands/git/commit.md"
+      "path": "<TMP>/ws/.synthesis/commands/git/commit.md"
     },
     {
       "allowedTools": null,
@@ -19,7 +19,7 @@
       "description": "Reviews code",
       "model": null,
       "name": "review",
-      "path": "<TMP>/ws/.nemo/commands/review.md"
+      "path": "<TMP>/ws/.synthesis/commands/review.md"
     }
   ],
   "mcpServers": [],
@@ -43,7 +43,7 @@
   },
   "skills": [
     {
-      "name": "nemocode-config",
+      "name": "synthesis-config",
       "source": "built-in"
     }
   ],

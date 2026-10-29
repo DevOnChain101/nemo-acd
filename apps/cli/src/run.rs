@@ -1,4 +1,4 @@
-//! `nemo run`: one headless task. Exit codes follow docs/specs/events.md §6.
+//! `synth run`: one headless task. Exit codes follow docs/specs/events.md §6.
 
 use std::collections::BTreeMap;
 use std::io::{IsTerminal, Read};
@@ -6,28 +6,28 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use clap::{Args, ValueEnum};
-use nemo_config::{Config, Env, LoadContext, ProjectTrust, parse_model, resolve_credential};
-use nemo_core::{AgentSession, BudgetUsage, SessionStatus, WorkspaceContext};
-use nemo_events::{ArtifactRef, Event, SessionEnd, TaskStatus};
-use nemo_harness::{
+use serde_json::Value;
+use sha2::{Digest, Sha256};
+use synthesis_config::{Config, Env, LoadContext, ProjectTrust, parse_model, resolve_credential};
+use synthesis_core::{AgentSession, BudgetUsage, SessionStatus, WorkspaceContext};
+use synthesis_events::{ArtifactRef, Event, SessionEnd, TaskStatus};
+use synthesis_harness::{
     Approval, ApprovalRequest, Approver, BoxFut, EventSink, Harness, HarnessConfig, Pricing, Scope,
     TaskOutcome, TaskRequest, ToolBox, budget_from_settings, from_mode, sanitize_for_display,
 };
-use nemo_hooks::Hooks;
-use nemo_mcp::McpManager;
-use nemo_permissions::{Mode, PermissionRules, Permissions};
-use nemo_providers::{ModelProvider, NetSettings, ProviderSpec, RetryPolicy};
-use nemo_sandbox::{NetworkPolicy, SandboxBackend, SandboxPolicy, SandboxedCommand};
-use nemo_session::{NewSession, Retention, Store as SessionStore, StoreOptions};
-use nemo_settings::load_settings;
-use nemo_terminal::{Guarantee, SandboxMode, TerminalRuntime};
-use nemo_tools::{Registry, standard_policy_git};
-use nemo_verification::{CompletionGate, Criterion, VerifyRunner};
-use serde_json::Value;
-use sha2::{Digest, Sha256};
+use synthesis_hooks::Hooks;
+use synthesis_mcp::McpManager;
+use synthesis_permissions::{Mode, PermissionRules, Permissions};
+use synthesis_providers::{ModelProvider, NetSettings, ProviderSpec, RetryPolicy};
+use synthesis_sandbox::{NetworkPolicy, SandboxBackend, SandboxPolicy, SandboxedCommand};
+use synthesis_session::{NewSession, Retention, Store as SessionStore, StoreOptions};
+use synthesis_settings::load_settings;
+use synthesis_terminal::{Guarantee, SandboxMode, TerminalRuntime};
+use synthesis_tools::{Registry, standard_policy_git};
+use synthesis_verification::{CompletionGate, Criterion, VerifyRunner};
 use tokio_util::sync::CancellationToken;
 
-use crate::ctx::{NemoContext, PutArtifact};
+use crate::ctx::{PutArtifact, SynthesisContext};
 use crate::events::{Persist, Store};
 use crate::taskdb::TaskDb;
 use crate::transcript::Transcript;
@@ -45,7 +45,7 @@ pub enum ModeArg {
     /// Headless: no classifier is wired, so asks the classifier would review are denied.
     Auto,
     /// Skips approval prompts. Still stops: deny rules, ask rules, critical rm, destructive MCP asks.
-    /// Does NOT stop plain writes to protected paths (.git, .nemo, .ssh ...), as in Claude Code. CLI only.
+    /// Does NOT stop plain writes to protected paths (.git, .synthesis, .ssh ...), as in Claude Code. CLI only.
     #[value(name = "bypassPermissions")]
     BypassPermissions,
 }
@@ -95,10 +95,10 @@ impl NetworkArg {
 /// the message for the exit-2 refusal.
 pub(crate) fn sandbox_preflight(
     backend: &dyn SandboxBackend,
-    policy: Option<&nemo_terminal::SandboxPolicy>,
+    policy: Option<&synthesis_terminal::SandboxPolicy>,
 ) -> Result<(), String> {
-    let hint = "run `nemo doctor` to see the sandbox backends, or pass --sandbox best-effort|off to run unconfined";
-    let skipped = nemo_sandbox::skipped_backends();
+    let hint = "run `synth doctor` to see the sandbox backends, or pass --sandbox best-effort|off to run unconfined";
+    let skipped = synthesis_sandbox::skipped_backends();
     let skipped = if skipped.is_empty() {
         String::new()
     } else {
@@ -159,7 +159,7 @@ impl Common {
     }
 }
 
-/// Flags shared by `nemo run` and the interactive app.
+/// Flags shared by `synth run` and the interactive app.
 #[derive(Args, Clone)]
 pub struct Common {
     /// Command confinement: enforce (default), best-effort, or off (loud warning). On Windows,
@@ -181,7 +181,7 @@ pub struct Common {
     pub model: Option<String>,
     #[arg(long, value_enum)]
     pub permission_mode: Option<ModeArg>,
-    /// Trust `<cwd>/.nemo/config.json`, `.nemo/settings.json`, agents and (with approval) MCP servers.
+    /// Trust `<cwd>/.synthesis/config.json`, `.synthesis/settings.json`, agents and (with approval) MCP servers.
     #[arg(long)]
     pub trust_project: bool,
     /// Start this project-scope MCP server (needs --trust-project; repeatable).
@@ -198,7 +198,7 @@ pub struct Common {
     /// Deny wins over every allow.
     #[arg(long, value_name = "RULE")]
     pub deny: Vec<String>,
-    /// Work in an isolated git worktree on branch `nemo/<session>`; left in place for review.
+    /// Work in an isolated git worktree on branch `synthesis/<session>`; left in place for review.
     #[arg(long)]
     pub worktree: bool,
     /// With --worktree: remove the worktree at the end when nothing changed.
@@ -219,7 +219,7 @@ pub struct RunArgs {
     max_turns: Option<u32>,
     #[arg(long)]
     max_tool_calls: Option<u32>,
-    /// Needs a price for the model: `nemo.pricing` in the user settings.json (config.md §6).
+    /// Needs a price for the model: `synthesis.pricing` in the user settings.json (config.md §6).
     #[arg(long)]
     max_cost_usd: Option<f64>,
     #[arg(long)]
@@ -268,21 +268,21 @@ pub struct Prepared {
     pub mcp: Option<Arc<McpManager>>,
     pub notices: Vec<String>,
     pub worktree: Option<Worktree>,
-    /// Required checks from `nemo.verification.checks`.
+    /// Required checks from `synthesis.verification.checks`.
     pub criteria: Vec<Criterion>,
     pub artifact_root: PathBuf,
     pub label: String,
     pub models: Vec<String>,
     /// `effort_tiers` the model declares (enables `/effort`).
     pub effort_tiers: Vec<String>,
-    pub sandbox: nemo_tui::SandboxStatus,
-    pub link: Option<nemo_tui::UiLink>,
+    pub sandbox: synthesis_tui::SandboxStatus,
+    pub link: Option<synthesis_tui::UiLink>,
     pub homes: crate::Homes,
     /// `#` notes and `/memory` (TUI).
     pub notes: crate::memory::Notes,
 }
 
-/// Rows of `{"nemo":{"pricing":{"<provider/model>"|"<model>": {input_per_mtok, output_per_mtok}}}}`
+/// Rows of `{"synthesis":{"pricing":{"<provider/model>"|"<model>": {input_per_mtok, output_per_mtok}}}}`
 /// from the USER settings file only (a repository must not be able to price a model at zero).
 fn pricing(user_settings: &Path, label: &str, model: &str) -> Option<Pricing> {
     let raw = std::fs::read(user_settings)
@@ -293,7 +293,7 @@ fn pricing(user_settings: &Path, label: &str, model: &str) -> Option<Pricing> {
 }
 
 fn parse_pricing(v: &Value, label: &str, model: &str) -> Option<Pricing> {
-    let table = v.get("nemo")?.get("pricing")?;
+    let table = v.get("synthesis")?.get("pricing")?;
     let e = table.get(label).or_else(|| table.get(model))?;
     let num = |k: &str| {
         e.get(k)
@@ -369,11 +369,11 @@ pub fn sandbox_notices(mode: SandboxMode, network: NetworkArg) -> Vec<String> {
     n
 }
 
-pub fn sandbox_status(mode: SandboxMode, unsandboxed: bool) -> nemo_tui::SandboxStatus {
-    let b = nemo_sandbox::detect();
+pub fn sandbox_status(mode: SandboxMode, unsandboxed: bool) -> synthesis_tui::SandboxStatus {
+    let b = synthesis_sandbox::detect();
     let c = b.capabilities();
     let g = |x: Guarantee| format!("{x:?}").to_lowercase();
-    nemo_tui::SandboxStatus {
+    synthesis_tui::SandboxStatus {
         mode: match mode {
             SandboxMode::Enforce => "enforce",
             SandboxMode::BestEffort => "best-effort",
@@ -397,21 +397,21 @@ fn read_denied(perms: &Permissions, p: &Path) -> bool {
             Mode::BypassPermissions,
         )
         .decision
-        == nemo_permissions::Decision::Deny
+        == synthesis_permissions::Decision::Deny
 }
 
-/// Default `--max-wall-secs` of a headless `nemo run` (one hour). Turns (50) and tool calls (200)
+/// Default `--max-wall-secs` of a headless `synth run` (one hour). Turns (50) and tool calls (200)
 /// are bounded by default already; a cost cap needs a configured price, so it has no default.
 const HEADLESS_WALL_SECS: u64 = 3600;
 
-/// The repository root (nearest trusted ancestor with `.git` or `.nemo`, see
-/// `nemo_settings::find_project_root`), else the launch dir. The home directory and anything above
-/// it never count: `~/.nemo` or a stray `/Users/.git` would otherwise make `$HOME` the workspace
+/// The repository root (nearest trusted ancestor with `.git` or `.synthesis`, see
+/// `synthesis_settings::find_project_root`), else the launch dir. The home directory and anything above
+/// it never count: `~/.synthesis` or a stray `/Users/.git` would otherwise make `$HOME` the workspace
 /// (and writable).
 pub fn workspace_root(cwd: &Path, home: &Path) -> PathBuf {
-    let real = nemo_core::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
-    let root = nemo_settings::find_project_root(&real);
-    let home = nemo_core::canonicalize(home).unwrap_or_else(|_| home.to_path_buf());
+    let real = synthesis_core::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
+    let root = synthesis_settings::find_project_root(&real);
+    let home = synthesis_core::canonicalize(home).unwrap_or_else(|_| home.to_path_buf());
     if home.starts_with(&root) { real } else { root }
 }
 
@@ -422,7 +422,7 @@ pub fn prepare(
     env: &Env,
     limits: &Limits,
     front: Front,
-    resume: Option<&nemo_tui::Resume>,
+    resume: Option<&synthesis_tui::Resume>,
 ) -> Result<Prepared, String> {
     let (cli_allow, cli_deny) = (
         rules_arg(&c.allow, "--allow")?,
@@ -430,11 +430,11 @@ pub fn prepare(
     );
     let is_tui = matches!(front, Front::Tui);
     let h = homes(env)?;
-    let nemo_deny = nemo_sandbox::nemo_state_paths(&h.nemo);
+    let synthesis_deny = synthesis_sandbox::synthesis_state_paths(&h.synthesis);
     // Before anything is created (worktree, store): a bad grant is a usage error.
     let reads = {
-        let mut probe = SandboxPolicy::standard(cwd, Path::new("/nemo-probe-tmp"));
-        probe.deny_paths.extend(nemo_deny.clone());
+        let mut probe = SandboxPolicy::standard(cwd, Path::new("/synthesis-probe-tmp"));
+        probe.deny_paths.extend(synthesis_deny.clone());
         c.sandbox_read
             .iter()
             .map(|r| {
@@ -451,7 +451,7 @@ pub fn prepare(
     };
     let lc = LoadContext {
         cwd,
-        nemo_home: &h.nemo,
+        synthesis_home: &h.synthesis,
         user_home: &h.user,
         env,
     };
@@ -463,10 +463,10 @@ pub fn prepare(
     };
     let settings = load_settings(&lc, trust);
     // A settings file we cannot read would silently drop its deny rules: stop before anything runs
-    // (`nemo run` exits 2; the TUI never opens).
+    // (`synth run` exits 2; the TUI never opens).
     if !settings.errors.is_empty() {
         return Err(format!(
-            "settings error: {}\nnemo: fix or remove the file; nothing was started because its deny/ask rules would not apply",
+            "settings error: {}\nsynth: fix or remove the file; nothing was started because its deny/ask rules would not apply",
             sanitize_for_display(&settings.errors.join("; "))
         ));
     }
@@ -475,30 +475,30 @@ pub fn prepare(
     } else {
         settings.clone()
     };
-    let vs = crate::verify_cfg::parse(&settings.nemo.verification);
+    let vs = crate::verify_cfg::parse(&settings.synthesis.verification);
     for w in cfg
         .warnings
         .iter()
         .chain(&settings.diagnostics)
         .chain(&vs.diagnostics)
     {
-        eprintln!("nemo: warning: {}", sanitize_for_display(w));
+        eprintln!("synth: warning: {}", sanitize_for_display(w));
     }
     if !settings.env_refused.is_empty() {
         eprintln!(
-            "nemo: warning: settings env: refused secret-shaped name(s): {}",
+            "synth: warning: settings env: refused secret-shaped name(s): {}",
             sanitize_for_display(&settings.env_refused.join(", "))
         );
     }
-    let res = resolve_provider(c, &cfg, &h.nemo, env)?;
+    let res = resolve_provider(c, &cfg, &h.synthesis, env)?;
 
-    let price = pricing(&h.nemo.join("settings.json"), &res.label, &res.model);
+    let price = pricing(&h.synthesis.join("settings.json"), &res.label, &res.model);
     if limits.max_cost_usd.is_some() && price.is_none() {
         return Err(format!(
-            "--max-cost-usd needs a price for {}: add nemo.pricing[\"{}\"] = {{\"input_per_mtok\": N, \"output_per_mtok\": N}} to {} (see docs/specs/config.md §6)",
+            "--max-cost-usd needs a price for {}: add synthesis.pricing[\"{}\"] = {{\"input_per_mtok\": N, \"output_per_mtok\": N}} to {} (see docs/specs/config.md §6)",
             res.label,
             res.label,
-            h.nemo.join("settings.json").display()
+            h.synthesis.join("settings.json").display()
         ));
     }
 
@@ -510,10 +510,10 @@ pub fn prepare(
         Some(ModeArg::Auto) => Mode::Auto,
         Some(ModeArg::BypassPermissions) => {
             // A TUI session switches into bypass with a confirmation dialog instead (Shift+Tab
-            // never reaches it); the flag is for `nemo run`.
+            // never reaches it); the flag is for `synth run`.
             if matches!(front, Front::Tui) {
                 return Err(
-                    "--permission-mode bypassPermissions is only for `nemo run`; in the TUI press Shift+Tab until the bypass dialog opens"
+                    "--permission-mode bypassPermissions is only for `synth run`; in the TUI press Shift+Tab until the bypass dialog opens"
                         .into(),
                 );
             }
@@ -561,27 +561,27 @@ pub fn prepare(
         .filter_map(|d| match std::fs::canonicalize(d) {
             Ok(p) if Path::new(d).is_absolute() && p.is_dir() => Some(p),
             _ => {
-                eprintln!("nemo: warning: ignored additional directory (not an existing absolute directory)");
+                eprintln!("synth: warning: ignored additional directory (not an existing absolute directory)");
                 None
             }
         })
         .collect();
 
     let sid = resume.map_or_else(|| uuid::Uuid::new_v4().to_string(), |r| r.record.id.clone());
-    let artifact_root = h.nemo.join("sessions").join(&sid);
+    let artifact_root = h.synthesis.join("sessions").join(&sid);
     let (ws, worktree) = if let Some(r) = resume {
         (
             r.record
-                .open_workspace(&h.nemo)
+                .open_workspace(&h.synthesis)
                 .map_err(|e| e.to_string())?,
             None,
         )
     } else if c.worktree {
         if !extra_dirs.is_empty() {
-            eprintln!("nemo: warning: additionalDirectories are ignored with --worktree");
+            eprintln!("synth: warning: additionalDirectories are ignored with --worktree");
             extra_dirs.clear();
         }
-        let (w, ctx) = crate::wt::create(env, &h.nemo, cwd, &sid, artifact_root.clone())?;
+        let (w, ctx) = crate::wt::create(env, &h.synthesis, cwd, &sid, artifact_root.clone())?;
         (ctx, Some(w))
     } else {
         (
@@ -607,7 +607,7 @@ pub fn prepare(
             permission_policy_id: r.record.permission_policy_id.clone(),
             // a session never resumes in bypassPermissions
             permission_mode: match r.record.permission_mode {
-                nemo_core::PermissionMode::BypassPermissions => from_mode(mode),
+                synthesis_core::PermissionMode::BypassPermissions => from_mode(mode),
                 m => m,
             },
             event_cursor: r.record.event_cursor,
@@ -638,10 +638,10 @@ pub fn prepare(
     let sandbox_mode = c.sandbox_mode();
     let net = c.network.policy();
     let git_dir = worktree.as_ref().map(|w| w.info.git_dir.clone());
-    let state_paths = nemo_deny.clone();
-    let build = Arc::new(move |ws: &nemo_core::WorkspaceContext| {
+    let state_paths = synthesis_deny.clone();
+    let build = Arc::new(move |ws: &synthesis_core::WorkspaceContext| {
         let mut p = standard_policy_git(ws, net.clone(), git_dir.as_deref())?;
-        p.deny_paths.extend(nemo_deny.clone());
+        p.deny_paths.extend(synthesis_deny.clone());
         p.readable_roots.extend(reads.iter().cloned());
         Ok::<_, String>(p)
     });
@@ -649,7 +649,7 @@ pub fn prepare(
     // runs unconfined in best-effort/off); preflight below reports the Err once.
     let make_policy = {
         let build = build.clone();
-        Arc::new(move |ws: &nemo_core::WorkspaceContext| build(ws).ok())
+        Arc::new(move |ws: &synthesis_core::WorkspaceContext| build(ws).ok())
     };
     let policy = build(&ws);
     match (&policy, sandbox_mode) {
@@ -657,12 +657,12 @@ pub fn prepare(
             return Err(format!("cannot build the sandbox policy: {e}"));
         }
         (Err(e), SandboxMode::BestEffort) => eprintln!(
-            "nemo: warning: cannot build the sandbox policy ({e}); commands run unconfined"
+            "synth: warning: cannot build the sandbox policy ({e}); commands run unconfined"
         ),
         _ => {}
     }
     if sandbox_mode == SandboxMode::Enforce {
-        sandbox_preflight(&*nemo_sandbox::detect(), policy.as_ref().ok())?;
+        sandbox_preflight(&*synthesis_sandbox::detect(), policy.as_ref().ok())?;
     }
     let mut notices = sandbox_notices(sandbox_mode, c.network);
     notices.extend(sandbox_default_notice(c));
@@ -685,18 +685,22 @@ pub fn prepare(
         _ => {}
     }
     for n in &notices {
-        eprintln!("nemo: WARNING: {n}");
+        eprintln!("synth: WARNING: {n}");
     }
 
     let store: Option<Store> = if c.no_session_store {
         None
     } else {
         let opts = StoreOptions {
-            write_node_transcripts: settings.nemo.compat.write_node_transcripts.unwrap_or(true),
+            write_node_transcripts: settings
+                .synthesis
+                .compat
+                .write_node_transcripts
+                .unwrap_or(true),
             secrets: res.secrets.clone(),
             ..StoreOptions::default()
         };
-        let w = SessionStore::open(&h.nemo, opts)
+        let w = SessionStore::open(&h.synthesis, opts)
             .and_then(|s| match resume {
                 Some(_) => s.resume_session(&sid, true),
                 None => s.create_session(NewSession {
@@ -721,10 +725,10 @@ pub fn prepare(
         Arc::new(t)
     });
     let derived = match (&store, &transcript) {
-        (Some(_), Some(t)) => match TaskDb::open(&h.nemo, &sid, res.secrets.clone()) {
+        (Some(_), Some(t)) => match TaskDb::open(&h.synthesis, &sid, res.secrets.clone()) {
             Ok(db) => Some((db, t.clone())),
             Err(e) => {
-                eprintln!("nemo: warning: task rows disabled: {e}");
+                eprintln!("synth: warning: task rows disabled: {e}");
                 None
             }
         },
@@ -752,7 +756,7 @@ pub fn prepare(
             Some((closed, cancel.clone())),
         ),
         Front::Tui => {
-            let l = nemo_tui::UiLink::new();
+            let l = synthesis_tui::UiLink::new();
             let ap = l.approver();
             (
                 Box::new(l.event_writer()),
@@ -813,12 +817,12 @@ pub fn prepare(
     // `interactive` lets asks reach the approver, so each one leaves approval events.
     let mut perms = Permissions::new(
         rules,
-        nemo_permissions::Env::new(cwd, &h.user, mode)
+        synthesis_permissions::Env::new(cwd, &h.user, mode)
             .with_project_root(&ws.root)
             .interactive(true)
             .protect(state_paths),
     );
-    perms.env.auto_mode = nemo_permissions::AutoModeSettings {
+    perms.env.auto_mode = synthesis_permissions::AutoModeSettings {
         classify_all_shell: user_settings.auto_mode.classify_all_shell.unwrap_or(false),
         use_auto_mode_during_plan: user_settings
             .auto_mode
@@ -831,25 +835,26 @@ pub fn prepare(
     hcfg.max_output_tokens = cfg.max_tokens as u32;
     hcfg.env = child_env;
     hcfg.pricing = price;
-    let (auto_compact, diag) = crate::ctx::read_auto_compact(&h.nemo.join("settings.json"));
+    let (auto_compact, diag) = crate::ctx::read_auto_compact(&h.synthesis.join("settings.json"));
     for d in &diag {
-        eprintln!("nemo: warning: {d}");
+        eprintln!("synth: warning: {d}");
     }
     hcfg.auto_compact = auto_compact;
-    let (shell, diag) = crate::ctx::read_shell_settings(&h.nemo.join("settings.json"));
+    let (shell, diag) = crate::ctx::read_shell_settings(&h.synthesis.join("settings.json"));
     for d in &diag {
-        eprintln!("nemo: warning: {d}");
+        eprintln!("synth: warning: {d}");
     }
     hcfg.shell = shell;
     let am = &user_settings.auto_mode;
     hcfg.auto.model = am.model.clone();
-    hcfg.auto.rules =
-        nemo_permissions::automode::effective_rules(&nemo_permissions::automode::AutoModeRules {
+    hcfg.auto.rules = synthesis_permissions::automode::effective_rules(
+        &synthesis_permissions::automode::AutoModeRules {
             environment: am.environment.clone(),
             allow: am.allow.clone(),
             soft_deny: am.soft_deny.clone(),
             hard_deny: am.hard_deny.clone(),
-        });
+        },
+    );
 
     let put: PutArtifact = match &store {
         Some(s) => {
@@ -863,7 +868,7 @@ pub fn prepare(
         }
         None => artifact_to_dir(artifact_root.clone()),
     };
-    let user_files = [h.nemo.join("NEMO.md")];
+    let user_files = [h.synthesis.join("SYNTHESIS.md")];
     // Read-deny rules apply to instruction files and their imports; a denied file is reported.
     let denied = Mutex::new(Vec::<PathBuf>::new());
     let deny = |p: &Path| {
@@ -876,12 +881,12 @@ pub fn prepare(
         }
         d
     };
-    let mut instructions = nemo_context::load_instructions_with(
+    let mut instructions = synthesis_context::load_instructions_with(
         &ws,
         &user_files,
         Some(&h.user),
-        &nemo_context::DEFAULT_NAMES,
-        &nemo_context::InstructionLimits::default(),
+        &synthesis_context::DEFAULT_NAMES,
+        &synthesis_context::InstructionLimits::default(),
         Some(&deny),
     );
     let mut denied = denied.into_inner().unwrap_or_else(|e| e.into_inner());
@@ -892,13 +897,13 @@ pub fn prepare(
             "instruction file not loaded (blocked by a Read deny rule): {}",
             p.display()
         );
-        eprintln!("nemo: warning: {}", sanitize_for_display(&w));
+        eprintln!("synth: warning: {}", sanitize_for_display(&w));
         notices.push(w);
     }
     // lowest priority: before the user and repository files
     instructions.splice(
         0..0,
-        crate::ctx::load_auto_memory(&h.nemo, &[&ws.root, &ws.cwd]),
+        crate::ctx::load_auto_memory(&h.synthesis, &[&ws.root, &ws.cwd]),
     );
     let notes = crate::memory::Notes {
         user: user_files[0].clone(),
@@ -908,10 +913,10 @@ pub fn prepare(
         loaded: crate::memory::describe(&instructions),
     };
     let skills = crate::ctx::visible_skills(
-        nemo_tools::discover_skills(env, &ws.root),
+        synthesis_tools::discover_skills(env, &ws.root),
         trust == ProjectTrust::Trusted,
     );
-    let mut context = NemoContext::new(
+    let mut context = SynthesisContext::new(
         instructions,
         &prompt,
         res.provider.clone(),
@@ -923,13 +928,13 @@ pub fn prepare(
     if let Some(t) = &transcript {
         context = context.with_transcript(t.clone());
     }
-    let agents = crate::agents::load(&h.nemo, &settings.project_root, trust);
+    let agents = crate::agents::load(&h.synthesis, &settings.project_root, trust);
     if !agents.skipped.is_empty() {
         let w = format!(
             "{} project agent definition(s) not loaded (project not trusted)",
             agents.skipped.len()
         );
-        eprintln!("nemo: warning: {w}");
+        eprintln!("synth: warning: {w}");
         notices.push(w);
     }
 
@@ -946,11 +951,16 @@ pub fn prepare(
         trust,
         &c.approve_mcp,
     );
-    mplan.env_passthrough = crate::mcp::read_passthrough(&h.nemo.join("settings.json"));
+    mplan.env_passthrough = crate::mcp::read_passthrough(&h.synthesis.join("settings.json"));
     mplan.guard = crate::mcp::read_guard(
-        &h.nemo.join("settings.json"),
+        &h.synthesis.join("settings.json"),
         (trust == ProjectTrust::Trusted)
-            .then(|| settings.project_root.join(".nemo").join("settings.json"))
+            .then(|| {
+                settings
+                    .project_root
+                    .join(".synthesis")
+                    .join("settings.json")
+            })
             .as_deref(),
     );
     mplan.artifact_dir = Some(artifact_root.join("mcp"));
@@ -958,7 +968,7 @@ pub fn prepare(
     // events (headless) or TUI startup notes, so approvals stay visible after the screen clears.
     for n in &mplan.notices {
         let n = sanitize_for_display(n);
-        eprintln!("nemo: {n}");
+        eprintln!("synth: {n}");
         notices.push(n);
     }
     for (n, why) in &mplan.skipped {
@@ -967,7 +977,7 @@ pub fn prepare(
             sanitize_for_display(n),
             sanitize_for_display(why)
         );
-        eprintln!("nemo: warning: {w}");
+        eprintln!("synth: warning: {w}");
         notices.push(w);
     }
     let (mcp, mcp_attach) = if mplan.servers.is_empty() {
@@ -975,7 +985,7 @@ pub fn prepare(
     } else {
         let (m, t, warns) = tokio_rt.block_on(crate::mcp::start(&mplan, env, &ws.root));
         for w in warns {
-            eprintln!("nemo: warning: {}", sanitize_for_display(&w));
+            eprintln!("synth: warning: {}", sanitize_for_display(&w));
         }
         (Some(m), Some(t))
     };
@@ -1004,14 +1014,14 @@ pub fn prepare(
     if let Some(l) = &link {
         harness = harness.with_input(l.input());
     }
-    // "Allow always" persists to .nemo/settings.local.json, but only in a trusted project: an
+    // "Allow always" persists to .synthesis/settings.local.json, but only in a trusted project: an
     // untrusted project's allow rules are ignored on load, so writing them would be misleading.
     if trust == ProjectTrust::Trusted {
         let root = settings.project_root.clone();
         harness = harness.with_rule_store(Arc::new(move |rules| {
-            if let Err(e) = nemo_settings::persist_allow_rules(&root, rules) {
+            if let Err(e) = synthesis_settings::persist_allow_rules(&root, rules) {
                 eprintln!(
-                    "nemo: warning: could not save the rule: {}",
+                    "synth: warning: could not save the rule: {}",
                     sanitize_for_display(&e.to_string())
                 );
             }
@@ -1027,7 +1037,7 @@ pub fn prepare(
     }
 
     eprintln!(
-        "nemo: session {sid} model {} cwd {} mode {}",
+        "synth: session {sid} model {} cwd {} mode {}",
         res.label,
         ws.cwd.display(),
         mode.as_str()
@@ -1045,7 +1055,7 @@ pub fn prepare(
             );
         }
     }
-    let models = nemo_config::list_models(&cfg, None)
+    let models = synthesis_config::list_models(&cfg, None)
         .into_iter()
         .map(|m| m.value)
         .collect();
@@ -1096,8 +1106,8 @@ pub fn run(a: RunArgs, env: Env) -> Result<u8, String> {
     if a.max_cost_usd.is_some_and(|c| !c.is_finite() || c <= 0.0) {
         return Err("--max-cost-usd must be a positive number".into());
     }
-    let cwd =
-        nemo_core::canonicalize(&a.cwd).map_err(|e| format!("--cwd {}: {e}", a.cwd.display()))?;
+    let cwd = synthesis_core::canonicalize(&a.cwd)
+        .map_err(|e| format!("--cwd {}: {e}", a.cwd.display()))?;
     if !cwd.is_dir() {
         return Err(format!("--cwd {} is not a directory", cwd.display()));
     }
@@ -1184,7 +1194,7 @@ pub fn run(a: RunArgs, env: Env) -> Result<u8, String> {
                     );
                 }
                 h2.end_session(&out);
-                Ok::<_, nemo_harness::HarnessError>(out)
+                Ok::<_, synthesis_harness::HarnessError>(out)
             }
             .await;
             if let (Some(s), Ok(out)) = (&store2, &r) {
@@ -1194,18 +1204,18 @@ pub fn run(a: RunArgs, env: Env) -> Result<u8, String> {
         });
         let code = match task.await {
             Ok(Ok(out)) => {
-                eprintln!("nemo: task {:?}: {}", out.status, out.reason);
+                eprintln!("synth: task {:?}: {}", out.status, out.reason);
                 if let Some(h) = blocked_hint(&out) {
                     eprintln!("{h}");
                 }
                 exit_code(out.status)
             }
             Ok(Err(e)) => {
-                eprintln!("nemo: internal error: {e}");
+                eprintln!("synth: internal error: {e}");
                 70
             }
             Err(e) => {
-                eprintln!("nemo: internal error: {e}");
+                eprintln!("synth: internal error: {e}");
                 sink.emit(
                     &Scope::default(),
                     Event::SessionFailed(SessionEnd {
@@ -1249,7 +1259,7 @@ pub fn finish_store(
         .unwrap_or_else(|e| e.into_inner())
         .update_usage(usage)
     {
-        eprintln!("nemo: warning: session store: {e}");
+        eprintln!("synth: warning: session store: {e}");
     }
 }
 
@@ -1311,7 +1321,7 @@ struct Resolved {
 fn resolve_provider(
     a: &Common,
     cfg: &Config,
-    nemo_home: &Path,
+    synthesis_home: &Path,
     env: &Env,
 ) -> Result<Resolved, String> {
     if let Some(script) = a.provider.as_deref().and_then(|p| p.strip_prefix("fake:")) {
@@ -1347,14 +1357,14 @@ fn resolve_provider(
         (_, m) => m.clone(),
     };
     let parsed = parse_model(spec.as_deref(), cfg).map_err(|_| {
-        "no model configured: pass --model provider/model or set NEMO_MODEL".to_string()
+        "no model configured: pass --model provider/model or set SYNTHESIS_MODEL".to_string()
     })?;
     let id = parsed.provider_id.ok_or("no provider configured")?;
     let p = cfg
         .providers
         .get(&id)
         .ok_or_else(|| format!("unknown provider \"{id}\""))?;
-    let cred = resolve_credential(&id, Some(p), nemo_home, env);
+    let cred = resolve_credential(&id, Some(p), synthesis_home, env);
     let secrets = cred.iter().map(|c| c.secret.clone()).collect();
     if cred.is_none() && !p.is_no_auth() {
         // Name the variable the provider's config points at (the warning only carries the name).
@@ -1366,7 +1376,7 @@ fn resolve_provider(
         return Err(match var {
             Some(v) => format!("no API key for provider \"{id}\": set {v} and restart"),
             None => format!(
-                "no API key for provider \"{id}\": set NEMO_API_KEY (when NEMO_PROVIDER={id}) or add apiKey to its config"
+                "no API key for provider \"{id}\": set SYNTHESIS_API_KEY (when SYNTHESIS_PROVIDER={id}) or add apiKey to its config"
             ),
         });
     }
@@ -1384,16 +1394,16 @@ fn resolve_provider(
 /// stdout was closed by the reader; the task was cancelled and its events are in the store.
 pub const EXIT_STDOUT_CLOSED: u8 = 141;
 
-/// `nemo: blocked: approval needed for ... - rerun with --allow ... or in the TUI`.
+/// `synth: blocked: approval needed for ... - rerun with --allow ... or in the TUI`.
 fn blocked_hint(out: &TaskOutcome) -> Option<String> {
     if out.needed_permissions.is_empty() {
         return None;
     }
     // Blocked is the usual outcome; a model that worked around the denial still gets told.
     let lead = if out.status == TaskStatus::Blocked {
-        "nemo: blocked: approval needed for"
+        "synth: blocked: approval needed for"
     } else {
-        "nemo: note: approval was needed but unavailable for"
+        "synth: note: approval was needed but unavailable for"
     };
     let rules = &out.needed_permissions;
     // The rule text derives from the model's command: never offer it paste-ready unless it is inert
@@ -1532,7 +1542,7 @@ mod tests {
             reason: String::new(),
             verification_report_id: None,
             final_text: String::new(),
-            usage: nemo_events::Usage {
+            usage: synthesis_events::Usage {
                 input_tokens: 0,
                 output_tokens: 0,
                 cache_read_input_tokens: None,
@@ -1570,8 +1580,8 @@ mod tests {
             fn name(&self) -> &'static str {
                 "fake"
             }
-            fn capabilities(&self) -> nemo_terminal::SandboxCapabilities {
-                nemo_terminal::SandboxCapabilities {
+            fn capabilities(&self) -> synthesis_terminal::SandboxCapabilities {
+                synthesis_terminal::SandboxCapabilities {
                     filesystem: Guarantee::Strong,
                     network: Guarantee::Strong,
                     process_tree: Guarantee::Strong,
@@ -1580,27 +1590,27 @@ mod tests {
             }
             fn wrap(
                 &self,
-                _: &nemo_terminal::SandboxPolicy,
+                _: &synthesis_terminal::SandboxPolicy,
                 c: &SandboxedCommand,
-            ) -> Result<SandboxedCommand, nemo_sandbox::SandboxError> {
+            ) -> Result<SandboxedCommand, synthesis_sandbox::SandboxError> {
                 Ok(c.clone())
             }
         }
-        let mut p = nemo_terminal::SandboxPolicy::default();
+        let mut p = synthesis_terminal::SandboxPolicy::default();
         assert!(sandbox_preflight(&NoLoopback, Some(&p)).is_ok());
         p.network = NetworkPolicy::Loopback;
         let e = sandbox_preflight(&NoLoopback, Some(&p)).unwrap_err();
         assert!(
-            e.contains("--network loopback") && e.contains("nemo doctor"),
+            e.contains("--network loopback") && e.contains("synth doctor"),
             "{e}"
         );
     }
 
     #[test]
     fn preflight_refuses_a_backend_that_cannot_confine() {
-        let e = sandbox_preflight(&nemo_sandbox::NullSandbox, None).unwrap_err();
+        let e = sandbox_preflight(&synthesis_sandbox::NullSandbox, None).unwrap_err();
         assert!(
-            e.contains("nemo doctor") && e.contains("no OS sandbox"),
+            e.contains("synth doctor") && e.contains("no OS sandbox"),
             "{e}"
         );
     }
@@ -1608,26 +1618,26 @@ mod tests {
     #[test]
     fn workspace_root_is_the_repo_root_not_the_launch_dir_and_never_home() {
         let d = tempfile::tempdir().unwrap();
-        let base = nemo_core::canonicalize(d.path()).unwrap();
+        let base = synthesis_core::canonicalize(d.path()).unwrap();
         let (repo, sub) = (base.join("repo"), base.join("repo/src/deep"));
         std::fs::create_dir_all(&sub).unwrap();
         std::fs::create_dir_all(repo.join(".git")).unwrap();
         assert_eq!(workspace_root(&sub, &base), repo);
         assert_eq!(workspace_root(&repo, &base), repo);
-        // `.nemo` also marks a root
+        // `.synthesis` also marks a root
         let proj = base.join("proj");
-        std::fs::create_dir_all(proj.join(".nemo")).unwrap();
+        std::fs::create_dir_all(proj.join(".synthesis")).unwrap();
         std::fs::create_dir_all(proj.join("a")).unwrap();
         assert_eq!(workspace_root(&proj.join("a"), &base), proj);
         // no marker: the launch dir
         let lone = base.join("lone/x");
         std::fs::create_dir_all(&lone).unwrap();
         assert_eq!(workspace_root(&lone, &base), lone);
-        // `$HOME/.nemo` must not turn the home directory into the workspace
-        std::fs::create_dir_all(base.join(".nemo")).unwrap();
+        // `$HOME/.synthesis` must not turn the home directory into the workspace
+        std::fs::create_dir_all(base.join(".synthesis")).unwrap();
         assert_eq!(workspace_root(&lone, &base), lone);
         // ... nor may a marker ABOVE home (`/Users/.git`)
-        std::fs::remove_dir(base.join(".nemo")).unwrap();
+        std::fs::remove_dir(base.join(".synthesis")).unwrap();
         std::fs::create_dir_all(base.join(".git")).unwrap();
         let home = base.join("users/me");
         std::fs::create_dir_all(home.join("proj")).unwrap();
@@ -1639,7 +1649,7 @@ mod tests {
     fn a_world_writable_marker_directory_is_not_a_workspace_root() {
         use std::os::unix::fs::PermissionsExt;
         let d = tempfile::tempdir().unwrap();
-        let base = nemo_core::canonicalize(d.path()).unwrap();
+        let base = synthesis_core::canonicalize(d.path()).unwrap();
         let (repo, sub) = (base.join("repo"), base.join("repo/src"));
         std::fs::create_dir_all(&sub).unwrap();
         std::fs::create_dir_all(repo.join(".git")).unwrap();
@@ -1660,21 +1670,21 @@ mod tests {
     #[test]
     fn started_in_a_subfolder_the_repo_instructions_and_skills_are_found() {
         let d = tempfile::tempdir().unwrap();
-        let base = nemo_core::canonicalize(d.path()).unwrap();
+        let base = synthesis_core::canonicalize(d.path()).unwrap();
         let (repo, sub) = (base.join("repo"), base.join("repo/pkg"));
         std::fs::create_dir_all(sub.clone()).unwrap();
         std::fs::create_dir_all(repo.join(".git")).unwrap();
         std::fs::write(repo.join("AGENTS.md"), "root rules").unwrap();
-        std::fs::write(sub.join("NEMO.md"), "pkg rules").unwrap();
+        std::fs::write(sub.join("SYNTHESIS.md"), "pkg rules").unwrap();
         let root = workspace_root(&sub, &base.join("home"));
         let ws = WorkspaceContext::open("w", &root, &sub, &[], base.join("art"), "pg").unwrap();
         assert_eq!(ws.cwd, sub);
-        let got = nemo_context::load_instructions(
+        let got = synthesis_context::load_instructions(
             &ws,
             &[],
             None,
-            &nemo_context::DEFAULT_NAMES,
-            &nemo_context::InstructionLimits::default(),
+            &synthesis_context::DEFAULT_NAMES,
+            &synthesis_context::InstructionLimits::default(),
         );
         let text: Vec<_> = got.iter().map(|f| f.content.as_str()).collect();
         assert_eq!(text, ["root rules", "pkg rules"], "root first");
@@ -1683,11 +1693,11 @@ mod tests {
     #[test]
     fn a_read_deny_rule_keeps_an_instruction_file_out_of_the_prompt() {
         let d = tempfile::tempdir().unwrap();
-        let base = nemo_core::canonicalize(d.path()).unwrap();
+        let base = synthesis_core::canonicalize(d.path()).unwrap();
         std::fs::write(base.join("AGENTS.md"), "secret plan").unwrap();
         std::fs::write(base.join("docs.md"), "imported").unwrap();
         std::fs::create_dir_all(base.join("sub")).unwrap();
-        std::fs::write(base.join("sub/NEMO.md"), "see @../docs.md").unwrap();
+        std::fs::write(base.join("sub/SYNTHESIS.md"), "see @../docs.md").unwrap();
         let rules = PermissionRules {
             // `/x` is anchored at the cwd (= base)
             deny: vec!["Read(/AGENTS.md)".into(), "Read(/docs.md)".into()],
@@ -1695,19 +1705,19 @@ mod tests {
         };
         let perms = Permissions::new(
             rules,
-            nemo_permissions::Env::new(&base, &base, Mode::Default),
+            synthesis_permissions::Env::new(&base, &base, Mode::Default),
         );
         assert!(read_denied(&perms, &base.join("AGENTS.md")));
-        assert!(!read_denied(&perms, &base.join("sub/NEMO.md")));
+        assert!(!read_denied(&perms, &base.join("sub/SYNTHESIS.md")));
         let ws = WorkspaceContext::open("w", &base, &base.join("sub"), &[], base.join("art"), "pg")
             .unwrap();
         let deny = |p: &Path| read_denied(&perms, p);
-        let got = nemo_context::load_instructions_with(
+        let got = synthesis_context::load_instructions_with(
             &ws,
             &[],
             None,
-            &nemo_context::DEFAULT_NAMES,
-            &nemo_context::InstructionLimits::default(),
+            &synthesis_context::DEFAULT_NAMES,
+            &synthesis_context::InstructionLimits::default(),
             Some(&deny),
         );
         let text: Vec<_> = got.iter().map(|f| f.content.as_str()).collect();

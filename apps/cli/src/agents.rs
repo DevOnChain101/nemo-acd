@@ -1,5 +1,5 @@
-//! Custom sub-agent definitions: `<nemo_home>/agents/*.md` (user) and
-//! `<project_root>/.nemo/agents/*.md` (project, repository content: only for a trusted project,
+//! Custom sub-agent definitions: `<synthesis_home>/agents/*.md` (user) and
+//! `<project_root>/.synthesis/agents/*.md` (project, repository content: only for a trusted project,
 //! enforced by `AgentTable::from_sources`). Format as Node `loadAgentsDir`: Markdown with a
 //! `---` frontmatter (`name`, `description`, `tools`); the body is the system prompt.
 //! `model`/`profile`/`reasoning` of the Node format are not supported by the Rust harness.
@@ -7,8 +7,8 @@
 use std::io::Read;
 use std::path::Path;
 
-use nemo_harness::{AgentDef, AgentSource, AgentTable};
-use nemo_settings::ProjectTrust;
+use synthesis_harness::{AgentDef, AgentSource, AgentTable};
+use synthesis_settings::ProjectTrust;
 
 const MAX_FILE_BYTES: u64 = 64 * 1024;
 const MAX_FILES: usize = 100;
@@ -100,12 +100,12 @@ pub struct Loaded {
     pub project: usize,
 }
 
-pub fn load(nemo_home: &Path, project_root: &Path, trust: ProjectTrust) -> Loaded {
+pub fn load(synthesis_home: &Path, project_root: &Path, trust: ProjectTrust) -> Loaded {
     let mut defs = vec![];
-    scan(&nemo_home.join("agents"), AgentSource::User, &mut defs);
+    scan(&synthesis_home.join("agents"), AgentSource::User, &mut defs);
     let user = defs.len();
     scan(
-        &project_root.join(".nemo").join("agents"),
+        &project_root.join(".synthesis").join("agents"),
         AgentSource::Project,
         &mut defs,
     );
@@ -137,7 +137,7 @@ mod tests {
             "rev.md",
             "---\nname: reviewer\ndescription: reviews\ntools: [Read, Grep]\n---\nBe strict.\n",
         );
-        write(&root.join(".nemo/agents"), "evil.md", "no frontmatter");
+        write(&root.join(".synthesis/agents"), "evil.md", "no frontmatter");
         let l = load(&home, &root, ProjectTrust::Untrusted);
         let r = l.table.get("reviewer").unwrap();
         assert_eq!(

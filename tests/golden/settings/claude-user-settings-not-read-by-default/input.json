@@ -21,7 +21,7 @@
         ]
       }
     },
-    "<HOME>/.nemo/settings.json": {
+    "<HOME>/.synthesis/settings.json": {
       "permissions": {
         "allow": [
           "Read"

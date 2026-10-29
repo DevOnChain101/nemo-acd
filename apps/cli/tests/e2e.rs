@@ -8,16 +8,16 @@ use std::process::{Child, Command, Output, Stdio};
 use serde_json::{Value, json};
 
 /// Whether `--sandbox enforce` (the default) would start here with the standard policy, as
-/// `nemo doctor` reports it (`enforce_ready: yes`). False e.g. on CI runners with userns blocked
+/// `synth doctor` reports it (`enforce_ready: yes`). False e.g. on CI runners with userns blocked
 /// (bubblewrap unusable) where Landlock alone cannot express the standard policy.
 fn host_confines() -> bool {
     static C: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *C.get_or_init(|| {
         let d = tempfile::tempdir().unwrap();
-        let o = Command::new(env!("CARGO_BIN_EXE_nemo"))
+        let o = Command::new(env!("CARGO_BIN_EXE_synth"))
             .args(["doctor", "--cwd"])
             .arg(d.path())
-            .env("NEMO_HOME", d.path())
+            .env("SYNTHESIS_HOME", d.path())
             .output()
             .unwrap();
         String::from_utf8_lossy(&o.stdout).contains("enforce_ready: yes")
@@ -28,7 +28,7 @@ fn host_confines() -> bool {
 fn skip_without_sandbox() -> bool {
     let skip = !host_confines();
     if skip {
-        eprintln!("SKIP: `nemo doctor` reports enforce_ready: no on this host");
+        eprintln!("SKIP: `synth doctor` reports enforce_ready: no on this host");
     }
     skip
 }
@@ -66,7 +66,7 @@ impl Rig {
         self.dir.path().join("ws")
     }
     fn home(&self) -> PathBuf {
-        self.dir.path().join("nemo")
+        self.dir.path().join("synthesis")
     }
     /// User-level settings (project settings are untrusted and cannot allow anything).
     fn settings(&self, v: Value) {
@@ -76,7 +76,7 @@ impl Rig {
     fn cmd(&self, script: Value, args: &[&str]) -> Command {
         let s = self.dir.path().join("script.json");
         std::fs::write(&s, script.to_string()).unwrap();
-        let mut c = Command::new(env!("CARGO_BIN_EXE_nemo"));
+        let mut c = Command::new(env!("CARGO_BIN_EXE_synth"));
         c.args(["run", "--cwd"])
             .arg(self.ws())
             .arg("--provider")
@@ -91,11 +91,11 @@ impl Rig {
         c.env_clear();
         host_env(&mut c);
         c.env("HOME", self.dir.path())
-            .env("NEMO_HOME", self.home())
+            .env("SYNTHESIS_HOME", self.home())
             .stdin(Stdio::null());
-        // Lets CI simulate a Landlock-only host (see nemo-sandbox feature `test-backend`).
-        if let Some(v) = std::env::var_os("NEMO_TEST_FORCE_BACKEND") {
-            c.env("NEMO_TEST_FORCE_BACKEND", v);
+        // Lets CI simulate a Landlock-only host (see synthesis-sandbox feature `test-backend`).
+        if let Some(v) = std::env::var_os("SYNTHESIS_TEST_FORCE_BACKEND") {
+            c.env("SYNTHESIS_TEST_FORCE_BACKEND", v);
         }
         c
     }
@@ -198,7 +198,7 @@ fn edit_with_verification_completes_exit_0() {
         "--events-out is a copy of stdout"
     );
     // Persisted: database and Node transcript mirror.
-    assert!(rig.home().join("nemo.db").exists());
+    assert!(rig.home().join("synthesis.db").exists());
     let projects = rig.home().join("projects");
     let found = std::fs::read_dir(&projects).unwrap().flatten().any(|d| {
         std::fs::read_dir(d.path())
@@ -210,7 +210,7 @@ fn edit_with_verification_completes_exit_0() {
 }
 
 #[test]
-fn malformed_settings_stop_nemo_run_with_exit_2_before_anything_runs() {
+fn malformed_settings_stop_synthesis_run_with_exit_2_before_anything_runs() {
     let rig = Rig::new();
     std::fs::create_dir_all(rig.home()).unwrap();
     // a trailing comma would otherwise silently drop this deny rule
@@ -240,7 +240,7 @@ fn no_session_store_writes_no_database() {
     let (o, ev) = rig.run(json!([{"text": "nothing to do"}]), &["--no-session-store"]);
     assert_eq!(o.status.code(), Some(0));
     check_stream(&ev);
-    assert!(!rig.home().join("nemo.db").exists());
+    assert!(!rig.home().join("synthesis.db").exists());
 }
 
 #[test]
@@ -501,7 +501,7 @@ impl Rig {
         p
     }
     fn db(&self) -> rusqlite::Connection {
-        rusqlite::Connection::open(self.home().join("nemo.db")).unwrap()
+        rusqlite::Connection::open(self.home().join("synthesis.db")).unwrap()
     }
     /// All Node transcript mirror text.
     fn mirror(&self) -> String {
@@ -552,7 +552,7 @@ fn mcp_rig(args: &[&str]) -> (Rig, String) {
     let rig = Rig::new();
     let srv = rig.write("echo_server.py", ECHO_SERVER);
     rig.write(
-        "nemo/nemo.json",
+        "synthesis/synthesis.json",
         &json!({"$schema": "config.json/v1",
             "mcpServers": {"echo": {"command": "python3", "args": [srv]}}})
         .to_string(),
@@ -621,7 +621,7 @@ fn untrusted_project_mcp_server_is_never_started() {
 fn skill_body_is_served_and_listed_for_doctor() {
     let rig = Rig::new();
     rig.write(
-        "nemo/skills/deploy/SKILL.md",
+        "synthesis/skills/deploy/SKILL.md",
         "---\nname: deploy\ndescription: ships it\n---\nRUN THE DEPLOY STEPS\n",
     );
     rig.settings(json!({"permissions": {"allow": ["Skill"]}}));
@@ -631,13 +631,13 @@ fn skill_body_is_served_and_listed_for_doctor() {
     );
     check_stream(&ev);
     assert!(rig.mirror().contains("RUN THE DEPLOY STEPS"));
-    let o = Command::new(env!("CARGO_BIN_EXE_nemo"))
+    let o = Command::new(env!("CARGO_BIN_EXE_synth"))
         .args(["doctor", "--cwd"])
         .arg(rig.ws())
         .env_clear()
         .env("PATH", std::env::var_os("PATH").unwrap_or_default())
         .env("HOME", rig.dir.path())
-        .env("NEMO_HOME", rig.home())
+        .env("SYNTHESIS_HOME", rig.home())
         .output()
         .unwrap();
     let out = String::from_utf8_lossy(&o.stdout);
@@ -673,11 +673,11 @@ fn settings_env_reaches_commands_and_secret_names_are_refused() {
 fn verification_settings_add_required_checks() {
     let rig = Rig::new();
     let args = ["--permission-mode", "acceptEdits"];
-    rig.settings(json!({"nemo": {"verification": {"checks": ["grep -q bye a.txt"]}}}));
+    rig.settings(json!({"synthesis": {"verification": {"checks": ["grep -q bye a.txt"]}}}));
     let (_, ev) = rig.run(edit_script(), &args);
     assert_eq!(ended(&ev)["status"], "completed");
     let rig2 = Rig::new();
-    rig2.settings(json!({"nemo": {"verification": {"checks": ["test -f no-such-file"]}}}));
+    rig2.settings(json!({"synthesis": {"verification": {"checks": ["test -f no-such-file"]}}}));
     let (_, ev) = rig2.run(edit_script(), &args);
     assert_ne!(
         ended(&ev)["status"],
@@ -699,9 +699,9 @@ fn cost_budget_is_rejected_without_a_price_and_enforced_with_one() {
         .unwrap();
     assert_eq!(o.status.code(), Some(2));
     assert!(o.stdout.is_empty());
-    assert!(String::from_utf8_lossy(&o.stderr).contains("nemo.pricing"));
+    assert!(String::from_utf8_lossy(&o.stderr).contains("synthesis.pricing"));
 
-    rig.settings(json!({"nemo": {"pricing": {"fake/fake-model": {"input_per_mtok": 1.0, "output_per_mtok": 1.0}}}}));
+    rig.settings(json!({"synthesis": {"pricing": {"fake/fake-model": {"input_per_mtok": 1.0, "output_per_mtok": 1.0}}}}));
     let (o, ev) = rig.run(script, &["--max-cost-usd", "0.5"]);
     assert_eq!(o.status.code(), Some(1));
     let e = ended(&ev);
@@ -857,15 +857,15 @@ fn worktree_run_produces_a_branch_and_a_diff_and_leaves_the_original_alone() {
         .find(|t| t.contains("worktree"))
         .expect("worktree notice");
     assert!(
-        notice.contains("branch nemo/") && notice.contains("1 file(s) changed, +1 -1"),
+        notice.contains("branch synthesis/") && notice.contains("1 file(s) changed, +1 -1"),
         "{notice}"
     );
     let b = Command::new("git")
-        .args(["branch", "--list", "nemo/*"])
+        .args(["branch", "--list", "synthesis/*"])
         .current_dir(rig.ws())
         .output()
         .unwrap();
-    assert!(String::from_utf8_lossy(&b.stdout).contains("nemo/"));
+    assert!(String::from_utf8_lossy(&b.stdout).contains("synthesis/"));
     let sid = ev[0]["session_id"].as_str().unwrap();
     let wt = rig.home().join("worktrees").join(sid);
     assert_eq!(std::fs::read_to_string(wt.join("a.txt")).unwrap(), "bye\n");
@@ -916,10 +916,10 @@ fn closed_stdout_cancels_the_run_exit_141_and_still_persists_the_end() {
 #[test]
 fn doctor_reports_enforce_readiness() {
     let d = tempfile::tempdir().unwrap();
-    let o = Command::new(env!("CARGO_BIN_EXE_nemo"))
+    let o = Command::new(env!("CARGO_BIN_EXE_synth"))
         .args(["doctor", "--cwd"])
         .arg(d.path())
-        .env("NEMO_HOME", d.path())
+        .env("SYNTHESIS_HOME", d.path())
         .output()
         .unwrap();
     let out = String::from_utf8_lossy(&o.stdout);
@@ -932,12 +932,12 @@ fn doctor_reports_enforce_readiness() {
 #[test]
 fn doctor_into_a_closed_pipe_exits_quietly() {
     let rig = Rig::new();
-    let mut c = Command::new(env!("CARGO_BIN_EXE_nemo"))
+    let mut c = Command::new(env!("CARGO_BIN_EXE_synth"))
         .arg("doctor")
         .env_clear()
         .env("PATH", std::env::var_os("PATH").unwrap_or_default())
         .env("HOME", rig.dir.path())
-        .env("NEMO_HOME", rig.home())
+        .env("SYNTHESIS_HOME", rig.home())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -1078,13 +1078,13 @@ fn terminal_escapes_in_untrusted_text_are_not_printed() {
     let err = String::from_utf8_lossy(&o.stderr);
     assert!(err.contains("invalid MCP server name"), "{err}");
     assert!(!err.contains(['\u{1b}', '\u{7}']), "{err:?}");
-    let d = Command::new(env!("CARGO_BIN_EXE_nemo"))
+    let d = Command::new(env!("CARGO_BIN_EXE_synth"))
         .args(["doctor", "--cwd"])
         .arg(rig.ws())
         .env_clear()
         .env("PATH", std::env::var_os("PATH").unwrap_or_default())
         .env("HOME", rig.dir.path())
-        .env("NEMO_HOME", rig.home())
+        .env("SYNTHESIS_HOME", rig.home())
         .output()
         .unwrap();
     let out = String::from_utf8_lossy(&d.stdout);

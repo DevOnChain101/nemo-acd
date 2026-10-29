@@ -2,7 +2,7 @@
   "cwd": "<TMP>/ws",
   "env": {},
   "files": {
-    "<HOME>/.nemo/settings.json": {
+    "<HOME>/.synthesis/settings.json": {
       "permissions": {
         "additionalDirectories": null,
         "allow": "Read",

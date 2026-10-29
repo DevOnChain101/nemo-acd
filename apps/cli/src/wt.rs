@@ -1,28 +1,28 @@
-//! `--worktree`: an isolated git worktree and branch `nemo/<session>` for the run, left in place
+//! `--worktree`: an isolated git worktree and branch `synthesis/<session>` for the run, left in place
 //! for review.
 
 use std::path::{Path, PathBuf};
 
-use nemo_config::Env;
-use nemo_core::WorkspaceContext;
-use nemo_workspace::{GitInfo, WorktreeManager, WorktreeOptions};
+use synthesis_config::Env;
+use synthesis_core::WorkspaceContext;
+use synthesis_workspace::{GitInfo, WorktreeManager, WorktreeOptions};
 
 pub struct Worktree {
     mgr: WorktreeManager,
     pub info: GitInfo,
 }
 
-/// Creates the worktree under `<nemo_home>/worktrees`. A non-git directory or a repository
+/// Creates the worktree under `<synthesis_home>/worktrees`. A non-git directory or a repository
 /// without commits is an error (the caller exits 2).
 pub fn create(
     env: &Env,
-    nemo_home: &Path,
+    synthesis_home: &Path,
     source: &Path,
     sid: &str,
     artifact_root: PathBuf,
 ) -> Result<(Worktree, WorkspaceContext), String> {
-    let mut opts = WorktreeOptions::new(nemo_home.to_path_buf());
-    opts.worktrees_dir = Some(nemo_home.join("worktrees"));
+    let mut opts = WorktreeOptions::new(synthesis_home.to_path_buf());
+    opts.worktrees_dir = Some(synthesis_home.join("worktrees"));
     let mgr = WorktreeManager::new(env, opts).map_err(|e| format!("--worktree: {e}"))?;
     let a = mgr
         .create(source, sid, artifact_root, false)

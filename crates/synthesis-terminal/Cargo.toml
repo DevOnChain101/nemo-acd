@@ -1,0 +1,23 @@
+[package]
+name = "synthesis-terminal"
+version.workspace = true
+edition.workspace = true
+# process-wrap 10 needs 1.87 (docs/research/crates.md: workspace MSRV must rise).
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+synthesis-core = { path = "../synthesis-core" }
+synthesis-events = { version = "0.1.0", path = "../synthesis-events" }
+synthesis-platform = { path = "../synthesis-platform" }
+synthesis-sandbox = { path = "../synthesis-sandbox" }
+process-wrap = { version = "10", default-features = false, features = ["tokio1", "process-group", "job-object"] }
+regex = "1.13.1"
+tokio = { version = "1.54.1", default-features = false, features = ["rt", "time", "net", "io-util", "macros"] }
+tokio-util = { version = "0.7.20", default-features = false }
+
+[dev-dependencies]
+tempfile = "3.27.0"

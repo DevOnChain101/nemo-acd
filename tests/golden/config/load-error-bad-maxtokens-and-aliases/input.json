@@ -2,7 +2,7 @@
   "cwd": "<TMP>/ws",
   "env": {},
   "files": {
-    "<NEMO_HOME>/nemo.json": {
+    "<SYNTHESIS_HOME>/synthesis.json": {
       "$schema": "config.json/v1",
       "aliases": {
         "a": ""
@@ -10,6 +10,6 @@
       "maxTokens": -5
     }
   },
-  "home": "<NEMO_HOME>",
+  "home": "<SYNTHESIS_HOME>",
   "op": "loadConfig"
 }

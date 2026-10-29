@@ -4,7 +4,7 @@
       {
         "hooks": [
           {
-            "command": "printf '%s|%s|%s|%s' \"$CLAUDE_PROJECT_DIR\" \"$NEMO_PROJECT_DIR\" \"${NEMO_API_KEY:-absent}\" \"${NEMO_ANTHROPIC_API_KEY:-absent}\"",
+            "command": "printf '%s|%s|%s|%s' \"$CLAUDE_PROJECT_DIR\" \"$SYNTHESIS_PROJECT_DIR\" \"${SYNTHESIS_API_KEY:-absent}\" \"${SYNTHESIS_ANTHROPIC_API_KEY:-absent}\"",
             "type": "command"
           }
         ],
@@ -17,8 +17,8 @@
   "opts": {
     "cwd": "<TMP>/ws",
     "env": {
-      "NEMO_ANTHROPIC_API_KEY": "secret",
-      "NEMO_API_KEY": "flat-secret"
+      "SYNTHESIS_ANTHROPIC_API_KEY": "secret",
+      "SYNTHESIS_API_KEY": "flat-secret"
     }
   },
   "payload": {

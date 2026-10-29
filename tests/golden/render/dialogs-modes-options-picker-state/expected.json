@@ -289,7 +289,7 @@
       },
       {
         "key": "no",
-        "label": "No, and tell Nemo what to do differently (esc)"
+        "label": "No, and tell Synthesis what to do differently (esc)"
       }
     ],
     [
@@ -303,7 +303,7 @@
       },
       {
         "key": "no",
-        "label": "No, and tell Nemo what to do differently (esc)"
+        "label": "No, and tell Synthesis what to do differently (esc)"
       }
     ],
     [
@@ -317,7 +317,7 @@
       },
       {
         "key": "no",
-        "label": "No, and tell Nemo what to do differently (esc)"
+        "label": "No, and tell Synthesis what to do differently (esc)"
       }
     ]
   ],

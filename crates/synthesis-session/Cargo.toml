@@ -1,0 +1,24 @@
+[package]
+name = "synthesis-session"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+synthesis-core = { path = "../synthesis-core" }
+synthesis-events = { path = "../synthesis-events" }
+synthesis-platform = { path = "../synthesis-platform" }
+rusqlite = { version = "0.41", features = ["bundled"] }
+regex = "1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.10"
+time = { version = "0.3", features = ["formatting", "parsing", "macros"] }
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+tempfile = "3"

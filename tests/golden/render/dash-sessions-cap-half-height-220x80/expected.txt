@@ -1,4 +1,4 @@
-▐ ✻ Nemo  ·  MISSION CONTROL ▌ │ ● 40 live │ ◆ claude-sonnet │ ⌂ project                                                                                                      session- · up 1m00s │ ctx ▱▱▱▱▱▱ 0% │ 12:00:00
+▐ ✻ Synthesis  ·  MISSION CONTROL ▌ │ ● 40 live │ ◆ claude-sonnet │ ⌂ project                                                                                                 session- · up 1m00s │ ctx ▱▱▱▱▱▱ 0% │ 12:00:00
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ┏━ ◆ Running 40 ━━━━━━━━━━━━━━━━━━━━┓┏━ ◆ Status ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓┏━ ◆ TOPOLOGY 0 nodes ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃ ►● proj-0                      10%┃┃                                                                                  ┃┃ ○ 1 Plan ━► ○ 2 Guard ━► ○ 3 Orchestrate ━► ○ 4 Execute ━► ○ 5 Verify ━► ○ 6 Learn              ┃
@@ -30,7 +30,7 @@
 │  ● proj-13                     10%││                                                                                  ││ ╰────────────────────────────╯   ╰───────────────────────▲────╯   ╰──▲─────────────────────────╯│
 │ project-13 (D:/workspace)         ││                                                                                  ││                           │                              │           │                          │
 │  ● proj-14                     10%││                                                                                  ││                           └────┐                         │      ┌────┘                          │
-│ project-14 (D:/workspace)         ││                                                                                  ││ ╭─── MEMORY · FEEDBACK ──────╮ │ ╭─ NEMO CORE  sonnet ───┻────╮ │ ╭─── SUB-AGENTS ─────────────╮│
+│ project-14 (D:/workspace)         ││                                                                                  ││ ╭─── MEMORY · FEEDBACK ──────╮ │ ╭─ SYNTHESIS CORE ──────┻────╮ │ ╭─── SUB-AGENTS ─────────────╮│
 │  ● proj-15                     10%││                                                                                  ││ │ context ▱▱▱▱▱▱▱▱▱▱      0% │ └─► · Intent       parse requ… ┣─┘ │ no sub-agents yet          ││
 │ project-15 (D:/workspace)         ││                                                                                  ││ │ verify  no test / build r… │   │ · Plan         decompose   │   │                            ││
 │  ● proj-16                     10%││                                                                                  ││ │ memory  0 writes           ◄───┫ · Orchestrator route… idle ┣───►                            ││

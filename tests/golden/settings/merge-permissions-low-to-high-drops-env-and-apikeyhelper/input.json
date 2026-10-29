@@ -2,7 +2,7 @@
   "cwd": "<TMP>/ws",
   "env": {},
   "files": {
-    "<HOME>/.nemo/settings.json": {
+    "<HOME>/.synthesis/settings.json": {
       "apiKeyHelper": "should-not-appear-either",
       "env": {
         "ANTHROPIC_API_KEY": "should-not-appear"
@@ -22,7 +22,7 @@
         ]
       }
     },
-    "<TMP>/ws/.nemo/settings.json": {
+    "<TMP>/ws/.synthesis/settings.json": {
       "permissions": {
         "allow": [
           "Bash(git:*)"

@@ -4,7 +4,7 @@
       "description": "",
       "model": null,
       "name": "other",
-      "path": "<TMP>/ws/.nemo/agents/other.md",
+      "path": "<TMP>/ws/.synthesis/agents/other.md",
       "profile": "inherit",
       "prompt": "no frontmatter body",
       "reasoning": "inherit",
@@ -16,7 +16,7 @@
       "description": "project tester",
       "model": "opus",
       "name": "tester",
-      "path": "<TMP>/ws/.nemo/agents/tester.md",
+      "path": "<TMP>/ws/.synthesis/agents/tester.md",
       "profile": "inherit",
       "prompt": "Project prompt body",
       "reasoning": "inherit",
@@ -28,7 +28,7 @@
       ]
     }
   ],
-  "autoMemoryDir": "<HOME>/.nemo/projects/<SANITIZED_CWD>/memory",
+  "autoMemoryDir": "<HOME>/.synthesis/projects/<SANITIZED_CWD>/memory",
   "claudeDir": "<HOME>/.claude",
   "commands": [],
   "mcpServers": [],
@@ -52,7 +52,7 @@
   },
   "skills": [
     {
-      "name": "nemocode-config",
+      "name": "synthesis-config",
       "source": "built-in"
     }
   ],

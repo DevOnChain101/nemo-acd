@@ -1,4 +1,4 @@
-▐ ✻ Nemo  ·  MISSION CONTROL ▌ │ ● 2 live               ctx ▱▱▱▱▱▱ 3% │ 12:00:00
+▐ ✻ Synthesis  ·  MISSION CONTROL ▌ │ ● 2 live               ctx ▱▱▱▱▱▱ 3% │ 12:00:00
 ┏━ ◆ Running 2 ━━━━┓┏━ ◆ Status ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃ ►● proj-0     10%┃┃                                                          ┃
 │ project-0        ││ · RUNNING TOOL  last activity 9m54s ago                  │
@@ -6,7 +6,7 @@
 │ project-1        ││ Context  █░░░░░░░░░░░░░░░░░░░░░░░░░░░   3% 5.9k/200.0k   │
 ┃                  ┃┃                                                          ┃
 ┗━━━━━━━━━━━━━━━━━━┛┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-┏━ ◆ Session ━━━━━━┓┏━ ◆ NEMO · /work/proj  · working ━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┏━ ◆ Session ━━━━━━┓┏━ ◆ SYNTHESIS · /work/proj  · working ━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃ model  anthropic…┃┃      FAIL login.test.ts                                  ┃
 │ mode   manual    ││      expected 2                                          │
 │ effort auto      ││                                                          │

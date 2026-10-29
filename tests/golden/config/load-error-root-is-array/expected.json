@@ -1,7 +1,7 @@
 {
   "error": {
-    "code": "NEMO_INVALID_CONFIG",
-    "message": "invalid config <NEMO_HOME>/nemo.json: $ must be an object, got array",
+    "code": "SYNTHESIS_INVALID_CONFIG",
+    "message": "invalid config <SYNTHESIS_HOME>/synthesis.json: $ must be an object, got array",
     "name": "ConfigValidationError"
   }
 }

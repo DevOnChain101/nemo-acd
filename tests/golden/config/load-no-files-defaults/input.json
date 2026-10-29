@@ -2,6 +2,6 @@
   "cwd": "<TMP>/ws",
   "env": {},
   "files": {},
-  "home": "<NEMO_HOME>",
+  "home": "<SYNTHESIS_HOME>",
   "op": "loadConfig"
 }

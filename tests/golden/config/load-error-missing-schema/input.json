@@ -2,10 +2,10 @@
   "cwd": "<TMP>/ws",
   "env": {},
   "files": {
-    "<NEMO_HOME>/nemo.json": {
+    "<SYNTHESIS_HOME>/synthesis.json": {
       "model": "a/b"
     }
   },
-  "home": "<NEMO_HOME>",
+  "home": "<SYNTHESIS_HOME>",
   "op": "loadConfig"
 }

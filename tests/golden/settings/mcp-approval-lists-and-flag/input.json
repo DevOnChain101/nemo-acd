@@ -2,7 +2,7 @@
   "cwd": "<TMP>/ws",
   "env": {},
   "files": {
-    "<HOME>/.nemo/settings.json": {
+    "<HOME>/.synthesis/settings.json": {
       "disabledMcpjsonServers": [
         "c"
       ],
@@ -12,7 +12,7 @@
         "b"
       ]
     },
-    "<TMP>/ws/.nemo/settings.json": {
+    "<TMP>/ws/.synthesis/settings.json": {
       "enableAllProjectMcpServers": false,
       "enabledMcpjsonServers": [
         "b",

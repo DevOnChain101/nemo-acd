@@ -1,10 +1,10 @@
 {
   "cwd": "<TMP>/ws",
   "env": {
-    "NEMO_API_KEY": "k",
-    "NEMO_BASE_URL": "https://proxy.example.test/anthropic"
+    "SYNTHESIS_API_KEY": "k",
+    "SYNTHESIS_BASE_URL": "https://proxy.example.test/anthropic"
   },
   "files": {},
-  "home": "<NEMO_HOME>",
+  "home": "<SYNTHESIS_HOME>",
   "op": "loadConfig"
 }

@@ -1,7 +1,7 @@
 {
   "error": {
-    "code": "NEMO_INVALID_CONFIG",
-    "message": "invalid config <NEMO_HOME>/nemo.json: $.maxTokens must be a positive number; $.aliases.a must be a non-empty string",
+    "code": "SYNTHESIS_INVALID_CONFIG",
+    "message": "invalid config <SYNTHESIS_HOME>/synthesis.json: $.maxTokens must be a positive number; $.aliases.a must be a non-empty string",
     "name": "ConfigValidationError"
   }
 }

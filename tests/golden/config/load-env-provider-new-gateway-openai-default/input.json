@@ -1,11 +1,11 @@
 {
   "cwd": "<TMP>/ws",
   "env": {
-    "NEMO_API_KEY": "k",
-    "NEMO_BASE_URL": "https://corp.example.test/v1",
-    "NEMO_PROVIDER": "corp"
+    "SYNTHESIS_API_KEY": "k",
+    "SYNTHESIS_BASE_URL": "https://corp.example.test/v1",
+    "SYNTHESIS_PROVIDER": "corp"
   },
   "files": {},
-  "home": "<NEMO_HOME>",
+  "home": "<SYNTHESIS_HOME>",
   "op": "loadConfig"
 }

@@ -1,0 +1,23 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {
+    "SYNTHESIS_HOME": "<SYNTHESIS_HOME>"
+  },
+  "files": {
+    "<HOME>/.synthesis/settings.json": {
+      "permissions": {
+        "allow": [
+          "DotSynthesis"
+        ]
+      }
+    },
+    "<SYNTHESIS_HOME>/settings.json": {
+      "permissions": {
+        "allow": [
+          "FromSynthesisHome"
+        ]
+      }
+    }
+  },
+  "op": "workspace"
+}

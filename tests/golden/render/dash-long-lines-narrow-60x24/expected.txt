@@ -1,4 +1,4 @@
-▐ ✻ Nemo  ·  MISSION CONTROL ▌ │ ● 3 live           12:00:00
+▐ ✻ Synthesis  ·  MISSION CONTROL ▌ │ ● 3 live           12:00:00
 ┏━ ◆ Running 3 ━━━━━━┓┏━ ◆ Status ━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃ ►● proj-0       10%┃┃                                    ┃
 │ project-0 (…ace)   ││                                    │

@@ -1,10 +1,10 @@
 //! `tasks` and `verification_reports` rows keyed by the HARNESS task id.
 //!
-//! nemo-session only offers `begin_task`, which invents its own id, while the harness names the
+//! synthesis-session only offers `begin_task`, which invents its own id, while the harness names the
 //! task itself and stamps that id on every event. A second connection (WAL, so it coexists with
 //! the session writer) inserts the rows with the harness id instead. It refuses to touch a
 //! database whose schema version it was not written for. Follow-up: `begin_task_with_id` /
-//! `record_verification_report_with_id` in nemo-session would make this module disappear.
+//! `record_verification_report_with_id` in synthesis-session would make this module disappear.
 //!
 //! The full `VerificationReport` never leaves the harness (only `verification.completed` does),
 //! so the stored report JSON is the event summary: id, attempt, status, one-line summary.
@@ -12,9 +12,9 @@
 use std::path::Path;
 use std::time::Duration;
 
-use nemo_events::{Envelope, Event, Redactor};
 use rusqlite::{Connection, params};
 use serde_json::json;
+use synthesis_events::{Envelope, Event, Redactor};
 
 pub struct TaskDb {
     conn: Connection,
@@ -23,8 +23,13 @@ pub struct TaskDb {
 }
 
 impl TaskDb {
-    pub fn open(nemo_home: &Path, session_id: &str, secrets: Vec<String>) -> Result<Self, String> {
-        let conn = Connection::open(nemo_home.join("nemo.db")).map_err(|e| e.to_string())?;
+    pub fn open(
+        synthesis_home: &Path,
+        session_id: &str,
+        secrets: Vec<String>,
+    ) -> Result<Self, String> {
+        let conn =
+            Connection::open(synthesis_home.join("synthesis.db")).map_err(|e| e.to_string())?;
         conn.busy_timeout(Duration::from_millis(5000))
             .map_err(|e| e.to_string())?;
         conn.pragma_update(None, "foreign_keys", true)
@@ -32,10 +37,10 @@ impl TaskDb {
         let v: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .map_err(|e| e.to_string())?;
-        if v != nemo_session::SCHEMA_VERSION_LATEST {
+        if v != synthesis_session::SCHEMA_VERSION_LATEST {
             return Err(format!(
                 "session database schema v{v}, this build writes task rows for v{}",
-                nemo_session::SCHEMA_VERSION_LATEST
+                synthesis_session::SCHEMA_VERSION_LATEST
             ));
         }
         Ok(Self {

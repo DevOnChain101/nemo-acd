@@ -5,11 +5,11 @@
   "commands": [],
   "mcpServers": [
     {
-      "command": "nemo-project",
+      "command": "synthesis-project",
       "enabled": true,
       "name": "dup",
-      "scope": "nemo",
-      "source": "<TMP>/ws/.nemo/config.json",
+      "scope": "synthesis",
+      "source": "<TMP>/ws/.synthesis/config.json",
       "type": "stdio"
     }
   ],
@@ -33,7 +33,7 @@
   },
   "skills": [
     {
-      "name": "nemocode-config",
+      "name": "synthesis-config",
       "source": "built-in"
     }
   ],

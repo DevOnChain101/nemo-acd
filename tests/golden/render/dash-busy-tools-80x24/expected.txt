@@ -1,4 +1,4 @@
-▐ ✻ Nemo  ·  MISSION CONTROL ▌ │ ● 3 live               ctx ▱▱▱▱▱▱ 3% │ 12:00:00
+▐ ✻ Synthesis  ·  MISSION CONTROL ▌ │ ● 3 live               ctx ▱▱▱▱▱▱ 3% │ 12:00:00
 ┏━ ◆ Running 3 ━━━━━━┓┏━ ◆ Status ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃ ►● proj-0       10%┃┃                                                        ┃
 │ project-0 (…ace)   ││                                                        │
@@ -16,7 +16,7 @@
 ┏━ ◆ MCP 1 enabled ━━┓│ 11:50:01 ✎ Looking.                                    │
 ┃ ● alpha       stdio┃│                                                        │
 │ ○ pending   not ap…││                                                        │
-┃ configured · nemo …┃│                                                        │
+┃ configured · synthesis …┃│                                                        │
 ┗━━━━━━━━━━━━━━━━━━━━┛│                                                        │
                       │                                                        │
                       ┃                                                        ┃

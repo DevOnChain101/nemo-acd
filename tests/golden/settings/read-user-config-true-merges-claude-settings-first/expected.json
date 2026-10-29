@@ -24,11 +24,11 @@
           "hooks": [
             {
               "command": "echo p",
-              "source": "<TMP>/ws/.nemo/settings.json",
+              "source": "<TMP>/ws/.synthesis/settings.json",
               "type": "command"
             }
           ],
-          "source": "<TMP>/ws/.nemo/settings.json"
+          "source": "<TMP>/ws/.synthesis/settings.json"
         }
       ]
     },
@@ -50,7 +50,7 @@
   },
   "skills": [
     {
-      "name": "nemocode-config",
+      "name": "synthesis-config",
       "source": "built-in"
     }
   ],

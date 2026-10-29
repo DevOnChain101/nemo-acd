@@ -1,13 +1,13 @@
 {
   "agents": [],
-  "autoMemoryDir": "<HOME>/.nemo/projects/<SANITIZED_CWD>/memory",
+  "autoMemoryDir": "<HOME>/.synthesis/projects/<SANITIZED_CWD>/memory",
   "claudeDir": "<HOME>/.claude",
   "commands": [],
   "mcpServers": [],
   "memory": [
     {
-      "content": "user nemo memory",
-      "path": "<HOME>/.nemo/AGENTS.md",
+      "content": "user synth memory",
+      "path": "<HOME>/.synthesis/AGENTS.md",
       "scope": "user"
     },
     {
@@ -40,7 +40,7 @@
   },
   "skills": [
     {
-      "name": "nemocode-config",
+      "name": "synthesis-config",
       "source": "built-in"
     }
   ],

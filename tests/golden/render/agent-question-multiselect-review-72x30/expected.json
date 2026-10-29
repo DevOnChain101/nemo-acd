@@ -8,20 +8,20 @@
     "",
     "",
     "",
-    "",
     "╭──────────────────────────────────────────────────────────────────────╮",
-    "│ ✻ Hello there! I'm Nemo.  · 1.0.0                                    │",
+    "│ ✻ Hello there! I'm Synthesis.  · 1.0.0                               │",
     "│                                                                      │",
     "│ /help for commands · alt+v pastes an image                           │",
     "│ cwd: /work/proj                                                      │",
     "╰──────────────────────────────────────────────────────────────────────╯",
     "",
     " Tips for getting started:",
-    "  1. Ask Nemo to explain, fix or build something in this folder",
+    "  1. Ask Synthesis to explain, fix or build something in this ",
+    "     folder",
     "  2. Type / for commands and skills, @ to mention a file",
     "  3. Drop or paste an image path to attach a screenshot",
-    "◆ Nemo is asking you  ↑/↓ choose · enter confirm · esc reject",
-    "╭─ Nemo has questions ─────────────────────────────────────────────────╮",
+    "◆ Synthesis is asking you  ↑/↓ choose · enter confirm · esc reject",
+    "╭─ Synthesis has questions ────────────────────────────────────────────╮",
     "│ ←  ☐ Colours  ☐ Size  ✓ Submit  →                                    │",
     "│                                                                      │",
     "│ Review your answers                                                  │",
@@ -35,33 +35,33 @@
   "maxScroll": 0,
   "question_hits": [
     {
-      "bodyRow": 0,
-      "index": 0,
       "type": "tab",
       "x0": 6,
       "x1": 17,
-      "y": 21
+      "bodyRow": 0,
+      "y": 21,
+      "index": 0
     },
     {
-      "bodyRow": 0,
-      "index": 1,
       "type": "tab",
       "x0": 17,
       "x1": 25,
-      "y": 21
+      "bodyRow": 0,
+      "y": 21,
+      "index": 1
     },
     {
-      "bodyRow": 0,
       "type": "submit-tab",
       "x0": 25,
       "x1": 35,
+      "bodyRow": 0,
       "y": 21
     },
     {
-      "bodyRow": 6,
       "type": "submit",
       "x0": 4,
       "x1": 72,
+      "bodyRow": 6,
       "y": 27
     }
   ],

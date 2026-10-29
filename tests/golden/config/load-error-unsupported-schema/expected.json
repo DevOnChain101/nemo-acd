@@ -1,7 +1,7 @@
 {
   "error": {
-    "code": "NEMO_INVALID_CONFIG",
-    "message": "invalid config <NEMO_HOME>/nemo.json: unsupported $schema \"config.json/v2\" (supported: config.json/v1)",
+    "code": "SYNTHESIS_INVALID_CONFIG",
+    "message": "invalid config <SYNTHESIS_HOME>/synthesis.json: unsupported $schema \"config.json/v2\" (supported: config.json/v1)",
     "name": "ConfigValidationError"
   }
 }

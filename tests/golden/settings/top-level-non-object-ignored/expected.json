@@ -1,6 +1,6 @@
 {
   "agents": [],
-  "autoMemoryDir": "<HOME>/.nemo/projects/<SANITIZED_CWD>/memory",
+  "autoMemoryDir": "<HOME>/.synthesis/projects/<SANITIZED_CWD>/memory",
   "claudeDir": "<HOME>/.claude",
   "commands": [],
   "mcpServers": [],
@@ -24,11 +24,11 @@
   },
   "skills": [
     {
-      "name": "nemocode-config",
+      "name": "synthesis-config",
       "source": "built-in"
     }
   ],
   "warnings": [
-    "malformed JSON in <TMP>/ws/.nemo/settings.json: Unexpected token 's', \"str\" is not valid JSON"
+    "malformed JSON in <TMP>/ws/.synthesis/settings.json: Unexpected token 's', \"str\" is not valid JSON"
   ]
 }

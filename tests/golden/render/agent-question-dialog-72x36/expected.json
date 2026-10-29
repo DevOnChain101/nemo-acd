@@ -11,19 +11,19 @@
     "",
     "",
     "",
-    "",
     "╭──────────────────────────────────────────────────────────────────────╮",
-    "│ ✻ Hello there! I'm Nemo.  · 1.0.0                                    │",
+    "│ ✻ Hello there! I'm Synthesis.  · 1.0.0                               │",
     "│                                                                      │",
     "│ /help for commands · alt+v pastes an image                           │",
     "│ cwd: /work/proj                                                      │",
     "╰──────────────────────────────────────────────────────────────────────╯",
     "",
     " Tips for getting started:",
-    "  1. Ask Nemo to explain, fix or build something in this folder",
+    "  1. Ask Synthesis to explain, fix or build something in this ",
+    "     folder",
     "  2. Type / for commands and skills, @ to mention a file",
     "  3. Drop or paste an image path to attach a screenshot",
-    "◆ Nemo is asking you  ↑/↓ choose · enter confirm · esc reject",
+    "◆ Synthesis is asking you  ↑/↓ choose · enter confirm · esc reject",
     "╭─ Colour ─────────────────────────────────────────────────────────────╮",
     "│ Which colour?                                                        │",
     "│                                                                      │",
@@ -41,31 +41,31 @@
   "maxScroll": 0,
   "question_hits": [
     {
+      "type": "option",
+      "x0": 4,
+      "x1": 72,
       "bodyRow": 2,
+      "y": 26,
       "index": 0,
-      "qi": 0,
+      "qi": 0
+    },
+    {
       "type": "option",
       "x0": 4,
       "x1": 72,
-      "y": 26
-    },
-    {
       "bodyRow": 4,
+      "y": 28,
       "index": 1,
-      "qi": 0,
-      "type": "option",
-      "x0": 4,
-      "x1": 72,
-      "y": 28
+      "qi": 0
     },
     {
-      "bodyRow": 6,
-      "index": 2,
-      "qi": 0,
       "type": "option",
       "x0": 4,
       "x1": 72,
-      "y": 30
+      "bodyRow": 6,
+      "y": 30,
+      "index": 2,
+      "qi": 0
     }
   ],
   "w": 72

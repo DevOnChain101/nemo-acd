@@ -1,7 +1,7 @@
 {
   "error": {
-    "code": "NEMO_INVALID_CONFIG",
-    "message": "invalid config <TMP>/ws/.nemo/config.json: malformed JSON",
+    "code": "SYNTHESIS_INVALID_CONFIG",
+    "message": "invalid config <TMP>/ws/.synthesis/config.json: malformed JSON",
     "name": "ConfigValidationError"
   }
 }

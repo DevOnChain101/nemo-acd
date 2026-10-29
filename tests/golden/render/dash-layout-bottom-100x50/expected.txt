@@ -1,4 +1,4 @@
-▐ ✻ Nemo  ·  MISSION CONTROL ▌ │ ● 3 live │ ◆ claude-sonnet │ ⌂ project     ctx ▱▱▱▱▱▱ 0% │ 12:00:00
+▐ ✻ Synthesis  ·  MISSION CONTROL ▌ │ ● 3 live │ ◆ claude-sonnet            ctx ▱▱▱▱▱▱ 0% │ 12:00:00
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ┏━ ◆ Running 3 ━━━━━━┓┏━ ◆ Status ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃ ►● proj-0       10%┃┃                                                                            ┃
@@ -30,7 +30,7 @@
 │ ╰────────────────────────────╯   ╰───────────────────────▲────╯   ╰──▲──────────────────────────╯│
 │                           │                              │           │                           │
 │                           └────┐                         │      ┌────┘                           │
-│ ╭─── MEMORY · FEEDBACK ──────╮ │ ╭─ NEMO CORE  sonnet ───┻────╮ │ ╭─── SUB-AGENTS ──────────────╮│
+│ ╭─── MEMORY · FEEDBACK ──────╮ │ ╭─ SYNTHESIS CORE ──────┻────╮ │ ╭─── SUB-AGENTS ──────────────╮│
 │ │ context ▱▱▱▱▱▱▱▱▱▱      0% │ └─► · Intent       parse requ… ┣─┘ │ no sub-agents yet           ││
 │ │ verify  no test / build r… │   │ · Plan         decompose   │   │                             ││
 │ │ memory  0 writes           ◄───┫ · Orchestrator route… idle ┣───►                             ││

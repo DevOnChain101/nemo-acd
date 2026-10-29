@@ -1,8 +1,8 @@
 //! MCP servers for a run: which configs to load, which may start, and the tool adapter.
 //!
 //! Sources (later wins, Node `buildMcpServers` order minus Claude Code's files, which Rust does
-//! not read): user `mcpServers` of nemo.json, project `.mcp.json` (gated), user `projects.<path>`
-//! local scope, user `mcp`, project `.nemo/config.json` `mcp`/`mcpServers` (gated).
+//! not read): user `mcpServers` of synthesis.json, project `.mcp.json` (gated), user `projects.<path>`
+//! local scope, user `mcp`, project `.synthesis/config.json` `mcp`/`mcpServers` (gated).
 //! SECURITY: a project-scope server is repository content that would run a command. It starts
 //! only with `--trust-project` AND an explicit approval (`--approve-mcp NAME`, or the USER's
 //! settings `enabledMcpjsonServers` / `enableAllProjectMcpServers`; a project settings file
@@ -15,30 +15,30 @@
 //! matches and the server is not started. A bare `NAME` in settings and
 //! `enableAllProjectMcpServers` no longer approve project servers (they would survive an edit).
 //! `${VAR}` in env/url/headers reads `Env::child_env` plus the names in the USER's
-//! `nemo.mcp.env_passthrough` (user settings.json only), and the latter only for user-owned
-//! scopes; see `nemo_mcp::McpOptions::env_passthrough`.
+//! `synthesis.mcp.env_passthrough` (user settings.json only), and the latter only for user-owned
+//! scopes; see `synthesis_mcp::McpOptions::env_passthrough`.
 
 use std::io::Read;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use nemo_config::{Config, Env, is_secret_shaped};
-use nemo_core::ToolContext;
-use nemo_harness::sanitize_for_display as san;
-use nemo_harness::{
+use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
+use synthesis_config::{Config, Env, is_secret_shaped};
+use synthesis_core::ToolContext;
+use synthesis_harness::sanitize_for_display as san;
+use synthesis_harness::{
     GuardConfig, McpCatalog, McpGuard, McpToolInfo, ServerRules, ToolBox, ToolSource,
 };
-use nemo_mcp::{
+use synthesis_mcp::{
     McpContent, McpManager, McpOptions, McpServerConfig, McpToolResult, ServerState, expand_vars,
-    expansion_env, parse_claude_servers, parse_nemo_mcp_servers,
+    expansion_env, parse_claude_servers, parse_synthesis_mcp_servers,
 };
-use nemo_settings::{ProjectTrust, Settings};
-use nemo_tools::{
+use synthesis_settings::{ProjectTrust, Settings};
+use synthesis_tools::{
     Block, BoxFuture, Content, ImageSource, SideEffectClass, Tool, ToolOutput, ToolRuntime,
     ToolSpec,
 };
-use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 
 #[derive(Default)]
 pub struct Plan {
@@ -48,9 +48,9 @@ pub struct Plan {
     pub skipped: Vec<(String, String)>,
     /// One line per project server approved for this run, with its exact definition. Raw too.
     pub notices: Vec<String>,
-    /// `nemo.mcp.env_passthrough` of the user settings file (see [`read_passthrough`]).
+    /// `synthesis.mcp.env_passthrough` of the user settings file (see [`read_passthrough`]).
     pub env_passthrough: Vec<String>,
-    /// `nemo.mcp.servers.<name>.write_tools|read_tools` (see [`read_guard`]).
+    /// `synthesis.mcp.servers.<name>.write_tools|read_tools` (see [`read_guard`]).
     pub guard: GuardConfig,
     /// Where oversized MCP results are saved in full.
     pub artifact_dir: Option<std::path::PathBuf>,
@@ -151,12 +151,12 @@ fn refs(v: &str) -> Vec<(String, bool)> {
     out
 }
 
-/// Which credentials `nemo run` will apply to `s`, WITHOUT any value: names, whether each is
+/// Which credentials `synth run` will apply to `s`, WITHOUT any value: names, whether each is
 /// resolvable right now (`${VAR}` against the same allowlist the manager uses), lengths only for
 /// names that are not secret-shaped, the scheme of `Authorization`.
 pub fn credentials(s: &McpServerConfig, env: &Env, passthrough: &[String]) -> Vec<String> {
     let xenv = expansion_env(env, passthrough, s.scope.as_deref());
-    let user_owned = matches!(s.scope.as_deref(), Some("user" | "nemo"));
+    let user_owned = matches!(s.scope.as_deref(), Some("user" | "synthesis"));
     let state = |v: &str, show_len: bool| match expand_vars(v, &xenv) {
         Ok(x) if x.is_empty() => "EMPTY".to_string(),
         Ok(x) if show_len => format!("set({} chars)", x.chars().count()),
@@ -208,10 +208,10 @@ pub fn credentials(s: &McpServerConfig, env: &Env, passthrough: &[String]) -> Ve
         } else if has_default {
             format!("env passthrough: {n} -> unset, the default is used")
         } else if user_owned {
-            format!("env passthrough: {n} -> NOT AVAILABLE (export it and add it to nemo.mcp.env_passthrough in the user settings.json)")
+            format!("env passthrough: {n} -> NOT AVAILABLE (export it and add it to synthesis.mcp.env_passthrough in the user settings.json)")
         } else {
             format!(
-                "env passthrough: {n} -> NOT AVAILABLE ({} servers can only read the child-env allowlist; move the server to the user nemo.json)",
+                "env passthrough: {n} -> NOT AVAILABLE ({} servers can only read the child-env allowlist; move the server to the user synthesis.json)",
                 s.scope.as_deref().unwrap_or("project")
             )
         });
@@ -270,7 +270,7 @@ pub fn reports_anonymous(r: &McpToolResult) -> bool {
         || serde_json::from_str::<Value>(&r.text()).is_ok_and(|v| walk(&v))
 }
 
-/// Masks token-looking words (long opaque strings) so `nemo mcp test` never prints a credential.
+/// Masks token-looking words (long opaque strings) so `synth mcp test` never prints a credential.
 fn mask_tokens(text: &str) -> String {
     let tokeny =
         |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '=' | '+' | '/');
@@ -321,10 +321,10 @@ fn check(entry: &str, name: &str, hash: &str, bare_ok: bool) -> Appr {
     }
 }
 
-/// `nemo.mcp.env_passthrough` from the USER settings file only (a repository must not widen it).
+/// `synthesis.mcp.env_passthrough` from the USER settings file only (a repository must not widen it).
 pub fn read_passthrough(user_settings: &Path) -> Vec<String> {
     read_obj(user_settings)
-        .and_then(|v| v.pointer("/nemo/mcp/env_passthrough").cloned())
+        .and_then(|v| v.pointer("/synthesis/mcp/env_passthrough").cloned())
         .and_then(|v| serde_json::from_value(v).ok())
         .unwrap_or_default()
 }
@@ -349,7 +349,7 @@ fn put(all: &mut Vec<McpServerConfig>, add: Vec<McpServerConfig>) {
     }
 }
 
-/// `nemo.mcp.servers.<name>.{write_tools,read_tools}` for the read-before-write guard. The USER
+/// `synthesis.mcp.servers.<name>.{write_tools,read_tools}` for the read-before-write guard. The USER
 /// file may list both; a project file (pass `None` when the project is not trusted) may only ADD
 /// `write_tools`, since a repository must not be able to switch the guard off for a tool.
 pub fn read_guard(user_settings: &Path, project_settings: Option<&Path>) -> GuardConfig {
@@ -357,7 +357,7 @@ pub fn read_guard(user_settings: &Path, project_settings: Option<&Path>) -> Guar
     for (path, user) in [(Some(user_settings), true), (project_settings, false)] {
         let Some(servers) = path
             .and_then(read_obj)
-            .and_then(|v| v.pointer("/nemo/mcp/servers").cloned())
+            .and_then(|v| v.pointer("/synthesis/mcp/servers").cloned())
             .and_then(|v| v.as_object().cloned())
         else {
             continue;
@@ -393,7 +393,7 @@ pub fn plan(
     let mut project: Vec<McpServerConfig> = vec![];
 
     let mut skipped = vec![];
-    let mut add = |dst: &mut Vec<McpServerConfig>, (ok, bad): nemo_mcp::Parsed| {
+    let mut add = |dst: &mut Vec<McpServerConfig>, (ok, bad): synthesis_mcp::Parsed| {
         put(dst, ok);
         skipped.extend(bad.into_iter().map(|e| ("(invalid name)".to_string(), e)));
     };
@@ -419,12 +419,15 @@ pub fn plan(
         add(&mut all, parse_claude_servers(local, Some("local")));
     }
     if let Some(m) = x.get("mcp") {
-        add(&mut all, parse_nemo_mcp_servers(m, Some("nemo")));
+        add(&mut all, parse_synthesis_mcp_servers(m, Some("synthesis")));
     }
-    if let Some(c) = read_obj(&root.join(".nemo").join("config.json")) {
+    if let Some(c) = read_obj(&root.join(".synthesis").join("config.json")) {
         for k in ["mcp", "mcpServers"] {
             if let Some(m) = c.get(k) {
-                add(&mut project, parse_nemo_mcp_servers(m, Some("project")));
+                add(
+                    &mut project,
+                    parse_synthesis_mcp_servers(m, Some("project")),
+                );
             }
         }
     }
@@ -604,15 +607,15 @@ pub async fn start(plan: &Plan, env: &Env, cwd: &Path) -> (Arc<McpManager>, Atta
     (mgr, attach, warnings)
 }
 
-// ---- `nemo mcp list|get|add|remove` ----------------------------------------------------------
-// Edits only the user's own config files: `<NEMO_HOME>/nemo.json` (scope user) or
+// ---- `synth mcp list|get|add|remove` ----------------------------------------------------------
+// Edits only the user's own config files: `<SYNTHESIS_HOME>/synthesis.json` (scope user) or
 // `<cwd>/.mcp.json` (scope project; still needs --approve-mcp to start). No credential is ever
 // written: secret-looking env/header values must be `${VAR}` references, and OAuth tokens are not
 // stored anywhere (use `npx mcp-remote <url>` as a stdio server, or a Bearer header from `${VAR}`).
 
 #[derive(clap::Subcommand)]
 pub enum McpCmd {
-    /// Servers that `nemo run` would see (nothing is started).
+    /// Servers that `synth run` would see (nothing is started).
     List(crate::CwdArg),
     /// One server's definition (header and env VALUES are never shown).
     Get {
@@ -624,7 +627,7 @@ pub enum McpCmd {
     /// `me`, `get_current_user`, `atlassianUserInfo`, `getAccessibleAtlassianResources`), call it
     /// and print who the server thinks you are. Run it before the first write.
     Test(TestArgs),
-    /// Add a server: `nemo mcp add NAME --url URL` or `nemo mcp add NAME -- COMMAND ARGS...`.
+    /// Add a server: `synth mcp add NAME --url URL` or `synth mcp add NAME -- COMMAND ARGS...`.
     Add(AddArgs),
     Remove {
         name: String,
@@ -643,7 +646,7 @@ pub struct TestArgs {
     /// Needed to test a server defined in the project's `.mcp.json`.
     #[arg(long)]
     trust_project: bool,
-    /// `NAME@HASH` of a project-scope server (see `nemo mcp get`).
+    /// `NAME@HASH` of a project-scope server (see `synth mcp get`).
     #[arg(long, value_name = "NAME")]
     approve_mcp: Vec<String>,
 }
@@ -719,7 +722,7 @@ fn kv(s: &str, sep: char) -> Result<(String, String), String> {
     let (k, v) = (k.trim(), v.trim());
     if secret_like(k) && !only_refs(v) {
         return Err(format!(
-            "{k}: looks like a credential; nemo never writes credentials into config files. Put it in an environment variable and pass {k}{sep}${{VAR}}"
+            "{k}: looks like a credential; synthesis never writes credentials into config files. Put it in an environment variable and pass {k}{sep}${{VAR}}"
         ));
     }
     Ok((k.to_string(), v.to_string()))
@@ -803,23 +806,23 @@ fn edit_file(path: &Path, name: &str, value: Option<Value>) -> Result<bool, Stri
     Ok(changed)
 }
 
-fn scope_file(scope: ScopeArg, nemo_home: &Path, cwd: &Path) -> std::path::PathBuf {
+fn scope_file(scope: ScopeArg, synthesis_home: &Path, cwd: &Path) -> std::path::PathBuf {
     match scope {
-        ScopeArg::User => nemo_home.join("nemo.json"),
+        ScopeArg::User => synthesis_home.join("synthesis.json"),
         ScopeArg::Project => cwd.join(".mcp.json"),
     }
 }
 
 fn show(env: &Env, h: &crate::Homes, cwd: Option<&Path>, only: Option<&str>) -> Result<u8, String> {
-    let pass = read_passthrough(&h.nemo.join("settings.json"));
-    use nemo_settings::{LoadContext, load_settings};
+    let pass = read_passthrough(&h.synthesis.join("settings.json"));
+    use synthesis_settings::{LoadContext, load_settings};
     let cfg = crate::load_config(env, h, cwd, ProjectTrust::Untrusted)?;
-    let none = h.nemo.join("no-project");
+    let none = h.synthesis.join("no-project");
     let cwd = cwd.unwrap_or(&none);
     let st = load_settings(
         &LoadContext {
             cwd,
-            nemo_home: &h.nemo,
+            synthesis_home: &h.synthesis,
             user_home: &h.user,
             env,
         },
@@ -869,7 +872,7 @@ const WHOAMI: [&str; 5] = [
 ];
 
 fn test_server(env: &Env, h: &crate::Homes, a: &TestArgs) -> Result<u8, String> {
-    use nemo_settings::{LoadContext, load_settings};
+    use synthesis_settings::{LoadContext, load_settings};
     // the server process runs here, so it must exist: default to the current directory
     let cwd = a.cwd.cwd.as_deref().unwrap_or(Path::new("."));
     let trust = if a.trust_project {
@@ -879,7 +882,7 @@ fn test_server(env: &Env, h: &crate::Homes, a: &TestArgs) -> Result<u8, String> 
     };
     let lc = LoadContext {
         cwd,
-        nemo_home: &h.nemo,
+        synthesis_home: &h.synthesis,
         user_home: &h.user,
         env,
     };
@@ -887,7 +890,7 @@ fn test_server(env: &Env, h: &crate::Homes, a: &TestArgs) -> Result<u8, String> 
     let settings = load_settings(&lc, trust);
     let user_settings = load_settings(&lc, ProjectTrust::Untrusted);
     let mut p = plan(&cfg, &settings, &user_settings, cwd, trust, &a.approve_mcp);
-    p.env_passthrough = read_passthrough(&h.nemo.join("settings.json"));
+    p.env_passthrough = read_passthrough(&h.synthesis.join("settings.json"));
     p.servers.retain(|s| s.name == a.name);
     let Some(s) = p.servers.first().cloned() else {
         let why = p
@@ -968,21 +971,21 @@ pub fn run_cmd(env: &Env, cmd: McpCmd) -> Result<u8, String> {
         McpCmd::Test(a) => test_server(env, &h, &a),
         McpCmd::Add(a) => {
             let cwd = cwd_of(&a.cwd)?;
-            if !nemo_mcp::valid_server_name(&a.name) {
+            if !synthesis_mcp::valid_server_name(&a.name) {
                 return Err("invalid server name (allowed: 1-64 of A-Z a-z 0-9 _ . -)".into());
             }
-            let f = scope_file(a.scope, &h.nemo, &cwd);
+            let f = scope_file(a.scope, &h.synthesis, &cwd);
             edit_file(&f, &a.name, Some(entry(&a)?))?;
             out!("added {} to {}", a.name, f.display());
             if matches!(a.scope, ScopeArg::Project) {
                 out!(
-                    "a project server starts only with --trust-project and --approve-mcp NAME@HASH (see `nemo mcp get`)"
+                    "a project server starts only with --trust-project and --approve-mcp NAME@HASH (see `synth mcp get`)"
                 );
             }
             Ok(0)
         }
         McpCmd::Remove { name, scope, cwd } => {
-            let f = scope_file(scope, &h.nemo, &cwd_of(&cwd)?);
+            let f = scope_file(scope, &h.synthesis, &cwd_of(&cwd)?);
             if edit_file(&f, &name, None)? {
                 out!("removed {name} from {}", f.display());
                 Ok(0)
@@ -1023,7 +1026,7 @@ impl Tool for McpTool {
             };
             let warn = (!r.is_error && reports_anonymous(&r)).then(|| {
                 format!(
-                    "\n[nemo warning: MCP server \"{server}\" reports an anonymous principal. Its configured credentials were probably not applied, so changes are attributed to 'anonymous'. Tell the user; they can check with `nemo mcp test {server}`.]"
+                    "\n[synth warning: MCP server \"{server}\" reports an anonymous principal. Its configured credentials were probably not applied, so changes are attributed to 'anonymous'. Tell the user; they can check with `synth mcp test {server}`.]"
                 )
             });
             let content = if r.content.iter().all(|c| matches!(c, McpContent::Text(_))) {
@@ -1057,7 +1060,7 @@ impl Tool for McpTool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nemo_config::Config;
+    use synthesis_config::Config;
 
     fn cfg(extra: Value) -> Config {
         Config {
@@ -1230,7 +1233,7 @@ mod tests {
         assert!(text.contains("Authorization=Basic ****(set)"), "{text}");
         assert!(text.contains("X-Api-Key=set"), "{text}");
         assert!(
-            text.contains("CONFLUENCE_TOKEN -> NOT AVAILABLE (export it and add it to nemo.mcp.env_passthrough"),
+            text.contains("CONFLUENCE_TOKEN -> NOT AVAILABLE (export it and add it to synthesis.mcp.env_passthrough"),
             "{text}"
         );
         assert!(text.contains("ATL_TOKEN -> available"), "{text}");
@@ -1372,7 +1375,7 @@ mod tests {
         let f = d.path().join("settings.json");
         std::fs::write(
             &f,
-            json!({"nemo":{"mcp":{"env_passthrough":["A","B"]}}}).to_string(),
+            json!({"synthesis":{"mcp":{"env_passthrough":["A","B"]}}}).to_string(),
         )
         .unwrap();
         assert_eq!(read_passthrough(&f), ["A", "B"]);
@@ -1385,13 +1388,13 @@ mod tests {
         let (u, p) = (d.path().join("u.json"), d.path().join("p.json"));
         std::fs::write(
             &u,
-            json!({"nemo":{"mcp":{"servers":{"a":{"write_tools":["w1"],"read_tools":["r1"]}}}}})
+            json!({"synthesis":{"mcp":{"servers":{"a":{"write_tools":["w1"],"read_tools":["r1"]}}}}})
                 .to_string(),
         )
         .unwrap();
         std::fs::write(
             &p,
-            json!({"nemo":{"mcp":{"servers":{"a":{"write_tools":["w2"],"read_tools":["r2"]},"b":{"write_tools":["x"]}}}}}).to_string(),
+            json!({"synthesis":{"mcp":{"servers":{"a":{"write_tools":["w2"],"read_tools":["r2"]},"b":{"write_tools":["x"]}}}}}).to_string(),
         )
         .unwrap();
         let g = read_guard(&u, Some(&p));
@@ -1426,7 +1429,7 @@ mod tests {
     #[test]
     fn add_and_remove_keep_other_keys_and_refuse_literal_credentials() {
         let d = tempfile::tempdir().unwrap();
-        let f = d.path().join("nemo.json");
+        let f = d.path().join("synthesis.json");
         std::fs::write(
             &f,
             json!({"model": "m", "mcpServers": {"old": {"command": "x"}}}).to_string(),

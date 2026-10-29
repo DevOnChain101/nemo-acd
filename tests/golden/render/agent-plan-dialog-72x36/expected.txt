@@ -10,20 +10,20 @@
 
 
 
-
 ╭──────────────────────────────────────────────────────────────────────╮
-│ ✻ Hello there! I'm Nemo.  · 1.0.0                                    │
+│ ✻ Hello there! I'm Synthesis.  · 1.0.0                               │
 │                                                                      │
 │ /help for commands · alt+v pastes an image                           │
 │ cwd: /work/proj                                                      │
 ╰──────────────────────────────────────────────────────────────────────╯
 
  Tips for getting started:
-  1. Ask Nemo to explain, fix or build something in this folder
+  1. Ask Synthesis to explain, fix or build something in this 
+     folder
   2. Type / for commands and skills, @ to mention a file
   3. Drop or paste an image path to attach a screenshot
-◆ Nemo finished planning  ↑/↓ choose · enter confirm · esc reject
-╭─ Ready to code? · here is Nemo’s plan ───────────────────────────────╮
+◆ Synthesis finished planning  ↑/↓ choose · enter confirm · esc reject
+╭─ Ready to code? · here is Synthesis’s plan ──────────────────────────╮
 │ Add README                                                           │
 │    1. draft it                                                       │
 │    2. commit                                                         │

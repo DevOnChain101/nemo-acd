@@ -8,9 +8,9 @@ use std::sync::{Arc, Mutex};
 
 use tokio_util::sync::CancellationToken;
 
-use nemo_core::SessionStatus;
-use nemo_events::{Envelope, Event};
-use nemo_session::SessionWriter;
+use synthesis_core::SessionStatus;
+use synthesis_events::{Envelope, Event};
+use synthesis_session::SessionWriter;
 
 use crate::taskdb::TaskDb;
 use crate::transcript::Transcript;
@@ -79,7 +79,7 @@ impl Persist {
             }
             if let Some((tasks, transcript)) = &self.derived {
                 if let Err(e) = tasks.on_event(&env) {
-                    eprintln!("nemo: warning: task rows: {e}");
+                    eprintln!("synth: warning: task rows: {e}");
                 }
                 transcript.on_event(&env);
             }

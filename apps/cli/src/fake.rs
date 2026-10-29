@@ -5,9 +5,9 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use nemo_harness::testing::{FakeProvider, Turn};
-use nemo_providers::ModelProvider;
 use serde_json::Value;
+use synthesis_harness::testing::{FakeProvider, Turn};
+use synthesis_providers::ModelProvider;
 
 pub fn load(path: &Path) -> Result<Arc<dyn ModelProvider>, String> {
     let raw = std::fs::read_to_string(path)

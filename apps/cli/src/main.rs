@@ -1,4 +1,4 @@
-//! `nemo`: headless run, `auth status`, `models`, `doctor`.
+//! `synth`: headless run, `auth status`, `models`, `doctor`.
 //!
 //! The process environment is read once (`Env::from_process`) and passed down. The binary never
 //! asks for the process cwd: `run` requires `--cwd`; other commands take an optional `--cwd`.
@@ -6,7 +6,7 @@
 #[cfg(all(feature = "test-provider", not(debug_assertions)))]
 compile_error!("feature `test-provider` must never be enabled in release builds");
 
-/// `println!` that exits quietly when the reader went away (`nemo doctor | head`).
+/// `println!` that exits quietly when the reader went away (`synth doctor | head`).
 macro_rules! out {
     ($($a:tt)*) => {{
         use std::io::Write;
@@ -14,7 +14,7 @@ macro_rules! out {
             if e.kind() == std::io::ErrorKind::BrokenPipe {
                 std::process::exit(0);
             }
-            eprintln!("nemo: error: stdout: {e}");
+            eprintln!("synth: error: stdout: {e}");
             std::process::exit(1);
         }
     }};
@@ -40,15 +40,15 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Args, Parser, Subcommand};
-use nemo_config::{
-    Config, Env, LoadContext, ProjectTrust, default_nemo_home, load_config_with_trust,
+use synthesis_config::{
+    Config, Env, LoadContext, ProjectTrust, default_synthesis_home, load_config_with_trust,
 };
 
 #[derive(Parser)]
 #[command(
-    name = "nemo",
+    name = "synth",
     version,
-    about = "Nemo autonomous coding agent",
+    about = "Synthesis autonomous coding agent",
     args_conflicts_with_subcommands = true
 )]
 struct Cli {
@@ -70,7 +70,7 @@ enum Cmd {
     },
     /// List configured models.
     Models(info::ModelsArgs),
-    /// The interactive app (same as running `nemo` with no subcommand).
+    /// The interactive app (same as running `synth` with no subcommand).
     Tui(Box<tui::TuiArgs>),
     /// Diagnose the installation.
     Doctor(CwdArg),
@@ -79,7 +79,7 @@ enum Cmd {
         #[command(subcommand)]
         cmd: mcp::McpCmd,
     },
-    /// Copy/convert another tool's setup into Nemo's own files (dry run unless --apply).
+    /// Copy/convert another tool's setup into Synthesis's own files (dry run unless --apply).
     Import {
         #[command(subcommand)]
         cmd: import::ImportCmd,
@@ -93,14 +93,14 @@ enum AuthCmd {
 
 #[derive(Args)]
 pub struct CwdArg {
-    /// Project directory whose `.nemo/config.json` is considered (default: none).
+    /// Project directory whose `.synthesis/config.json` is considered (default: none).
     #[arg(long)]
     pub cwd: Option<PathBuf>,
 }
 
 pub struct Homes {
     pub user: PathBuf,
-    pub nemo: PathBuf,
+    pub synthesis: PathBuf,
 }
 
 pub fn homes(env: &Env) -> Result<Homes, String> {
@@ -108,12 +108,12 @@ pub fn homes(env: &Env) -> Result<Homes, String> {
         .get_nonempty("HOME")
         .or_else(|| env.get_nonempty("USERPROFILE"))
         .map(PathBuf::from);
-    if user.is_none() && env.get_nonempty("NEMO_HOME").is_none() {
-        return Err("neither HOME nor NEMO_HOME is set".into());
+    if user.is_none() && env.get_nonempty("SYNTHESIS_HOME").is_none() {
+        return Err("neither HOME nor SYNTHESIS_HOME is set".into());
     }
     let user = user.unwrap_or_default();
     Ok(Homes {
-        nemo: default_nemo_home(env, &user),
+        synthesis: default_synthesis_home(env, &user),
         user,
     })
 }
@@ -125,10 +125,10 @@ pub fn load_config(
     cwd: Option<&Path>,
     trust: ProjectTrust,
 ) -> Result<Config, String> {
-    let none = h.nemo.join("no-project");
+    let none = h.synthesis.join("no-project");
     let ctx = LoadContext {
         cwd: cwd.unwrap_or(&none),
-        nemo_home: &h.nemo,
+        synthesis_home: &h.synthesis,
         user_home: &h.user,
         env,
     };
@@ -153,7 +153,7 @@ fn main() -> ExitCode {
     match r {
         Ok(code) => ExitCode::from(code),
         Err(msg) => {
-            eprintln!("nemo: error: {msg}");
+            eprintln!("synth: error: {msg}");
             ExitCode::from(2)
         }
     }

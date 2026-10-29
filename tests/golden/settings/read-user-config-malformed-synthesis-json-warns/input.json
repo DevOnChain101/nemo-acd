@@ -1,0 +1,15 @@
+{
+  "cwd": "<TMP>/ws",
+  "env": {},
+  "files": {
+    "<HOME>/.claude/settings.json": {
+      "permissions": {
+        "allow": [
+          "ClaudeOnly"
+        ]
+      }
+    },
+    "<HOME>/.synthesis/synthesis.json": "{oops"
+  },
+  "op": "workspace"
+}

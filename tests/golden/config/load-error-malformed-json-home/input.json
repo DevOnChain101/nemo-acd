@@ -2,8 +2,8 @@
   "cwd": "<TMP>/ws",
   "env": {},
   "files": {
-    "<NEMO_HOME>/nemo.json": "{\"apiKey\": \"sk-secret\", "
+    "<SYNTHESIS_HOME>/synthesis.json": "{\"apiKey\": \"sk-secret\", "
   },
-  "home": "<NEMO_HOME>",
+  "home": "<SYNTHESIS_HOME>",
   "op": "loadConfig"
 }

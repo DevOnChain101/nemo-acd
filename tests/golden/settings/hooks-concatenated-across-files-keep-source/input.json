@@ -2,7 +2,7 @@
   "cwd": "<TMP>/ws",
   "env": {},
   "files": {
-    "<HOME>/.nemo/settings.json": {
+    "<HOME>/.synthesis/settings.json": {
       "hooks": {
         "PreToolUse": [
           {
@@ -27,7 +27,7 @@
         ]
       }
     },
-    "<TMP>/ws/.nemo/settings.json": {
+    "<TMP>/ws/.synthesis/settings.json": {
       "hooks": {
         "PreToolUse": [
           {

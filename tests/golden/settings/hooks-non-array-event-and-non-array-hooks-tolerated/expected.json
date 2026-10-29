@@ -1,6 +1,6 @@
 {
   "agents": [],
-  "autoMemoryDir": "<HOME>/.nemo/projects/<SANITIZED_CWD>/memory",
+  "autoMemoryDir": "<HOME>/.synthesis/projects/<SANITIZED_CWD>/memory",
   "claudeDir": "<HOME>/.claude",
   "commands": [],
   "mcpServers": [],
@@ -13,11 +13,11 @@
         {
           "hooks": "bad",
           "matcher": "x",
-          "source": "<HOME>/.nemo/settings.json"
+          "source": "<HOME>/.synthesis/settings.json"
         },
         {
           "matcher": "y",
-          "source": "<HOME>/.nemo/settings.json"
+          "source": "<HOME>/.synthesis/settings.json"
         }
       ],
       "Stop": []
@@ -37,7 +37,7 @@
   },
   "skills": [
     {
-      "name": "nemocode-config",
+      "name": "synthesis-config",
       "source": "built-in"
     }
   ],

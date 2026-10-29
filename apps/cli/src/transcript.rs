@@ -9,10 +9,10 @@
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-use nemo_events::{Envelope, Event};
-use nemo_providers::{Message, Role};
-use nemo_session::NewMessage;
 use serde_json::Value;
+use synthesis_events::{Envelope, Event};
+use synthesis_providers::{Message, Role};
+use synthesis_session::NewMessage;
 
 use crate::events::Store;
 
@@ -43,7 +43,7 @@ impl Transcript {
             .unwrap_or_else(|e| e.into_inner())
             .append_message(msg);
         if let Err(e) = &r {
-            eprintln!("nemo: warning: session store: {e}");
+            eprintln!("synth: warning: session store: {e}");
         }
         r.is_ok()
     }

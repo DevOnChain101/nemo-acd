@@ -5,13 +5,13 @@
     "KEEP": "k"
   },
   "files": {
-    "<NEMO_HOME>/settings.json": {
+    "<SYNTHESIS_HOME>/settings.json": {
       "env": {
         "A": "user",
         "B": "user"
       }
     },
-    "<TMP>/ws/.nemo/settings.json": {
+    "<TMP>/ws/.synthesis/settings.json": {
       "env": {
         "A": "proj",
         "B": "proj",

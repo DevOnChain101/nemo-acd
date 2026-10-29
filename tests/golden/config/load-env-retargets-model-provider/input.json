@@ -1,11 +1,11 @@
 {
   "cwd": "<TMP>/ws",
   "env": {
-    "NEMO_BASE_URL": "https://gw2.example.test/v1",
-    "NEMO_PROVIDER": "gateway"
+    "SYNTHESIS_BASE_URL": "https://gw2.example.test/v1",
+    "SYNTHESIS_PROVIDER": "gateway"
   },
   "files": {
-    "<NEMO_HOME>/nemo.json": {
+    "<SYNTHESIS_HOME>/synthesis.json": {
       "$schema": "config.json/v1",
       "model": "anthropic/foo",
       "providers": {
@@ -21,6 +21,6 @@
       }
     }
   },
-  "home": "<NEMO_HOME>",
+  "home": "<SYNTHESIS_HOME>",
   "op": "loadConfig"
 }

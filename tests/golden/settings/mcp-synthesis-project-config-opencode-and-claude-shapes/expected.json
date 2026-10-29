@@ -1,0 +1,78 @@
+{
+  "agents": [],
+  "autoMemoryDir": "<HOME>/.synthesis/projects/<SANITIZED_CWD>/memory",
+  "claudeDir": "<HOME>/.claude",
+  "commands": [],
+  "mcpServers": [
+    {
+      "args": [
+        "a",
+        "b"
+      ],
+      "command": "bin",
+      "enabled": true,
+      "name": "oc",
+      "scope": "synthesis",
+      "source": "<TMP>/ws/.synthesis/config.json",
+      "type": "stdio"
+    },
+    {
+      "command": "x",
+      "disabledReason": "disabled",
+      "enabled": false,
+      "name": "off",
+      "scope": "synthesis",
+      "source": "<TMP>/ws/.synthesis/config.json",
+      "type": "stdio"
+    },
+    {
+      "enabled": true,
+      "name": "rem",
+      "scope": "synthesis",
+      "source": "<TMP>/ws/.synthesis/config.json",
+      "type": "http",
+      "url": "https://r.example.test/m"
+    },
+    {
+      "command": "f",
+      "enabled": true,
+      "name": "flat",
+      "scope": "synthesis",
+      "source": "<TMP>/ws/.synthesis/config.json",
+      "type": "stdio"
+    },
+    {
+      "enabled": true,
+      "name": "extra",
+      "scope": "synthesis",
+      "source": "<TMP>/ws/.synthesis/config.json",
+      "type": "sse",
+      "url": "https://s.example.test/sse"
+    }
+  ],
+  "memory": [],
+  "projectRoot": "<TMP>/ws",
+  "settings": {
+    "disableAllHooks": false,
+    "hooks": {},
+    "mcpApproval": {
+      "disabledMcpjsonServers": [],
+      "enableAllProjectMcpServers": false,
+      "enabledMcpjsonServers": []
+    },
+    "permissions": {
+      "additionalDirectories": [],
+      "allow": [],
+      "ask": [],
+      "defaultMode": "default",
+      "deny": []
+    }
+  },
+  "skills": [
+    {
+      "name": "synthesis-config",
+      "source": "built-in"
+    }
+  ],
+  "warnings": []
+}
