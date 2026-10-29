@@ -11,22 +11,22 @@ title=${2:-$log}
 max=${DIGEST_MAX:-60}
 
 env_dump() {
-  local py chrome nemo=target/debug/nemo
+  local py chrome synth=target/debug/synth
   py=$(python3 --version 2>&1 || python --version 2>&1 || echo none)
   echo "env: os=$(uname -s) arch=$(uname -m) runner=${RUNNER_OS:-local} node=$(node --version 2>/dev/null || echo none) python=${py%%$'\n'*} git=$(git --version 2>/dev/null || echo none)"
-  if [ -n "${NEMO_BROWSER_PATH:-}" ]; then
-    chrome=$("$NEMO_BROWSER_PATH" --version 2>&1 | head -n 1)
-    echo "chrome: $NEMO_BROWSER_PATH (${chrome:-no version output})"
+  if [ -n "${SYNTHESIS_BROWSER_PATH:-}" ]; then
+    chrome=$("$SYNTHESIS_BROWSER_PATH" --version 2>&1 | head -n 1)
+    echo "chrome: $SYNTHESIS_BROWSER_PATH (${chrome:-no version output})"
   fi
   if [ "$(uname -s)" = Linux ]; then
     echo "linux: apparmor_restrict_unprivileged_userns=$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null || echo n/a)" \
       "max_user_namespaces=$(cat /proc/sys/user/max_user_namespaces 2>/dev/null || echo n/a)" \
       "lsm=$(cat /sys/kernel/security/lsm 2>/dev/null || echo n/a)" "bwrap=$(command -v bwrap || echo none)"
   fi
-  if [ ! -x "$nemo" ] && [ -x "$nemo.exe" ]; then nemo=$nemo.exe; fi
-  if [ -x "$nemo" ]; then
-    echo "nemo doctor (sandbox):"
-    "$nemo" doctor --cwd "${RUNNER_TEMP:-${TMPDIR:-/tmp}}" 2>&1 | grep -E 'default mode: enforce|enforce_ready|^  selected |available:' | sed 's/^/  /'
+  if [ ! -x "$synth" ] && [ -x "$synth.exe" ]; then synth=$synth.exe; fi
+  if [ -x "$synth" ]; then
+    echo "synth doctor (sandbox):"
+    "$synth" doctor --cwd "${RUNNER_TEMP:-${TMPDIR:-/tmp}}" 2>&1 | grep -E 'default mode: enforce|enforce_ready|^  selected |available:' | sed 's/^/  /'
   fi
 }
 

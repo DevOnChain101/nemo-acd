@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // Writes the npm packages for a release from already-built binaries.
-//   node scripts/package-npm.mjs --version 0.1.0 --raw <dir> --out <dir> [--name @devonchain101/nemo]
-//        [--bin-names nemo[,other]] [--require-all]
-// <dir> holds one subdirectory per Rust target (optionally prefixed "raw-"), each with `nemo[.exe]`
-// and, on Linux, `nemo-sandbox-exec`. Only targets that are present are emitted (and listed in
+//   node scripts/package-npm.mjs --version 0.1.0 --raw <dir> --out <dir> [--name @devonchain101/synthesis]
+//        [--bin-names synth[,other]] [--require-all]
+// <dir> holds one subdirectory per Rust target (optionally prefixed "raw-"), each with `synth[.exe]`
+// and, on Linux, `synthesis-sandbox-exec`. Only targets that are present are emitted (and listed in
 // optionalDependencies); --require-all fails unless the 5 release-gating targets are present.
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -14,9 +14,9 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const { values: a } = parseArgs({
   options: {
     version: { type: "string" }, raw: { type: "string" }, out: { type: "string" },
-    name: { type: "string", default: "@devonchain101/nemo" },
+    name: { type: "string", default: "@devonchain101/synthesis" },
     repo: { type: "string" }, // owner/repo; default: packaging/REPO (the single source, scripts/check-placeholders.mjs --set)
-    "bin-names": { type: "string", default: "nemo" }, // default: "nemo" (the Node CLI is retired)
+    "bin-names": { type: "string", default: "synth" }, // default: "synth" (the Node CLI is retired)
     "require-all": { type: "boolean", default: false },
   },
 });
@@ -46,7 +46,7 @@ const optional = {};
 const missing = [];
 for (const [target, [suffix, os, cpu, libc]] of Object.entries(TARGETS)) {
   const src = [join(a.raw, `raw-${target}`), join(a.raw, target)].find(existsSync);
-  const exe = os === "win32" ? "nemo.exe" : "nemo";
+  const exe = os === "win32" ? "synth.exe" : "synth";
   if (!src || !existsSync(join(src, exe))) { if (REQUIRED.includes(target)) missing.push(target); continue; }
   const name = `${a.name}-${suffix}`;
   const dir = join(a.out, name.split("/").pop()); // scoped names: no nested @scope dir
@@ -55,11 +55,11 @@ for (const [target, [suffix, os, cpu, libc]] of Object.entries(TARGETS)) {
     copyFileSync(join(src, f), join(dir, "bin", f));
     if (os !== "win32") chmodSync(join(dir, "bin", f), 0o755);
   }
-  if (os === "linux" && !existsSync(join(dir, "bin", "nemo-sandbox-exec")))
-    throw new Error(`${target}: nemo-sandbox-exec missing (Landlock backend requires it next to nemo)`);
+  if (os === "linux" && !existsSync(join(dir, "bin", "synthesis-sandbox-exec")))
+    throw new Error(`${target}: synthesis-sandbox-exec missing (Landlock backend requires it next to synth)`);
   for (const f of ["LICENSE", "NOTICE", "README.md"]) copyFileSync(join(root, f), join(dir, f));
   writeFileSync(join(dir, "package.json"), JSON.stringify({
-    name, ...common, description: `Nemo native binary for ${suffix}`, os: [os], cpu: [cpu],
+    name, ...common, description: `Synthesis native binary for ${suffix}`, os: [os], cpu: [cpu],
     ...(libc ? { libc: [libc] } : {}), files: ["bin", "LICENSE", "NOTICE", "README.md"],
   }, null, 2) + "\n");
   optional[name] = a.version;
@@ -69,13 +69,13 @@ if (!Object.keys(optional).length) throw new Error(`no binaries found under ${a.
 
 const main = join(a.out, a.name.split("/").pop());
 mkdirSync(join(main, "bin"), { recursive: true });
-copyFileSync(join(root, "packaging/npm/bin/nemo.js"), join(main, "bin/nemo.js"));
-chmodSync(join(main, "bin/nemo.js"), 0o755);
+copyFileSync(join(root, "packaging/npm/bin/synth.js"), join(main, "bin/synth.js"));
+chmodSync(join(main, "bin/synth.js"), 0o755);
 for (const f of ["LICENSE", "NOTICE", "README.md"]) copyFileSync(join(root, f), join(main, f));
 writeFileSync(join(main, "package.json"), JSON.stringify({
-  name: a.name, ...common, description: "Nemo autonomous coding agent (native binary, installed via platform packages)",
-  bin: Object.fromEntries(binNames.map((n) => [n, "bin/nemo.js"])),
+  name: a.name, ...common, description: "Synthesis autonomous coding agent (native binary, installed via platform packages)",
+  bin: Object.fromEntries(binNames.map((n) => [n, "bin/synth.js"])),
   files: ["bin", "LICENSE", "NOTICE", "README.md"], engines: { node: ">=18" },
-  optionalDependencies: optional, nemo: { platformPrefix: a.name },
+  optionalDependencies: optional, synthesis: { platformPrefix: a.name },
 }, null, 2) + "\n");
 console.log(`wrote ${Object.keys(optional).length + 1} packages to ${a.out}: ${[a.name, ...Object.keys(optional)].join(", ")}`);

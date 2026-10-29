@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Fails if the given nemo binary was built with the `test-provider` feature (scripted fake model).
+# Fails if the given synth binary was built with the `test-provider` feature (scripted fake model).
 # Note: `--help` text and the "needs a build with the test-provider feature" error exist in release
 # builds too, so we look for code that only exists in fake.rs and for behaviour.
 set -euo pipefail
-bin=${1:?usage: check-no-test-provider.sh <path-to-nemo>}
+bin=${1:?usage: check-no-test-provider.sh <path-to-synthesis>}
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 

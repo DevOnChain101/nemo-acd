@@ -1,6 +1,6 @@
-# tty-qa: black-box driver for the real Nemo TUI
+# tty-qa: black-box driver for the real Synthesis TUI
 
-Spawns `target/debug/nemo` in a pseudo-terminal, feeds it keys / SGR mouse / bracketed paste, renders the
+Spawns `target/debug/synth` in a pseudo-terminal, feeds it keys / SGR mouse / bracketed paste, renders the
 byte stream through a VT screen model ([`pyte`](https://pypi.org/project/pyte/)) and lets a script assert on
 or dump what a user would see. Python 3.9+ stdlib plus `pyte`. It never touches product code.
 
@@ -8,12 +8,12 @@ or dump what a user would see. Python 3.9+ stdlib plus `pyte`. It never touches 
 
 ```sh
 python3 -m venv /path/to/venv && /path/to/venv/bin/pip install pyte
-cargo build -p nemo-cli            # builds target/debug/nemo
+cargo build -p synthesis-cli            # builds target/debug/synth
 /path/to/venv/bin/python tests/tty-qa/qa_smoke.py          # offline smoke (no provider call)
 /path/to/venv/bin/python tests/tty-qa/qa_smoke.py --live   # + one real turn through your configured provider
 ```
 
-Copy the binary first (`cp target/debug/nemo /tmp/nemo-qa`, then `NEMO_BIN=/tmp/nemo-qa`) when someone else is
+Copy the binary first (`cp target/debug/synth /tmp/synthesis-qa`, then `SYNTHESIS_BIN=/tmp/synthesis-qa`) when someone else is
 rebuilding the workspace; a half-written binary gives confusing results.
 
 ## API (`ttyqa.py`)

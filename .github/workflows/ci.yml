@@ -1,4 +1,4 @@
-# CI for Nemo-ACD. Also reusable: release.yml calls it (workflow_call) so a tag cannot ship on a red commit.
+# CI for Synthesis. Also reusable: release.yml calls it (workflow_call) so a tag cannot ship on a red commit.
 # Third-party actions are pinned to commit SHAs (docs/RELEASE.md "Action pinning"); Dependabot proposes updates.
 name: CI
 
@@ -64,11 +64,11 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       # test-provider only exists in debug builds (compile_error! in release). This also runs the
-      # nemo-cli binary tests (apps/cli/tests/*), which need it for the scripted model.
+      # synthesis-cli binary tests (apps/cli/tests/*), which need it for the scripted model.
       # --no-fail-fast: a failing binary must not hide the crates after it. The digest step prints the
       # failures as the last lines of the job (the log viewer only shows the tail of a long step).
       - name: cargo test
-        run: cargo test --workspace --locked --no-fail-fast --features nemo-cli/test-provider 2>&1 | tee test.log
+        run: cargo test --workspace --locked --no-fail-fast --features synthesis-cli/test-provider 2>&1 | tee test.log
       - name: Failure digest
         if: always()
         run: DIGEST_ENV=1 bash scripts/ci-digest.sh test.log "cargo test (${{ matrix.os }})"
@@ -101,8 +101,8 @@ jobs:
         run: DIGEST_ENV=1 bash scripts/ci-digest.sh evals.log "eval selftest (${{ matrix.os }})"
 
   browser:
-    # Real Chrome from browser-actions/setup-chrome (stable channel). Nemo never downloads a browser,
-    # so NEMO_BROWSER_PATH points at the one installed here.
+    # Real Chrome from browser-actions/setup-chrome (stable channel). Synthesis never downloads a browser,
+    # so SYNTHESIS_BROWSER_PATH points at the one installed here.
     name: browser (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
@@ -141,21 +141,21 @@ jobs:
         shell: bash
         timeout-minutes: 25 # per-test caps below name the hang; fail fast with the log so far instead of hanging to the job limit
         env:
-          NEMO_BROWSER_PATH: ${{ steps.pre.outputs.path || steps.chrome.outputs.chrome-path }}
+          SYNTHESIS_BROWSER_PATH: ${{ steps.pre.outputs.path || steps.chrome.outputs.chrome-path }}
         run: |
-          echo "Chrome: $NEMO_BROWSER_PATH"
+          echo "Chrome: $SYNTHESIS_BROWSER_PATH"
           # `chrome.exe --version` does NOT print on Windows: it launches the browser and never returns
           # (this alone hung the step for 15-25 min). Read the file version instead.
           if [ "$RUNNER_OS" = Windows ]; then
-            powershell -NoProfile -Command "(Get-Item -LiteralPath '$NEMO_BROWSER_PATH').VersionInfo.ProductVersion" || echo "(could not read the Chrome version)"
+            powershell -NoProfile -Command "(Get-Item -LiteralPath '$SYNTHESIS_BROWSER_PATH').VersionInfo.ProductVersion" || echo "(could not read the Chrome version)"
           else
-            "$NEMO_BROWSER_PATH" --version || echo "(could not print the Chrome version)"
+            "$SYNTHESIS_BROWSER_PATH" --version || echo "(could not print the Chrome version)"
           fi
           # Chrome's OWN helper sandbox is unusable on these ephemeral VMs (Linux: AppArmor userns
           # restriction; macOS: Mach port rendezvous denied, "Page.enable got no answer"). The test
           # hook only adds --no-sandbox so the tests can exercise OUR URL policy; production keeps
           # Chrome's sandbox ON (default). Windows keeps it on.
-          if [ "$RUNNER_OS" != Windows ]; then export NEMO_BROWSER_TEST_NO_SANDBOX=1; fi
+          if [ "$RUNNER_OS" != Windows ]; then export SYNTHESIS_BROWSER_TEST_NO_SANDBOX=1; fi
           # One test binary invocation per test, each with its own wall-clock cap, so a hang names the
           # test (step output + $GITHUB_STEP_SUMMARY) instead of eating the whole step. Test output goes
           # to a file, not a pipe: Chrome processes inherit pipe handles on Windows and would keep the
@@ -163,8 +163,8 @@ jobs:
           : > browser.log
           say() { echo "$@" | tee -a browser.log; }
           killchrome() { if [ "$RUNNER_OS" = Windows ]; then taskkill //F //T //IM chrome.exe >/dev/null 2>&1 || true; fi; }
-          cargo test -p nemo-browser --locked --lib > lib.log 2>&1 || { cat lib.log; exit 1; }
-          bin=$(cargo test -p nemo-browser --locked --test browser --no-run --message-format=json \
+          cargo test -p synthesis-browser --locked --lib > lib.log 2>&1 || { cat lib.log; exit 1; }
+          bin=$(cargo test -p synthesis-browser --locked --test browser --no-run --message-format=json \
                 | jq -r 'select(.executable != null) | .executable' | tail -n 1)
           say "[$(date -u +%T)] test binary: $bin"
           failed=""
@@ -194,7 +194,7 @@ jobs:
       - name: Failure digest
         if: always()
         env:
-          NEMO_BROWSER_PATH: ${{ steps.pre.outputs.path || steps.chrome.outputs.chrome-path }}
+          SYNTHESIS_BROWSER_PATH: ${{ steps.pre.outputs.path || steps.chrome.outputs.chrome-path }}
         run: DIGEST_ENV=1 bash scripts/ci-digest.sh browser.log "browser (${{ matrix.os }})"
 
   sandbox-linux:
@@ -220,12 +220,12 @@ jobs:
           cat /sys/kernel/security/lsm; echo
           grep -q landlock /sys/kernel/security/lsm || { echo "::error::Landlock not enabled on this runner kernel"; exit 1; }
       - name: sandbox tests
-        run: cargo test -p nemo-sandbox -p nemo-terminal --locked --no-fail-fast -- --nocapture 2>&1 | tee sandbox.log
+        run: cargo test -p synthesis-sandbox -p synthesis-terminal --locked --no-fail-fast -- --nocapture 2>&1 | tee sandbox.log
       - name: Failure digest
         if: always()
         run: DIGEST_ENV=1 bash scripts/ci-digest.sh sandbox.log "sandbox (linux)"
       - name: doctor reports the Linux backends
-        run: cargo run -q --locked -p nemo-cli -- doctor --cwd "$RUNNER_TEMP"
+        run: cargo run -q --locked -p synthesis-cli -- doctor --cwd "$RUNNER_TEMP"
 
   msrv:
     name: msrv (1.89)
@@ -290,6 +290,8 @@ jobs:
       - run: shellcheck -S warning scripts/*.sh
       - name: Tracked paths are portable to Windows
         run: node scripts/check-portable-paths.mjs
+      - name: No new use of the old product name
+        run: node scripts/check-no-legacy-name.mjs
       - name: Release tag policy tests (local origin + stub gh)
         run: bash scripts/test-check-release-tag.sh
       - uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2

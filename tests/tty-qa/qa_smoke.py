@@ -1,6 +1,6 @@
 """Smoke scenarios for the real TUI: startup, prompt editing, slash picker, unknown command, exit restore.
 
-Run: <venv>/bin/python tests/tty-qa/qa_smoke.py   (env: NEMO_BIN, QA_OUT; add --live for one real-provider turn)
+Run: <venv>/bin/python tests/tty-qa/qa_smoke.py   (env: SYNTHESIS_BIN, QA_OUT; add --live for one real-provider turn)
 Screens are appended to $QA_OUT/smoke.txt. Exit code 1 if any check fails.
 """
 import os, sys, tempfile, time
@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ttyqa import Session, key, make_repo
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-BIN = os.environ.get("NEMO_BIN", os.path.join(ROOT, "target", "debug", "nemo"))
+BIN = os.environ.get("SYNTHESIS_BIN", os.path.join(ROOT, "target", "debug", "synth"))
 OUT = os.environ.get("QA_OUT") or tempfile.mkdtemp(prefix="ttyqa-")
 FAILS = []
 

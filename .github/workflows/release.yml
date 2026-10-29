@@ -47,7 +47,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
-          NEMO_ALLOW_ANY_VERIFIED_TAGGER: ${{ vars.NEMO_ALLOW_ANY_VERIFIED_TAGGER }}
+          SYNTHESIS_ALLOW_ANY_VERIFIED_TAGGER: ${{ vars.SYNTHESIS_ALLOW_ANY_VERIFIED_TAGGER }}
         run: bash scripts/check-release-tag.sh
       - run: node scripts/check-action-pins.mjs
       - name: Repository placeholder is replaced and matches this repository
@@ -126,27 +126,27 @@ jobs:
           echo "CC_x86_64_unknown_linux_musl=musl-gcc" >>"$GITHUB_ENV"
       - name: Build
         run: |
-          pkgs=(-p nemo-cli)
-          # Landlock backend looks for nemo-sandbox-exec next to nemo (crates/nemo-sandbox/src/linux.rs).
-          case "$TARGET" in *linux*) pkgs+=(-p nemo-sandbox);; esac
+          pkgs=(-p synthesis-cli)
+          # Landlock backend looks for synthesis-sandbox-exec next to synth (crates/synthesis-sandbox/src/linux.rs).
+          case "$TARGET" in *linux*) pkgs+=(-p synthesis-sandbox);; esac
           cargo build --release --locked --target "$TARGET" "${pkgs[@]}"
       - name: Locate artifacts
         run: |
           d="target/$TARGET/release"
           exe=""; case "$TARGET" in *windows*) exe=".exe";; esac
-          echo "BIN=$d/nemo$exe" >>"$GITHUB_ENV"
-          case "$TARGET" in *linux*) echo "HELPER=$d/nemo-sandbox-exec" >>"$GITHUB_ENV";; esac
+          echo "BIN=$d/synth$exe" >>"$GITHUB_ENV"
+          case "$TARGET" in *linux*) echo "HELPER=$d/synthesis-sandbox-exec" >>"$GITHUB_ENV";; esac
       - name: Prove the scripted test provider is absent
         run: bash scripts/check-no-test-provider.sh "$BIN"
       - name: Smoke test
         run: |
           "$BIN" --version | tee version.txt
-          grep -q "nemo $VERSION" version.txt
+          grep -q "synth $VERSION" version.txt
           "$BIN" doctor --cwd "$RUNNER_TEMP"
 
       - name: Package
         run: |
-          name="nemo-$VERSION-$TARGET"
+          name="synthesis-$VERSION-$TARGET"
           mkdir -p "dist/$name"
           cp "$BIN" "dist/$name/"
           if [ -n "${HELPER:-}" ]; then cp "$HELPER" "dist/$name/"; fi
@@ -157,7 +157,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: archive-${{ matrix.target }}
-          path: dist/nemo-*.*
+          path: dist/synthesis-*.*
           if-no-files-found: error
       - name: Keep raw binaries for the npm generator
         run: |
@@ -185,12 +185,12 @@ jobs:
       - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2
         with:
           tool: cargo-cyclonedx
-      - name: Generate CycloneDX SBOM for nemo-cli
+      - name: Generate CycloneDX SBOM for synthesis-cli
         run: |
           cd apps/cli || exit 1
           cargo cyclonedx --format json
           ls -l ./*.cdx.json
-          mkdir -p ../../sbom && cp ./*.cdx.json "../../sbom/nemo-$VERSION.cdx.json"
+          mkdir -p ../../sbom && cp ./*.cdx.json "../../sbom/synthesis-$VERSION.cdx.json"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: sbom
@@ -245,14 +245,14 @@ jobs:
         working-directory: assets
         run: |
           ls -l
-          sha256sum -- nemo-*.tar.gz nemo-*.zip *.tgz *.cdx.json install.sh install.ps1 > SHA256SUMS
+          sha256sum -- synthesis-*.tar.gz synthesis-*.zip *.tgz *.cdx.json install.sh install.ps1 > SHA256SUMS
           cat SHA256SUMS
           sha256sum --check SHA256SUMS
       - name: Require the non-experimental targets
         working-directory: assets
         run: |
           for t in x86_64-apple-darwin aarch64-apple-darwin x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu x86_64-pc-windows-msvc; do
-            ls nemo-*-"$t".* >/dev/null || { echo "::error::missing archive for $t"; exit 1; }
+            ls synthesis-*-"$t".* >/dev/null || { echo "::error::missing archive for $t"; exit 1; }
           done
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -278,8 +278,8 @@ jobs:
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-path: |
-            assets/nemo-*.tar.gz
-            assets/nemo-*.zip
+            assets/synthesis-*.tar.gz
+            assets/synthesis-*.zip
             assets/*.tgz
             assets/SHA256SUMS
             assets/install.sh
@@ -309,13 +309,13 @@ jobs:
           REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
           PRE: ${{ needs.version.outputs.prerelease }}
-          NEMO_ALLOW_ANY_VERIFIED_TAGGER: ${{ vars.NEMO_ALLOW_ANY_VERIFIED_TAGGER }}
+          SYNTHESIS_ALLOW_ANY_VERIFIED_TAGGER: ${{ vars.SYNTHESIS_ALLOW_ANY_VERIFIED_TAGGER }}
         run: |
           # The gate ran long ago (environment approval can take days): the tag must still be the built commit.
           bash scripts/check-release-tag.sh
           flag=""; [ "$PRE" = true ] && flag="--prerelease"
           gh release create "$TAG" --draft --verify-tag --target "$GITHUB_SHA" $flag \
-            --title "Nemo $TAG" --generate-notes assets/*
+            --title "Synthesis $TAG" --generate-notes assets/*
           if ! bash scripts/check-release-tag.sh; then
             gh release delete "$TAG" --yes   # tag moved during creation: do not leave a draft on the wrong commit
             exit 1
@@ -340,7 +340,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
-          NEMO_ALLOW_ANY_VERIFIED_TAGGER: ${{ vars.NEMO_ALLOW_ANY_VERIFIED_TAGGER }}
+          SYNTHESIS_ALLOW_ANY_VERIFIED_TAGGER: ${{ vars.SYNTHESIS_ALLOW_ANY_VERIFIED_TAGGER }}
         run: |
           bash scripts/check-release-tag.sh
           read -r draft target < <(gh release view "$TAG" --json isDraft,targetCommitish --jq '[.isDraft, .targetCommitish] | @tsv')
@@ -349,7 +349,7 @@ jobs:
           gh release edit "$TAG" --draft=false
 
   # Publishes the npm tarballs built above. Skips (green, with a log line) unless an npm credential is configured:
-  # secret NPM_TOKEN (granular, publish-only), or repo variable NEMO_NPM_TRUSTED_PUBLISHING=true once npm trusted publishing
+  # secret NPM_TOKEN (granular, publish-only), or repo variable SYNTHESIS_NPM_TRUSTED_PUBLISHING=true once npm trusted publishing
   # is set up for this repo + workflow file `release.yml` + environment `release` (then no token exists at all).
   npm-publish:
     needs: [publish, version]
@@ -363,7 +363,7 @@ jobs:
       VERSION: ${{ needs.version.outputs.version }}
       PRE: ${{ needs.version.outputs.prerelease }}
       HAVE_NPM_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
-      NPM_TRUSTED: ${{ vars.NEMO_NPM_TRUSTED_PUBLISHING }}
+      NPM_TRUSTED: ${{ vars.SYNTHESIS_NPM_TRUSTED_PUBLISHING }}
     steps:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -378,13 +378,13 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           if [ "$HAVE_NPM_TOKEN" != true ] && [ "$NPM_TRUSTED" != true ]; then
-            echo "SKIP npm publish: no NPM_TOKEN secret and NEMO_NPM_TRUSTED_PUBLISHING is not 'true' (docs/RELEASE.md, npm)"; exit 0
+            echo "SKIP npm publish: no NPM_TOKEN secret and SYNTHESIS_NPM_TRUSTED_PUBLISHING is not 'true' (docs/RELEASE.md, npm)"; exit 0
           fi
           # An empty NODE_AUTH_TOKEN would make npm try (and fail) token auth instead of OIDC.
           if [ "$HAVE_NPM_TOKEN" != true ]; then unset NODE_AUTH_TOKEN; fi
           tag=latest; [ "$PRE" = true ] && tag=next
-          main="assets/devonchain101-nemo-$VERSION.tgz"
+          main="assets/devonchain101-synthesis-$VERSION.tgz"
           [ -f "$main" ] || { echo "::error::$main missing"; exit 1; }
-          for f in assets/devonchain101-nemo-*-"$VERSION".tgz "$main"; do
+          for f in assets/devonchain101-synthesis-*-"$VERSION".tgz "$main"; do
             npm publish "$f" --provenance --access public --tag "$tag"
           done
