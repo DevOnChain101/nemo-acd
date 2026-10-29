@@ -24,7 +24,7 @@ use synthesis_tui_base::terminal::{GuardOptions, TerminalGuard};
 use crate::SavedSession;
 use crate::app::{App, AppConfig, Cmd, Info, PermAction};
 use crate::link::{Msg, TaskDone, UiLink, UserDone};
-use crate::links::{OpenTarget, Opener, SystemOpener};
+use crate::links::{OpenTarget, Opener, SystemOpener, hyperlink_line, hyperlinks_enabled};
 use crate::resume::Resume;
 use crate::status::SandboxStatus;
 use crate::tty::{SharedOut, Tty};
@@ -186,6 +186,7 @@ fn cfg_for(o: &Options) -> AppConfig {
             .env
             .get_nonempty(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
             .map(Into::into),
+        mouse_debug: o.env.get("SYNTHESIS_MOUSE_DEBUG") == Some("1"),
         tz_offset_min: 0,
         agent_defs: o.harness.agent_defs().into_iter().map(|(n, _)| n).collect(),
     }
@@ -507,6 +508,17 @@ pub fn run_interactive(mut o: Options, tty: Tty) -> io::Result<Exit> {
     let out = SharedOut::new(output);
     let guard = TerminalGuard::enter(out.clone(), GuardOptions { raw_mode })?;
     let mut screen = Screen::new(out.clone(), color);
+    if hyperlinks_enabled(&o.env) {
+        let (base, home) = (
+            Some(o.session.workspace.cwd.clone()),
+            o.env
+                .get_nonempty(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+                .map(std::path::PathBuf::from),
+        );
+        screen.set_linker(Some(Box::new(move |l| {
+            hyperlink_line(l, base.as_deref(), home.as_deref(), cfg!(windows))
+        })));
+    }
     screen.enter()?;
     out.clone().write_all(BRACKETED_PASTE_ON.as_bytes())?;
 
@@ -875,7 +887,14 @@ fn exec(
         },
         Cmd::Compact { instructions } => runner.compact(app, instructions, now),
         Cmd::Open(t) => match opener.open(&t) {
-            Ok(()) => app.toast(format!("opening {}", t.describe()), now, false),
+            Ok(()) => {
+                let verb = if matches!(t, OpenTarget::Url(_)) {
+                    "opening"
+                } else {
+                    "revealed"
+                };
+                app.toast(format!("{verb} {}", t.describe()), now, false);
+            }
             Err(e) => {
                 app.toast(format!("could not open {}: {e}", t.describe()), now, true);
                 app.note(format!("could not open {}: {e}", describe(&t)), "error");
@@ -961,6 +980,7 @@ pub fn render_once(o: &OnceOptions, out: &mut impl Write) -> io::Result<()> {
         extra_commands: vec![],
         saved: o.saved.clone(),
         home: None,
+        mouse_debug: false,
         tz_offset_min: 0,
         agent_defs: vec![],
     };

@@ -56,7 +56,11 @@ pub struct Screen<W: Write> {
     /// Where the hardware cursor should be (0-based `(x, y)`); `None` hides it.
     caret: Option<(u32, u32)>,
     caret_shown: Option<(u32, u32)>,
+    /// Post-processes each encoded line (OSC 8 hyperlinks); the row cache compares the plain lines.
+    linker: Option<Linker>,
 }
+
+pub type Linker = Box<dyn Fn(&str) -> String + Send>;
 
 impl<W: Write> Screen<W> {
     pub fn new(out: W, color_mode: ColorMode) -> Self {
@@ -71,7 +75,12 @@ impl<W: Write> Screen<W> {
             title: TITLE.into(),
             caret: None,
             caret_shown: None,
+            linker: None,
         }
+    }
+
+    pub fn set_linker(&mut self, linker: Option<Linker>) {
+        self.linker = linker;
     }
 
     /// Parks the real cursor at `caret` after the next `draw` (so an IME places its candidate window
@@ -166,11 +175,11 @@ impl<W: Write> Screen<W> {
             if !full && self.prev.get(i).is_some_and(|p| p == line) {
                 continue;
             }
-            buf.push_str(&format!(
-                "\x1b[{};1H{}\x1b[K",
-                i + 1,
-                encode(line, self.color_mode)
-            ));
+            let mut enc = encode(line, self.color_mode);
+            if let Some(link) = &self.linker {
+                enc = link(&enc);
+            }
+            buf.push_str(&format!("\x1b[{};1H{enc}\x1b[K", i + 1));
         }
         self.prev = lines.iter().take(rows as usize).cloned().collect();
         let caret = self.caret.filter(|(x, y)| *x < cols && *y < rows);

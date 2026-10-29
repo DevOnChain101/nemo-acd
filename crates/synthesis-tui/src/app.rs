@@ -39,7 +39,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::chat::Chat;
 use crate::link::{ApprovalAsk, InputAsk};
-use crate::links::{OpenTarget, existing_path, path_at, url_at};
+use crate::links::{Link, OpenTarget, existing_path, join_wrapped, link_at, mouse_debug, open_gesture};
 use crate::route::{self, Known, Route};
 use crate::sanitize::{clean_input, clean_input_lines, clean_line, clean_text};
 use crate::status::{SandboxStatus, StatusExtra, status_line_with};
@@ -85,6 +85,8 @@ pub(crate) struct AppConfig {
     pub extra_commands: Vec<CmdDef>,
     pub saved: Vec<SavedSession>,
     pub home: Option<PathBuf>,
+    /// `SYNTHESIS_MOUSE_DEBUG=1`: every mouse report is shown in the footer.
+    pub mouse_debug: bool,
     pub tz_offset_min: i32,
     /// Agent definitions `@agent:<name>` can start.
     pub agent_defs: Vec<String>,
@@ -792,6 +794,11 @@ impl App {
                 return out;
             }
             Key::Mouse { .. } | Key::MouseDrag { .. } | Key::Wheel { .. } => {
+                if self.cfg.mouse_debug
+                    && let Some(d) = mouse_debug(&k)
+                {
+                    self.toast(d, now, false);
+                }
                 self.mouse(&k, now, &mut out);
                 return out;
             }
@@ -2417,6 +2424,16 @@ impl App {
                     self.follow_pointer();
                 }
             }
+            // motion with no button (terminals that report it): hint when over a link
+            Key::MouseDrag { x, y, button: 3, .. } if self.sel.mode() != SelMode::Dragging => {
+                let p = Point {
+                    x: i64::from(x) - 1,
+                    y: i64::from(y) - 1,
+                };
+                if self.dialogs.is_empty() && self.in_chat(p) && self.link_under(p).is_some() {
+                    self.toast("ctrl+click to open", now, false);
+                }
+            }
             Key::MouseDrag { x, y, .. } => {
                 if self.sel.mode() != SelMode::Dragging || self.sel.selection.is_none() {
                     return;
@@ -2477,6 +2494,16 @@ impl App {
                     _ => self.clear_selection(),
                 }
             }
+            // ctrl / alt / secondary click on a link or path: open it (see `open_gesture`)
+            Key::Mouse {
+                x,
+                y,
+                button,
+                action: MouseAction::Down,
+                mods,
+            } if self.dialogs.is_empty()
+                && open_gesture(button, mods)
+                && self.try_open(x, y, button, mods, now, out) => {}
             // a dialog owns the mouse: a click picks the option under it
             Key::Mouse {
                 y,
@@ -2510,6 +2537,65 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    /// The link under screen cell `p`. Chat rows are looked up with their soft-wrapped neighbours
+    /// joined (a long url or path may span rows); anything else from the drawn row.
+    fn link_under(&self, p: Point) -> Option<Link> {
+        if let (Some(g), Some(body)) = (
+            self.geom(),
+            self.frame.as_ref().and_then(|f| f.chat_body.as_ref()),
+        ) {
+            let b = sel::body_bounds(&g);
+            let c = sel::point_to_content(&g, p);
+            if p.y >= b.y0 && p.y <= b.y1 && c.y >= 0 {
+                let rows = |y: i64| body_sel_rows(body, y.max(0) as usize, y.max(0) as usize).pop();
+                let (text, col) = join_wrapped(&rows, c.y, p.x - g.x0)?;
+                return link_at(&text, col);
+            }
+        }
+        let row = self.lines.get(p.y.max(0) as usize)?;
+        link_at(row, p.x.max(0) as usize)
+    }
+
+    /// Opens the link under the pointer. `false` leaves the click to the selection logic: nothing
+    /// there, the prompt box's right click (paste), or an alt+click on text that is no real path.
+    fn try_open(
+        &mut self,
+        x: u32,
+        y: u32,
+        button: u32,
+        mods: synthesis_tui_base::keys::Mods,
+        now: i64,
+        out: &mut Vec<Cmd>,
+    ) -> bool {
+        let p = Point {
+            x: i64::from(x) - 1,
+            y: i64::from(y) - 1,
+        };
+        if !self.in_chat(p) || (button == 2 && self.in_input(p)) {
+            return false;
+        }
+        let Some(link) = self.link_under(p) else {
+            return false;
+        };
+        match link {
+            Link::Url(u) => out.push(Cmd::Open(OpenTarget::Url(u))),
+            Link::Path(raw) => {
+                let found =
+                    existing_path(&raw, self.cfg.home.as_deref(), Some(Path::new(&self.cfg.cwd)));
+                match found {
+                    Some(t) => out.push(Cmd::Open(OpenTarget::from_path(&t))),
+                    // alt+click is also "extend selection": only a real path takes it over
+                    None if mods.ctrl || button == 2 => {
+                        self.toast(format!("not found {}", clean_line(&raw)), now, true);
+                    }
+                    None => return false,
+                }
+            }
+        }
+        self.clear_selection();
+        true
     }
 
     /// Click on screen row `y` while a permission / plan dialog is open: the option drawn there is
@@ -2568,26 +2654,6 @@ impl App {
             x: i64::from(x) - 1,
             y: i64::from(y) - 1,
         };
-        let row = self
-            .lines
-            .get(p.y.max(0) as usize)
-            .cloned()
-            .unwrap_or_default();
-        // ctrl+click opens a link or a path under the pointer (looked up in the drawn frame)
-        if mods.ctrl && self.in_chat(p) {
-            if let Some(u) = url_at(&row, p.x as usize) {
-                out.push(Cmd::Open(OpenTarget::Url(u)));
-                self.clear_selection();
-                return;
-            }
-            if let Some(t) = path_at(&row, p.x as usize)
-                .and_then(|raw| existing_path(&raw, self.cfg.home.as_deref()))
-            {
-                out.push(Cmd::Open(OpenTarget::from_path(&t)));
-                self.clear_selection();
-                return;
-            }
-        }
         let g = if self.in_chat(p) { self.geom() } else { None };
         let b = g.as_ref().map(sel::body_bounds);
         let in_body = b.is_some_and(|b| p.y >= b.y0 && p.y <= b.y1);

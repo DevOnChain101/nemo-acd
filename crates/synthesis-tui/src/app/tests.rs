@@ -28,6 +28,7 @@ fn cfg(cwd: &str) -> AppConfig {
             mtime: 1,
         }],
         home: None,
+        mouse_debug: false,
         tz_offset_min: 0,
         agent_defs: vec!["reviewer".into()],
     }

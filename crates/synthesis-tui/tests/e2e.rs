@@ -774,8 +774,12 @@ mod signals {
         }
         /// Exit status, after the reader has drained the pipe: without the join, the child's last
         /// bytes (the restore sequence) can still sit unread in the pipe when `text()` is called.
+        /// `Child::wait` closes the child's stdin first, and that EOF races the signal just sent
+        /// (the app quits as `InputClosed`, not killed by it), so stdin stays open until it exits.
         fn wait(&mut self) -> std::process::ExitStatus {
+            let stdin = self.child.stdin.take();
             let st = self.child.wait().unwrap();
+            drop(stdin);
             self.reader.take().unwrap().join().unwrap();
             st
         }
@@ -831,7 +835,6 @@ mod signals {
             t.contains("EXIT Quit") && t.contains("\x1b[?1049l"),
             "{t:?}"
         );
-        drop(c.child.stdin.take());
     }
 }
 

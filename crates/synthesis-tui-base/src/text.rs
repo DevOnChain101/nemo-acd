@@ -58,6 +58,29 @@ pub fn strip_ansi(s: &str) -> String {
     out
 }
 
+/// `s` without OSC 8 hyperlink sequences (`ESC ] 8 ; params ; uri ST|BEL`), for text snapshots.
+pub fn strip_osc8(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(i) = rest.find("\x1b]8;") {
+        out.push_str(&rest[..i]);
+        let tail = &rest[i..];
+        // the sequence ends at BEL or ST (ESC \)
+        match tail[1..].find(['\x07', '\x1b'].as_slice()).map(|j| {
+            let j = j + 1;
+            (j + if tail.as_bytes()[j] == 0x07 { 1 } else { 2 }).min(tail.len())
+        }) {
+            Some(end) => rest = &tail[end..],
+            None => {
+                out.push_str(tail);
+                return out;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
 fn is_emoji_presentation(c: char) -> bool {
     matches!(
         c.emoji_status(),

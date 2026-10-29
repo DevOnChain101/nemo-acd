@@ -27,10 +27,12 @@ struct Inner {
 
 impl Inner {
     fn restore(&self) {
+        // Lock before claiming: a second caller (the signal thread vs the normal exit) must wait
+        // for the first one's bytes to be written, or the process can exit with them still unsent.
+        let mut out = self.out.lock().unwrap_or_else(|p| p.into_inner());
         if self.done.swap(true, Ordering::SeqCst) {
             return;
         }
-        let mut out = self.out.lock().unwrap_or_else(|p| p.into_inner());
         let _ = out.write_all(terminal_restore_sequence().as_bytes());
         let _ = out.flush();
         if self.raw {
@@ -127,6 +129,7 @@ impl Drop for TerminalGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::mpsc;
 
     #[derive(Clone, Default)]
     struct Shared(Arc<Mutex<Vec<u8>>>);
@@ -151,6 +154,37 @@ mod tests {
         g.restore();
         drop(g);
         assert_eq!(text(&out), terminal_restore_sequence());
+    }
+
+    /// Blocks inside `write` until released, to hold a restore half done.
+    struct Slow(mpsc::Sender<()>, Arc<Mutex<Vec<u8>>>);
+    impl Write for Slow {
+        fn write(&mut self, b: &[u8]) -> io::Result<usize> {
+            self.0.send(()).unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            self.1.lock().unwrap().extend_from_slice(b);
+            Ok(b.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_second_restore_waits_for_the_first_to_finish_writing() {
+        let (tx, rx) = mpsc::channel();
+        let buf = Arc::default();
+        let g = TerminalGuard::enter(Slow(tx, Arc::clone(&buf)), GuardOptions { raw_mode: false })
+            .unwrap();
+        let inner = Arc::clone(&g.inner);
+        let t = std::thread::spawn(move || inner.restore());
+        rx.recv().unwrap(); // the first restore is inside its write
+        g.restore();
+        assert!(
+            !buf.lock().unwrap().is_empty(),
+            "returned before the bytes were written"
+        );
+        t.join().unwrap();
     }
 
     #[test]
