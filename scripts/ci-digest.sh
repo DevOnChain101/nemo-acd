@@ -15,7 +15,12 @@ env_dump() {
   py=$(python3 --version 2>&1 || python --version 2>&1 || echo none)
   echo "env: os=$(uname -s) arch=$(uname -m) runner=${RUNNER_OS:-local} node=$(node --version 2>/dev/null || echo none) python=${py%%$'\n'*} git=$(git --version 2>/dev/null || echo none)"
   if [ -n "${SYNTHESIS_BROWSER_PATH:-}" ]; then
-    chrome=$("$SYNTHESIS_BROWSER_PATH" --version 2>&1 | head -n 1)
+    # `chrome.exe --version` launches the browser on Windows and never returns: read the file version.
+    if [ "${RUNNER_OS:-}" = Windows ]; then
+      chrome=$(powershell -NoProfile -Command "(Get-Item -LiteralPath '$SYNTHESIS_BROWSER_PATH').VersionInfo.ProductVersion" 2>&1 | head -n 1)
+    else
+      chrome=$("$SYNTHESIS_BROWSER_PATH" --version 2>&1 | head -n 1)
+    fi
     echo "chrome: $SYNTHESIS_BROWSER_PATH (${chrome:-no version output})"
   fi
   if [ "$(uname -s)" = Linux ]; then
