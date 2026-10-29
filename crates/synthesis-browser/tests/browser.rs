@@ -7,9 +7,30 @@ use synthesis_config::Env;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
-/// Prints the test name when it starts and fails it after 120 s, so a hanging test shows in the log.
+struct DoneOnDrop(std::sync::Arc<std::sync::atomic::AtomicBool>);
+impl Drop for DoneOnDrop {
+    fn drop(&mut self) {
+        self.0.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// Prints the test name when it starts and fails it after 90 s, so a hanging test shows in the log.
 async fn traced(name: &str, f: impl std::future::Future<Output = ()>) {
     eprintln!("START {name}");
+    // A tokio timeout cannot fire when a runtime thread is blocked inside a synchronous call (the
+    // Windows hang), so an OS thread independent of the runtime enforces the cap too.
+    let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    {
+        let (done, name) = (done.clone(), name.to_string());
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(100));
+            if !done.load(std::sync::atomic::Ordering::SeqCst) {
+                eprintln!("HANG {name} (watchdog thread: no result after 100 s)");
+                std::process::exit(101);
+            }
+        });
+    }
+    let _guard = DoneOnDrop(done);
     if tokio::time::timeout(Duration::from_secs(90), f)
         .await
         .is_err()

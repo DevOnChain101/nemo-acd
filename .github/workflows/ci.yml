@@ -170,9 +170,17 @@ jobs:
           failed=""
           for t in $("$bin" --list --format terse | sed -n 's/: test$//p'); do
             say "[$(date -u +%T)] START $t"
-            # GNU timeout (also in Git for Windows' bash): 124 = timed out, 137 = needed the KILL
-            timeout --kill-after=10 150 "$bin" --exact "$t" --nocapture --test-threads=1 > one.log 2>&1
+            # 124 = timed out, 137 = killed. GNU timeout (Linux, Git for Windows' bash), gtimeout, or perl
+            # alarm (macOS has no `timeout`; the exit code 142 = SIGALRM is mapped to 124).
+            if command -v timeout >/dev/null 2>&1; then
+              timeout --kill-after=10 150 "$bin" --exact "$t" --nocapture --test-threads=1 > one.log 2>&1
+            elif command -v gtimeout >/dev/null 2>&1; then
+              gtimeout --kill-after=10 150 "$bin" --exact "$t" --nocapture --test-threads=1 > one.log 2>&1
+            else
+              perl -e 'alarm shift; exec @ARGV' 150 "$bin" --exact "$t" --nocapture --test-threads=1 > one.log 2>&1
+            fi
             rc=$?
+            [ $rc -eq 142 ] && rc=124
             if [ $rc -eq 124 ] || [ $rc -eq 137 ]; then
               say "[$(date -u +%T)] HANG $t (rc=$rc, no exit after 150 s)"
               failed="$failed $t(hang)"
