@@ -1,0 +1,42 @@
+{
+  "name": "Synthesis UI Kit",
+  "version": "1.0",
+  "palette": {
+    "background": "#0B0C0F",
+    "surface": "#15171B",
+    "elevated": "#242830",
+    "border": "#3A3F4A",
+    "text": "#9CA3AF",
+    "textStrong": "#E5E7EB",
+    "accent": "#D9D9E0",
+    "accentLight": "#F7F8FA",
+    "mutedBlue": "#0B1322",
+    "softBeige": "#D7CEC7"
+  },
+  "typography": {
+    "display": "Inter / SF Pro Display / system-ui",
+    "body": "Inter / SF Pro Text / system-ui",
+    "mono": "JetBrains Mono / SF Mono / ui-monospace"
+  },
+  "radii": {
+    "sm": 12,
+    "md": 16,
+    "lg": 24,
+    "xl": 32,
+    "pill": 999
+  },
+  "spacing": {
+    "xs": 4,
+    "sm": 8,
+    "md": 16,
+    "lg": 24,
+    "xl": 32,
+    "2xl": 48
+  },
+  "effects": {
+    "shadowSoft": "0 12px 40px rgba(0,0,0,0.35)",
+    "shadowElevated": "0 18px 60px rgba(0,0,0,0.45)",
+    "strokeSubtle": "1px solid rgba(255,255,255,0.08)",
+    "glowSubtle": "0 0 20px rgba(247,248,250,0.10)"
+  }
+}

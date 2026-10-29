@@ -1,10 +1,10 @@
-# Nemo-ACD status
+# Synthesis status
 
-Goal: R1–R9, hand over the full Nemo autonomous coding agent. Not complete: see "Open".
+Goal: R1–R9, hand over the full Synthesis autonomous coding agent. Not complete: see "Open".
 
 ## Verified
 - CI run #22 on commit c6c6a29 (GitHub Actions, public repo `DevOnChain101/nemo-acd`): `ci-ok` green. test (macOS, Ubuntu, Windows), msrv 1.89, sandbox (linux), docs, cargo-deny, cargo-audit, shell-scripts and the three eval selftests passed. Only `browser (windows-latest)` is red (non-blocking, `continue-on-error`).
-- macOS (local, tester + developers): `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` (about 884 tests, 0 failed), `cargo test -p nemo-cli --features test-provider` (88), eval selftest 6/6, rustdoc `-D warnings`, `cargo +1.89 check`.
+- macOS (local, tester + developers): `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` (about 884 tests, 0 failed), `cargo test -p synthesis-cli --features test-provider` (88), eval selftest 6/6, rustdoc `-D warnings`, `cargo +1.89 check`.
 - Counting method (to compare future runs): `grep -E '^test result' log | awk '{p+=$4; f+=$6; i+=$8}'`.
 - Real provider smoke (omniroute, OpenAI-compatible gateway): `cc/claude-haiku-5-5` and `cx/gpt-5.6-luna` stream, call tools and finish a task; a TUI end-to-end coding task passed (20 s, verification passed).
 - TUI driven through a pseudo-terminal (`tests/tty-qa`, report `docs/research/tty-qa-report.md`): 34 bugs found, 29 fixed, 4 partly, 1 open (B-29).
@@ -14,14 +14,16 @@ Goal: R1–R9, hand over the full Nemo autonomous coding agent. Not complete: se
 ## Built (R1–R9)
 - R1 contracts, specs (reviewed by the owner 2026-10-28), eval harness, golden snapshots.
 - R2 core: config, terminal, hooks, tools, permissions (all six modes incl. the auto-mode LLM judge; bypass needs confirmation).
-- R3 providers (Anthropic, OpenAI-compatible) and MCP (stdio, streamable HTTP, SSE; read-before-write guard; credential propagation checks; `nemo mcp test`).
-- R4 harness, verification gate (one approval per check set; edits with no check end `unverified`), headless `nemo run` with `--permission-mode`, `--allow/--deny`.
+- R3 providers (Anthropic, OpenAI-compatible) and MCP (stdio, streamable HTTP, SSE; read-before-write guard; credential propagation checks; `synth mcp test`).
+- R4 harness, verification gate (one approval per check set; edits with no check end `unverified`), headless `synth run` with `--permission-mode`, `--allow/--deny`.
 - R5 TUI: Shift+Tab modes, copy/selection, message queue, diff views, `/mcp /agents /permissions /model /resume /effort`.
 - R6 browser (own CDP client). R7 sandbox (Seatbelt tested; Landlock/bwrap; Windows Job Object). R8 sessions (SQLite) and worktrees. R9a CI + release pipeline.
 
 ## Decisions on record
-ADR-010 Rust core; ADR-011 API keys only (NEMO_*); sandbox enforce by default (Windows: best-effort with a notice); network deny by default; the Node prototype is a frozen, non-authoritative reference (design doc plus official Claude Code/Codex practice decide behaviour, see docs/research/official-conformance.md).
+Product rename to Synthesis (owner, 2026-10-30; see CHANGELOG): command `synth`, crates `synthesis-*`, env `SYNTHESIS_*`, home `~/.synthesis`; the old names are detected by `synth doctor` and never read (docs/MIGRATION.md). Not verified yet after the rename: Linux and Windows CI (run it on the next push); GitHub repository variables must be recreated under the new names (docs/RELEASE.md).
+
+ADR-010 Rust core; ADR-011 API keys only (SYNTHESIS_*); sandbox enforce by default (Windows: best-effort with a notice); network deny by default; the Node prototype is a frozen, non-authoritative reference (design doc plus official Claude Code/Codex practice decide behaviour, see docs/research/official-conformance.md).
 
 ## Open
-- Owner: real-model eval baseline and the R9 cutover threshold; golden snapshot review; release setup (maintainer emails or `NEMO_ALLOW_ANY_VERIFIED_TAGGER`, `release` environment reviewers, tag ruleset, signing, npm names, OWNER placeholders); Dependabot PRs; remote-MCP OAuth decision (default: not supported); owner email in public commit history.
+- Owner: real-model eval baseline and the R9 cutover threshold; golden snapshot review; release setup (maintainer emails or `SYNTHESIS_ALLOW_ANY_VERIFIED_TAGGER`, `release` environment reviewers, tag ruleset, signing, npm names, OWNER placeholders); Dependabot PRs; remote-MCP OAuth decision (default: not supported); owner email in public commit history.
 - Engineering: `browser (windows)` job hangs (cause unconfirmed); Windows/Linux behaviour of ConPTY, Git Bash quoting, clipboard, Landlock/bwrap enforcement is verified only by CI, not on real machines; remaining conformance gaps in docs/research/conformance-gaps.md (P2); QA items B-14, B-18, B-25, B-29, B-34.

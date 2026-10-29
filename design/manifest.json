@@ -1,0 +1,8 @@
+{
+  "package": "Synthesis_UI_Kit_Full",
+  "version": "1.0",
+  "main_logo": "01-brand/logo/png/synthesis-symbol-transparent-1024.png",
+  "main_app_icon": "01-brand/app-icons/synthesis-app-icon-1024.png",
+  "landing_preview": "03-designs/landing/landing-preview.png",
+  "desktop_preview": "03-designs/desktop/desktop-preview.png"
+}

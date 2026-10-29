@@ -4,6 +4,12 @@ Format: Keep a Changelog. Versioning: SemVer (pre-1.0: minor versions may break)
 
 ## [Unreleased]
 
+### Changed (rename Nemo to Synthesis, owner decision 2026-10-30)
+- The product is **Synthesis**; the command is `synth` (`synth run|tui|doctor|auth|models|mcp|import`). Crates `nemo-*` are `synthesis-*` (package `synthesis-cli`, bin `synth`), env `NEMO_*` is `SYNTHESIS_*`, `~/.nemo` is `~/.synthesis`, `.nemo/` is `.synthesis/`, `nemo.json` is `synthesis.json`, `NEMO.md` is `SYNTHESIS.md`, `nemo.db` is `synthesis.db`, settings section `"nemo"` is `"synthesis"`, npm `@devonchain101/synthesis`, archives `synthesis-<version>-<target>`, bundled skill `nemocode-config` is `synthesis-config`. The GitHub slug stays `DevOnChain101/nemo-acd` until the new repository exists (docs/RELEASE.md). Repository variables `NEMO_ALLOW_ANY_VERIFIED_TAGGER` and `NEMO_NPM_TRUSTED_PUBLISHING` are now `SYNTHESIS_*`.
+- No automatic migration: the old names are not read. `synth doctor` prints the manual migration steps when `~/.nemo` exists and `~/.synthesis` does not, names any set `NEMO_*` variable (never values) and warns when another `synth` on PATH shadows this one (docs/MIGRATION.md).
+- Golden snapshots follow the same mapping (owner-approved divergence from the Node captures; regression-only). 29 render cases were regenerated on 2026-10-30 with `SYNTHESIS_UPDATE_GOLDEN=1` (longer wordmark, wrapping and header chips); `tools/golden-capture` is untouched and can no longer regenerate them.
+- New `design/` (brand kit, tokens, landing and desktop design references) and CI check `scripts/check-no-legacy-name.mjs`.
+
 ### Changed (release engineering)
 - License is Apache-2.0 (LICENSE, NOTICE). npm packages are `@devonchain101/nemo` and `@devonchain101/nemo-<os>-<arch>[-musl]` (command `nemo`, `publishConfig` access public + provenance). Installers moved to `scripts/install.sh` / `scripts/install.ps1` (default repo built in, run `nemo doctor` after install, attestation verified whenever `gh` exists). `release.yml`: `workflow_dispatch` dry run, no private signing secrets, optional `npm-publish` job with provenance.
 

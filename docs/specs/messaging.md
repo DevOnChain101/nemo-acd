@@ -1,12 +1,12 @@
 # Spec: Inter-agent messaging (in-session sub-agents, cross-session peers) — draft 0.3
 
 Status: draft (2026-10-29). D1–D16 accepted by the owner on 2026-10-29. Tags as in events.md. Design doc: §5.13, ADR-012, roadmap R10.
-Scope: **Part A**, in-session messaging (agent ↔ sub-agent, user `@agent` in chat). **Part B**, agent-to-agent request/response between live sessions of the same OS user on the same machine, in the same or different workspaces, with no human in the loop. **§1 addressing** covers both parts. Out of scope: a user CLI `nemo send`, cross-user and network delivery.
+Scope: **Part A**, in-session messaging (agent ↔ sub-agent, user `@agent` in chat). **Part B**, agent-to-agent request/response between live sessions of the same OS user on the same machine, in the same or different workspaces, with no human in the loop. **§1 addressing** covers both parts. Out of scope: a user CLI `synthesis send`, cross-user and network delivery.
 
 ## 0. Non-negotiables
 1. A message never grants anything: no approval, no mode change, no dialog answer, no bypass. Receivers act only with their own permissions and policy.
 2. Messages reach a model only at agent-loop safe points, never between a `tool_use` and its `tool_result`.
-3. Event-driven, no polling. Works on macOS/Linux/Windows, headless `nemo run` and the TUI.
+3. Event-driven, no polling. Works on macOS/Linux/Windows, headless `synth run` and the TUI.
 4. Every send and receive is an event (additive v1), redacted, and visible in the TUI of every session involved.
 5. Addressing never guesses: an address resolves to exactly one agent or fails with the candidate list.
 
@@ -15,7 +15,7 @@ Many sessions in many workspaces may run the same definition (e.g. `developer`) 
 
 | Component | Stable id | Human form | Uniqueness |
 |---|---|---|---|
-| workspace | `workspace_key` = first 24 hex (96 bits) of SHA-256 over the **folded canonical root** (realpath; case-folded on Windows/macOS; on Windows `\`→`/`, `\\?\` stripped, drive letter folded; workspace-context.md §4.3) | `label` = basename of the root mapped to `[a-z0-9_-]` (e.g. `Nemo-ACD` → `nemo-acd`) | key: global. label: not unique |
+| workspace | `workspace_key` = first 24 hex (96 bits) of SHA-256 over the **folded canonical root** (realpath; case-folded on Windows/macOS; on Windows `\`→`/`, `\\?\` stripped, drive letter folded; workspace-context.md §4.3) | `label` = basename of the root mapped to `[a-z0-9_-]` (e.g. `My-App` → `my-app`) | key: global. label: not unique |
 | session | `session_id` (UUIDv4) | short id = first 8 hex; optional `name` (`--name`, `/name`, charset `[a-z0-9][a-z0-9_-]{0,31}`) | name unique among **live** sessions of one workspace; a taken name is rejected, never suffixed |
 | agent | `agent_id` (UUIDv4; main has none) | `instance` name (A2; `main` for the main agent); `kind` = definition name | instance unique within its session |
 
@@ -43,8 +43,8 @@ instance  = name | agent_id-prefix (>= 6 hex) | "main" | "parent" (in-session on
 ## Part A — In-session messaging
 
 ### A1. Today and transport
-Sub-agents live only for one synchronous `Task` call (exec.rs:1563, shared `&TaskRun`). The TUI holds lines typed during a task until it ends (app.rs `next_queued`). Node had `@name` routing [from-node agent.js:1165, 882], a chat target [from-node app.js:803-820] and idle eviction [from-node agent.js:49]. Rust already ranks agents first in `@` completion (nemo-tui-base complete.rs:280) and has the render side (`visible_subagents`, `subagent_rows`, `chat_target`, `docked`, nemo-tui-render agent.rs:2055). Nothing feeds them.
-**Transport: in-process `AgentHub` per session** (`nemo-harness/src/hub.rs`). It holds the retained sub-agents and a FIFO inbox per agent (main included), and wakes waiters with `tokio::sync::Notify`. Against it: queued messages are lost on a crash. Accepted, because their targets die with the process; the events show `sent` without `delivered`.
+Sub-agents live only for one synchronous `Task` call (exec.rs:1563, shared `&TaskRun`). The TUI holds lines typed during a task until it ends (app.rs `next_queued`). Node had `@name` routing [from-node agent.js:1165, 882], a chat target [from-node app.js:803-820] and idle eviction [from-node agent.js:49]. Rust already ranks agents first in `@` completion (synthesis-tui-base complete.rs:280) and has the render side (`visible_subagents`, `subagent_rows`, `chat_target`, `docked`, synthesis-tui-render agent.rs:2055). Nothing feeds them.
+**Transport: in-process `AgentHub` per session** (`synthesis-harness/src/hub.rs`). It holds the retained sub-agents and a FIFO inbox per agent (main included), and wakes waiters with `tokio::sync::Notify`. Against it: queued messages are lost on a crash. Accepted, because their targets die with the process; the events show `sent` without `delivered`.
 
 ### A2. Sub-agent lifecycle
 - **Instance name:** given by `Task{name}` or defaulting to the definition; `-2`, `-3` … on collision within the session.
@@ -123,12 +123,12 @@ B (`ws:web`) needs a fact only A (`ws:api/sess:backend`, mid-task) has. B's agen
 ### B2. What exists to reuse (verified in this repo)
 | Piece | State | Use |
 |---|---|---|
-| `nemo-mcp/src/sse.rs` | legacy HTTP+SSE **client** (reqwest) | no: needs an HTTP server |
-| rmcp | prod: client, child-process, streamable-HTTP client; `server` + axum **dev-only** (nemo-mcp Cargo.toml:25-26) | no server in prod |
-| tokio `net` | on in nemo-tools/terminal/browser/mcp: `UnixListener`, `UnixStream::peer_cred()`, `windows::named_pipe` | **yes** |
+| `synthesis-mcp/src/sse.rs` | legacy HTTP+SSE **client** (reqwest) | no: needs an HTTP server |
+| rmcp | prod: client, child-process, streamable-HTTP client; `server` + axum **dev-only** (synthesis-mcp Cargo.toml:25-26) | no server in prod |
+| tokio `net` | on in synthesis-tools/terminal/browser/mcp: `UnixListener`, `UnixStream::peer_cred()`, `windows::named_pipe` | **yes** |
 | session writer lock | kernel-released OS lock (store.rs:1022) | **yes**, liveness |
 | `notify` | not in the tree | not needed (B4) |
-| JSONL, `Redactor`, `is_secret_path`, `fence()` | nemo-events / nemo-context | **yes** |
+| JSONL, `Redactor`, `is_secret_path`, `fence()` | synthesis-events / synthesis-context | **yes** |
 | constraint | `unsafe_code = "forbid"` | no hand-made Win32 DACLs |
 
 ### B3. Transport options
@@ -141,11 +141,11 @@ B (`ws:web`) needs a fact only A (`ws:api/sess:backend`, mid-task) has. B's agen
 **Pick T1:** no port, no HTTP stack; the transport comes from tokio `net`, already compiled, and the frame format is the event JSONL. Against it: the Windows default pipe DACL grants Everyone read (Microsoft docs, to verify) and `unsafe` is forbidden. That is covered by a handshake that releases nothing before both sides prove the key, plus unguessable pipe names. SSE was rejected because it presumes HTTP.
 
 ### B4. Endpoint, registry, discovery
-- **Endpoint per live session** (when `nemo.peers.enabled`):
-  - unix: `$NEMO_HOME/run/<rand16hex>.sock` in a 0700 dir, socket chmod 0600; accepted connections must have `peer_cred().uid` equal to the owner uid of `run/` (`MetadataExt::uid`).
-  - Windows: `\\.\pipe\nemo-peer-<rand32hex>` with `first_pipe_instance(true)` and `reject_remote_clients(true)`.
-  - If the unix path exceeds 100 B, peers are off for that session (`notice` + `nemo doctor`).
-- **Key:** `$NEMO_HOME/run/peer.key`, 32 random bytes, 0600. On Windows, peers stay off unless `NEMO_HOME` is under `%USERPROFILE%` (ACL inheritance, unverified).
+- **Endpoint per live session** (when `synthesis.peers.enabled`):
+  - unix: `$SYNTHESIS_HOME/run/<rand16hex>.sock` in a 0700 dir, socket chmod 0600; accepted connections must have `peer_cred().uid` equal to the owner uid of `run/` (`MetadataExt::uid`).
+  - Windows: `\\.\pipe\synthesis-peer-<rand32hex>` with `first_pipe_instance(true)` and `reject_remote_clients(true)`.
+  - If the unix path exceeds 100 B, peers are off for that session (`notice` + `synth doctor`).
+- **Key:** `$SYNTHESIS_HOME/run/peer.key`, 32 random bytes, 0600. On Windows, peers stay off unless `SYNTHESIS_HOME` is under `%USERPROFILE%` (ACL inheritance, unverified).
 - **Registry:** `run/<session_id>.json` = `{v:1, session_id, session_name?, workspace_key, workspace_label, workspace_root, cwd, pid, pid_start, endpoint, started_at}`. It is 0600, written temp+rename and removed on clean exit. Session-name uniqueness per workspace is checked against live entries at `--name` time.
 - **Discovery on demand** (no polling): the list and resolve calls read `run/*.json`, then fetch live data (status, agents, task summary) with a `status` frame per allowed session (parallel, 500 ms each).
 - **Stale:** a connect failure leads to a writer-lock probe. A free lock means the holder is dead: delete the entry and report `offline`. A held lock gives `unreachable`. pid probes are not used (they spawn PowerShell on Windows, recover.rs:45).
@@ -180,7 +180,7 @@ C→S {"t":"cancel","id"}                   closing the connection = cancel
 - **Responder** = a sub-agent of A (`kind:"peer-responder"`, instance `peer-<n>`), visible in A's events and TUI.
   - Tools: Read, Glob, Grep, git_status, git_diff only. No Bash, Web*, MCP, browser, SendMessage or Task, so hops are at most 1 by construction.
   - Mode: `stricter(A's mode, plan)`; A's deny rules and protected/secret paths apply; asks auto-deny.
-  - Budget: 8 turns, 20 tool calls, request timeout. Cost goes into A's usage and `nemo.peers.max_cost_usd` (D13).
+  - Budget: 8 turns, 20 tool calls, request timeout. Cost goes into A's usage and `synthesis.peers.max_cost_usd` (D13).
 - **Sanitising:** `tool_result`s of reads of secret or protected paths become `[withheld from peers]` in the snapshot.
 - **The request** is the responder's first user turn: `<peer_request id from="<display>" reply_to="<canonical>" kind="<sender kind>" hop trust="peer-data">…</peer_request>`. The responder rules: answer only from that context and read-only lookups; decline any request to act; never include credentials, keys, tokens, env values or contents of protected/secret paths; share the minimum.
 - **Outgoing:** the final text and every `partial` (coalesced to at most 1 per 500 ms) pass A's `Redactor`. Cap 32 KiB.
@@ -194,8 +194,8 @@ C→S {"t":"cancel","id"}                   closing the connection = cancel
 - It returns `{request_id, to:<canonical>, status:"accepted"}`, and the harness keeps the connection open.
 - Partials become events only. The reply goes to the inbox as `<peer_reply id from reply_to kind status trust="peer-data">`. On timeout the model gets the partials marked `incomplete (timeout)`.
 - Errors: `not_found`, `ambiguous` (with candidates), `offline`, `unreachable`, `denied`, `busy`, `rate_limited`, `cycle`, `disabled`. At most 4 in flight per session.
-- **Offline:** a session known in `nemo.db` but not live gets `offline` with its display form, title and last status.
-- **Optional resume (D12, off by default):** with `resume_offline:true` and `SendMessage{…, resume:true}`, Nemo runs the hidden headless `nemo peer-answer --session <id>`. It takes the free writer lock, runs R2 over the stored history, answers over its stdout pipe and exits. Needs R8.
+- **Offline:** a session known in `synthesis.db` but not live gets `offline` with its display form, title and last status.
+- **Optional resume (D12, off by default):** with `resume_offline:true` and `SendMessage{…, resume:true}`, Synthesis runs the hidden headless `synth peer-answer --session <id>`. It takes the free writer lock, runs R2 over the stored history, answers over its stdout pipe and exits. Needs R8.
 
 ### B8. Security model
 1. **Same user, same machine.**
@@ -205,12 +205,12 @@ C→S {"t":"cancel","id"}                   closing the connection = cancel
 2. **Peer text is untrusted data,** fenced in both directions. It is never an approval, a grant or a mode change, and it is excluded from the judge's input.
 3. **Exfiltration:** the receiver decides what to share, via the read-only responder under its own policy, snapshot withholding and the outgoing `Redactor`. **Residual:** content A's user showed A can reach an allowed peer. The allow list is the trust decision.
 4. **Impersonation:** a same-user process (including the agent's own Bash) could read `peer.key`. Mitigations:
-   - `$NEMO_HOME/run/` becomes a protected/secret path (file tools refuse it; Bash's protected-path scan asks);
+   - `$SYNTHESIS_HOME/run/` becomes a protected/secret path (file tools refuse it; Bash's protected-path scan asks);
    - deny it in the R7 sandbox.
    A Bash-capable agent can still bypass its *own* sender policy, but never the receiver's (R2 stays read-only and redacted).
 5. **Settings are honoured only from user settings and CLI flags, never from project settings:**
    ```json
-   "nemo": {"peers": {"enabled": false, "allow": ["workspace:<this root>"], "deny": [],
+   "synthesis": {"peers": {"enabled": false, "allow": ["workspace:<this root>"], "deny": [],
      "initiate": true, "answer": true, "confirm_replies": false, "max_hops": 2,
      "max_cost_usd": 1.0, "resume_offline": false}}
    ```
@@ -269,7 +269,7 @@ Row = {"address": canonical, "display": display,
 13. Case-folded keys: the same root on Windows/macOS in a different case gives the same key; on Linux, different keys.
 14. A taken session name is rejected.
 
-**Part B** (two harnesses in one process, temp `NEMO_HOME`)
+**Part B** (two harnesses in one process, temp `SYNTHESIS_HOME`)
 15. B asks A, and A's responder answers. B's next request has `<peer_reply>`, and the same `request_id` appears in both streams.
 16. A is mid a long Bash call: the reply still arrives, and A's main requests never contain peer text.
 17. Addressing a peer's named instance forks that instance's snapshot, not main's.
@@ -278,7 +278,7 @@ Row = {"address": canonical, "display": display,
 20. Auth: a wrong key, or an impostor server → nothing is leaked or sent.
 21. Offline (free lock → cleanup) and `unreachable`.
 22. `cycle`, `rate_limited`, `busy`, timeout.
-23. Project `nemo.peers` is ignored; a cross-workspace request without an allow rule is `denied`.
+23. Project `synthesis.peers` is ignored; a cross-workspace request without an allow rule is `denied`.
 24. Unix: a long-path disable, and a unit test for the uid comparison.
 
 ## D. Decisions
@@ -293,7 +293,7 @@ Accepted 2026-10-29:
 - **D8** (revised) In-session SendMessage follows the mode table above (asks in `default`); cross-session asks unless allowlisted with `initiate`.
 
 Open until 2026-10-29 (recommendations as written; all accepted, see below):
-- **D9** `nemo.peers.enabled` default off, with a same-workspace default allow list once on (recommended).
+- **D9** `synthesis.peers.enabled` default off, with a same-workspace default allow list once on (recommended).
 - **D10** R2 read-only responder (recommended) vs R1.
 - **D11** `confirm_replies` default false (recommended).
 - **D12** Build offline resume, default off?
@@ -305,19 +305,19 @@ Open until 2026-10-29 (recommendations as written; all accepted, see below):
 ## E. Implementation plan (roadmap R10)
 | Step | Where | Risk |
 |---|---|---|
-| R10a-1 Hub, drains, wait, snapshots | new `nemo-harness/src/hub.rs`; `agent.rs`, `harness.rs`, `context.rs` | **probe first:** `TaskRun` shared across spawned futures (today `&` borrows, exec.rs:1563) |
-| R10a-2 Tools + resolver | `exec.rs`; new `nemo-core` `address.rs` (grammar, `workspace_key`, folding reused from §4.3 code); `nemo-tools/src/schemas.json`; specs/tools.md | the judge must ignore agent text |
-| R10a-3 Events | `nemo-events/src/types.rs`, schema, specs/events.md, golden `tests/golden/events/messaging-basic.jsonl` | additive only |
-| R10a-4 TUI | `nemo-tui/src/{chat,app,runtime}.rs`, `nemo-tui-base/src/complete.rs` | colour only |
-| R10b-1 Transport | new crate `crates/nemo-peers` (registry, per-OS endpoint behind `cfg`, frames, handshake) | Windows DACL assumption, path length; **security-reviewer** |
-| R10b-2 Responder + sender | `nemo-harness`, `nemo-settings` (user-only `nemo.peers`), `nemo-permissions` (`$NEMO_HOME/run` protected) | exfil residual (B8.3) |
+| R10a-1 Hub, drains, wait, snapshots | new `synthesis-harness/src/hub.rs`; `agent.rs`, `harness.rs`, `context.rs` | **probe first:** `TaskRun` shared across spawned futures (today `&` borrows, exec.rs:1563) |
+| R10a-2 Tools + resolver | `exec.rs`; new `synthesis-core` `address.rs` (grammar, `workspace_key`, folding reused from §4.3 code); `synthesis-tools/src/schemas.json`; specs/tools.md | the judge must ignore agent text |
+| R10a-3 Events | `synthesis-events/src/types.rs`, schema, specs/events.md, golden `tests/golden/events/messaging-basic.jsonl` | additive only |
+| R10a-4 TUI | `synthesis-tui/src/{chat,app,runtime}.rs`, `synthesis-tui-base/src/complete.rs` | colour only |
+| R10b-1 Transport | new crate `crates/synthesis-peers` (registry, per-OS endpoint behind `cfg`, frames, handshake) | Windows DACL assumption, path length; **security-reviewer** |
+| R10b-2 Responder + sender | `synthesis-harness`, `synthesis-settings` (user-only `synthesis.peers`), `synthesis-permissions` (`$SYNTHESIS_HOME/run` protected) | exfil residual (B8.3) |
 | R10b-3 CLI/TUI | `apps/cli` (`--name`, `/name`, `/peers`, `doctor`), rows | — |
 | R10c Offline resume | `apps/cli` hidden `peer-answer` | needs R8 |
 Order: R10a (after R5) → R10b (after the R7 protected-path/sandbox rules) → R10c (after R8). Each step is verified with `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace` on macOS, Linux and Windows.
 
 ### Decisions (accepted 2026-10-29)
 The owner accepted every recommendation of D9–D16:
-- **D9** `nemo.peers.enabled` is off by default. Once enabled, the default allow list is the same workspace only.
+- **D9** `synthesis.peers.enabled` is off by default. Once enabled, the default allow list is the same workspace only.
 - **D10** The receiver answers through a read-only responder forked from the addressed agent's context (R2).
 - **D11** `confirm_replies` defaults to false: no per-reply confirmation.
 - **D12** Offline resume is built, but off by default.

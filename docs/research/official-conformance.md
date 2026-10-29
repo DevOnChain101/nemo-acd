@@ -1,11 +1,11 @@
-# Official conformance checklist for Nemo
+# Official conformance checklist for Synthesis
 
 Research date: 2026-10-28. Scope: quick facts plus a per-area checklist, with a comparison matrix.
 
 **Source notes**
 - Claude Code pages are on code.claude.com. None of them shows a publication date. They reference versions up to v2.1.311, so they appear current but this is inferred.
 - Codex pages on developers.openai.com now redirect (308) to learn.chatgpt.com. I cite the final URL. None of the Codex pages shows a date.
-- Tags: **documented** means the official page states it. **inferred** means I derived it or it is a recommendation for Nemo.
+- Tags: **documented** means the official page states it. **inferred** means I derived it or it is a recommendation for Synthesis.
 - Where the request's premise conflicts with the official text, I flag it under "Conflicts" rather than picking silently.
 - The official pages I fetched were long. Some sections were truncated or only partly read. Those gaps are listed at the end.
 
@@ -81,7 +81,7 @@ Research date: 2026-10-28. Scope: quick facts plus a per-area checklist, with a 
 35. **documented.** Edits to permissions, hooks, and `apiKeyHelper` apply to the running session without restart. Source: CC-SET.
 36. **documented.** Environment variables are not a precedence level. Each shell variable and settings key pair is decided separately. An `env` block in a settings file follows the normal levels. Source: CC-SET.
 37. **documented.** Codex: user config is `~/.codex/config.toml`, project config is `.codex/config.toml` (trusted projects only). Project-local config cannot set `model_provider`, `notify`, `profile`, `otel`, and similar keys. Source: CX-CFG.
-38. **inferred.** Nemo should read only `NEMO_*` for its own settings and API keys, plus the standard variables listed in the design doc. This is an ADR-011 choice, not an official rule. No official page covers it.
+38. **inferred.** Synthesis should read only `SYNTHESIS_*` for its own settings and API keys, plus the standard variables listed in the design doc. This is an ADR-011 choice, not an official rule. No official page covers it.
 
 ## 3. Memory files
 
@@ -125,7 +125,7 @@ Research date: 2026-10-28. Scope: quick facts plus a per-area checklist, with a 
 65. **documented.** Edit: `old_string` must match exactly once. If it occurs more than once, use a longer context or `replace_all: true`. Source: CC-TOOLS.
 66. **documented.** Edit requires a prior read of the file in the conversation for `Opus 4.6`, `Haiku 4.5`, and older models. Newer models may edit an unread file when reading would not need a permission prompt. A partial read with a `PARTIAL view` notice does not count. `cat`, `nl`, `head`, `tail`, `sed -n`, `grep`, and `rg` on a single file count as reads. Source: CC-TOOLS.
 67. **documented.** Write: overwriting an existing file requires a prior read, except for newer models under the same conditions. Creating new files does not require a read. Before v2.1.228, every model required the read. Source: CC-TOOLS.
-68. **inferred.** For Nemo, enforce read-before-edit and read-before-overwrite unconditionally. Official behaviour varies by model, and a model-independent rule is safer.
+68. **inferred.** For Synthesis, enforce read-before-edit and read-before-overwrite unconditionally. Official behaviour varies by model, and a model-independent rule is safer.
 
 **Glob and Grep**
 
@@ -253,7 +253,7 @@ Research date: 2026-10-28. Scope: quick facts plus a per-area checklist, with a 
 | `--full-auto` | n/a | Removed | |
 | `--permission-prompts none` | v2.1.259+ | n/a | |
 
-**Better default for Nemo (judgement, not official)**
+**Better default for Synthesis (judgement, not official)**
 - Adopt Claude's deny, then ask, then allow evaluation with compound-command splitting (items 2, 8).
 - Enforce protected-path read-only at the sandbox layer, as Codex does, rather than relying on prompts (items 17, 91).
 - Default network to off, and make sandbox failure fail closed in autonomous mode. Claude's default fallback to unsandboxed is weaker (item 88).
@@ -285,4 +285,4 @@ Research date: 2026-10-28. Scope: quick facts plus a per-area checklist, with a 
 
 **Skipped or unchecked:** the Codex TUI and compaction, the Claude status line, and MCP resources and tool search. The "Better default" items are my judgement, not official behaviour.
 
-**Risk:** the Codex and Claude pages may have changed since the cached copies, and the premise conflicts above (`untrusted`, Landlock, the secret-variable default) need a decision before they are written into Nemo's design doc.
+**Risk:** the Codex and Claude pages may have changed since the cached copies, and the premise conflicts above (`untrusted`, Landlock, the secret-variable default) need a decision before they are written into Synthesis's design doc.

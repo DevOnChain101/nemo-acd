@@ -4,32 +4,32 @@
 - Type `!` at the start of the prompt: the prompt shows `! bash mode`. Enter runs the command; Esc (or backspace on the empty prompt) leaves the mode; while a command runs, Esc cancels it and kills its process tree. Only a typed `!` starts a command: pasted text or a burst of characters starting with `!` is plain text.
 - `!cmd` runs as a user-initiated `Bash` call: same terminal runtime, sandbox, `--network` mode and artifact log as the model's Bash tool; events carry `origin:"user"`. A plain `ask` is approved (you typed it); deny rules, protected paths and critical removals still block, with the reason shown. `PreToolUse` hooks run for it and only a deny is honoured (ask and allow are moot: you typed it).
 - The command and its capped output are appended to the conversation as `<user-bash-input>` / `<user-bash-output exit=N truncated=B>` (data from a command the user ran). Then the model gets a turn (an implicit harness note, not shown as your text) to report success or failure, key lines and next steps. `!!cmd` records without a model turn.
-- Settings (user `settings.json`): `nemo.shell.user_commands_model_turn` (default true), `nemo.shell.user_commands_unsandboxed` (default false: network is denied by default; use `--network loopback|allow`).
+- Settings (user `settings.json`): `synthesis.shell.user_commands_model_turn` (default true), `synthesis.shell.user_commands_unsandboxed` (default false: network is denied by default; use `--network loopback|allow`).
 
 ## Commands the agent runs (tests, builds)
-The agent runs tests itself. A call that needs permission opens the approval dialog (allow-always is offered). Verification-gate checks (`cargo test`, `npm test`, ...) go through the same permission check as a `Bash` call. Without an approver (`nemo run`) the call is not run, the model is told which permission is missing and the task ends `blocked` (`approval_unavailable`); `task.ended.needed_permissions` lists the rules and `nemo run` prints, e.g.:
+The agent runs tests itself. A call that needs permission opens the approval dialog (allow-always is offered). Verification-gate checks (`cargo test`, `npm test`, ...) go through the same permission check as a `Bash` call. Without an approver (`synth run`) the call is not run, the model is told which permission is missing and the task ends `blocked` (`approval_unavailable`); `task.ended.needed_permissions` lists the rules and `synth run` prints, e.g.:
 
-    nemo: blocked: approval needed for Bash(cargo test:*) — rerun with --allow 'Bash(cargo test:*)' or in the TUI
+    synth: blocked: approval needed for Bash(cargo test:*) — rerun with --allow 'Bash(cargo test:*)' or in the TUI
 
 ## Permission modes (`--permission-mode`, Shift+Tab)
-`nemo run --permission-mode default|acceptEdits|plan|dontAsk|auto|bypassPermissions`. `nemo run` never prompts (no stdin): asks are decided by the mode and the `--allow` / settings allowlist; an ask nobody can grant is denied.
+`synth run --permission-mode default|acceptEdits|plan|dontAsk|auto|bypassPermissions`. `synth run` never prompts (no stdin): asks are decided by the mode and the `--allow` / settings allowlist; an ask nobody can grant is denied.
 
-| mode | `nemo run` behaviour |
+| mode | `synth run` behaviour |
 |---|---|
 | `default` | asks are auto-denied unless allowed by `--allow`/settings (`SendMessage` between agents asks; `ListAgents` is read-only) |
 | `acceptEdits` | edits inside the workspace are allowed, and so is `SendMessage`; other asks (Bash, MCP, ...) are auto-denied |
 | `plan` | read-only; writes are denied; `SendMessage` is denied (it can steer another agent) |
 | `dontAsk` | an ask becomes a deny |
 | `auto` | a judge model call decides each open call (allow / deny / ask); ask, unclear answer, error or timeout = denied |
-| `bypassPermissions` | skips approval prompts; still stops: deny rules, ask rules (they still ask, so an unattended run denies them), critical `rm`, destructive MCP asks. Protected paths (`.git`, `.nemo`, `.ssh`, ...) are NOT stopped by plain writes, as in Claude Code; the sandbox still confines commands. Loud notice at start. Only from the CLI flag: never from project settings, `.mcp.json` or the environment |
+| `bypassPermissions` | skips approval prompts; still stops: deny rules, ask rules (they still ask, so an unattended run denies them), critical `rm`, destructive MCP asks. Protected paths (`.git`, `.synthesis`, `.ssh`, ...) are NOT stopped by plain writes, as in Claude Code; the sandbox still confines commands. Loud notice at start. Only from the CLI flag: never from project settings, `.mcp.json` or the environment |
 
-**Default limits.** `nemo run` ends a task after 3600 s of wall time unless `--max-wall-secs N` says otherwise (the interactive app has no default); turns (50) and tool calls (200) are bounded by default as well. `--max-cost-usd` has no default because it needs a configured price.
+**Default limits.** `synth run` ends a task after 3600 s of wall time unless `--max-wall-secs N` says otherwise (the interactive app has no default); turns (50) and tool calls (200) are bounded by default as well. `--max-cost-usd` has no default because it needs a configured price.
 
-**Inferred verification checks.** In `default` and `acceptEdits` the checks the harness infers from the repo (`cargo test`, `npm run test`, `pytest`, `go test`, `make test`, ... see `docs/specs/verification.md` section 4) run without an `--allow`, so `nemo run --permission-mode acceptEdits` no longer ends `blocked` only because such a check asked. They stay sandboxed and deny rules still win; any other check command (user-declared or model-registered, or not a recognised test/lint/build invocation) still needs an allow.
+**Inferred verification checks.** In `default` and `acceptEdits` the checks the harness infers from the repo (`cargo test`, `npm run test`, `pytest`, `go test`, `make test`, ... see `docs/specs/verification.md` section 4) run without an `--allow`, so `synth run --permission-mode acceptEdits` no longer ends `blocked` only because such a check asked. They stay sandboxed and deny rules still win; any other check command (user-declared or model-registered, or not a recognised test/lint/build invocation) still needs an allow.
 
 A denied write or command (Write, Edit, Bash, MCP write tools, ...) makes the task end `blocked` / `approval_unavailable` with `needed_permissions`, never `completed`. Typical CI use:
 
-    nemo run --permission-mode acceptEdits --allow 'Bash(cargo test:*)' --prompt "fix the failing test"
+    synth run --permission-mode acceptEdits --allow 'Bash(cargo test:*)' --prompt "fix the failing test"
 
 **Auto mode judge.** The judge uses the session provider and model; set another model of the same provider with `autoMode.model` in the user `settings.json` (with `autoMode.environment|allow|soft_deny|hard_deny` to steer it). It sees the task, earlier user messages, the workspace and the pending call, all as data (tool output and repo text are never sent). At most 50 judge calls per task (identical calls are cached); their cost counts in the task. Every decision is logged as a `permission.auto_verdict` event and shown in the TUI. Hard stops (deny rules, critical `rm`, protected paths, destructive MCP asks) are decided before it and it cannot relax them.
 
@@ -53,14 +53,14 @@ Mouse reporting is on, so the app does the selection itself.
 - To use the terminal's own selection instead, hold the bypass key while dragging: Shift in most terminals (xterm, GNOME Terminal, kitty, Windows Terminal), Option on macOS (iTerm2: Option; some terminals need Fn or Option+Cmd). Text selected that way is copied by the terminal (Cmd+C / Ctrl+Shift+C) and may include the gutters.
 - Terminals without SGR mouse reporting (mode 1006) are not supported for in-app selection; use the native selection above.
 
-## `--allow RULE` / `--deny RULE` (repeatable, `nemo run` and the interactive app)
+## `--allow RULE` / `--deny RULE` (repeatable, `synth run` and the interactive app)
 Settings rule syntax (`Bash(cargo test:*)`, `Edit`, `mcp__server__tool`). Flags are typed by you, so trusted.
 - `deny: ["mcp__*"]` removes every MCP tool, `mcp__server__*` (or `mcp__server`) one server; `mcp__*` is never honoured as an allow rule.
 - A `Read(path)` deny/ask rule also covers Grep, Glob, Write/Edit of that path (denied, not asked), and Bash readers of it (`cat`, `head`, `tail`, `less`, `grep`, `sed`, `awk`, `cp`, `< file` ...). It is checked on the command's own operands only; a command that builds the path in the shell (`cat "$F"`) cannot be matched, which is what the sandbox and the other rules are for.
-- An ask rule prompts in every mode but `dontAsk` (denied there), `bypassPermissions` included; `nemo run` has nobody to ask, so it is denied.
-- A `settings.json` that exists but is malformed (a trailing comma, a missing brace) or unreadable stops `nemo run` with exit 2 and `settings error: ...`, and the interactive app does not start, because the deny rules in it could not apply. Fix or remove the file.
-- Memory files: per directory, the first non-empty of `NEMO.md`, `AGENTS.md`, `CLAUDE.md` (then `.claude/CLAUDE.md`) is loaded, root to cwd, 32 KiB combined; `CLAUDE.local.md` is added next to it.
+- An ask rule prompts in every mode but `dontAsk` (denied there), `bypassPermissions` included; `synth run` has nobody to ask, so it is denied.
+- A `settings.json` that exists but is malformed (a trailing comma, a missing brace) or unreadable stops `synth run` with exit 2 and `settings error: ...`, and the interactive app does not start, because the deny rules in it could not apply. Fix or remove the file.
+- Memory files: per directory, the first non-empty of `SYNTHESIS.md`, `AGENTS.md`, `CLAUDE.md` (then `.claude/CLAUDE.md`) is loaded, root to cwd, 32 KiB combined; `CLAUDE.local.md` is added next to it.
 - Hooks: `PreToolUse` and `UserPromptSubmit` fail closed and time out after 60 s by default; every other event defaults to 600 s. A per-hook `timeout` (seconds) overrides either.
 - Read: a whole-file read over 256 KB, or a result over about 25k tokens, is refused with the offset/limit to use instead.
-- Bash timeout: `nemo run` kills the command; the interactive app keeps it running in the background and tells the model its `bash_id` (BashOutput / KillShell).
+- Bash timeout: `synth run` kills the command; the interactive app keeps it running in the background and tells the model its `bash_id` (BashOutput / KillShell).
 - Windows: no OS backend can confine commands, so without `--sandbox` the default is `best-effort` with a notice at start (commands run unconfined); pass `--sandbox enforce` to refuse them instead. macOS and Linux default to `enforce`. Deny wins over allow. `--allow` cannot lift critical-path or protected-path protections. A malformed rule is a usage error (exit 2).

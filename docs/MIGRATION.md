@@ -1,15 +1,30 @@
-# Migrating from the Node CLI
+# Migrating to Synthesis
 
-The Node CLI (`~/Vibe/nemo-cli`) is frozen and retired: the owner no longer uses it (2026-10-28), so a parallel run is NOT required for cutover. It stays read-only as a behaviour/fixture reference (ADR-010). If you still have it installed, both can coexist as described below.
+Two predecessors exist: the frozen Node CLI (`~/Vibe/nemo-cli`, command `nemo`) and early Rust builds that were still called Nemo. Synthesis reads neither one's files or variables automatically.
 
-## Coexistence
+## From earlier Nemo builds (renamed 2026-10-30)
 
-- **Command names.** The Rust binary is `nemo`; the Node CLI also uses `nemo`/`nemocode`. The npm package for the Rust build is `@devonchain101/nemo` (command `nemo`); pass `--bin-names` to `scripts/package-npm.mjs` for another command name if you must coexist. `install.sh`/`install.ps1` take `NEMO_BIN_NAME` (e.g. `nemo-rs`).
-- **PATH precedence.** Whichever directory comes first wins for plain `nemo`. The installers warn when another `nemo` is already earlier on PATH. Check with `which -a nemo` (`where nemo` on Windows).
-- **Shared `NEMO_HOME`** (default `~/.nemo`). Both read `settings.json`, provider config and `projects/<cwd>/<session>.jsonl` transcripts. The Rust store adds `nemo.db` and `sessions/` next to them; the Node CLI ignores these. Use a separate home for experiments: `NEMO_HOME=/tmp/nemo-try nemo ...`.
-- **`compat.write_node_transcripts`** (default ON): the Rust session store also mirrors each session as a Node-format JSONL transcript so Node can resume/list it. Node is retired, so turn it off unless you still use Node.
-- **Keys.** Both use `NEMO_*` variables only (ADR-011). The Rust build never reads `ANTHROPIC_*`, `OPENAI_*`, `CLAUDE_CONFIG_DIR` or `CODEX_HOME`. Import from `~/.claude` / `~/.codex` takes an explicit path.
-- **Config and sessions.** Formats stay compatible for anyone still running Node (no longer a cutover gate). Config layering is a golden-tested faithful port (530 fixtures, `tests/golden`). Do not assume a session written by one side resumes cleanly on the other.
+Everything was renamed: command `nemo` is `synth`, `NEMO_*` is `SYNTHESIS_*`, `~/.nemo` is `~/.synthesis`, project `.nemo/` is `.synthesis/`, `nemo.json` is `synthesis.json`, `NEMO.md` is `SYNTHESIS.md` (precedence `SYNTHESIS.md` > `AGENTS.md` > `CLAUDE.md`), `nemo.db` is `synthesis.db`, and the settings section `"nemo"` is `"synthesis"` (`synthesis.mcp.env_passthrough`, `synthesis.shell.*`, `synthesis.context.*`, `synthesis.pricing`, ...). Npm package `@devonchain101/synthesis`, archives `synthesis-<version>-<target>`.
+
+Nothing is migrated for you. `synth doctor` prints a hint when `~/.nemo` exists and `~/.synthesis` does not, lists any `NEMO_*` variable that is set (names only), and warns when another `synth` earlier on PATH shadows the one you run. To migrate by hand (review first):
+
+```
+cp -R ~/.nemo ~/.synthesis
+mv ~/.synthesis/nemo.json ~/.synthesis/synthesis.json      # NEMO.md -> SYNTHESIS.md, nemo.db* -> synthesis.db* likewise
+# in settings.json rename the top-level key "nemo" to "synthesis"
+# per project: git mv .nemo .synthesis   (and NEMO.md -> SYNTHESIS.md)
+# shell profile: rename every NEMO_X variable to SYNTHESIS_X
+```
+
+## Coexistence with the Node CLI
+
+The Node CLI is frozen and retired: the owner no longer uses it (2026-10-28), so a parallel run is NOT required for cutover. It stays read-only as a behaviour/fixture reference (ADR-010). If you still have it installed, both coexist without sharing anything:
+
+- **Command names.** Node `nemo`/`nemocode`, Synthesis `synth`. The installers warn when another `synth` is already earlier on PATH; check with `which -a synth` (`where synth` on Windows). `scripts/package-npm.mjs --bin-names` and `SYNTHESIS_BIN_NAME` choose another command name.
+- **Separate homes.** Node uses `~/.nemo` and `NEMO_HOME`, Synthesis `~/.synthesis` and `SYNTHESIS_HOME` (default `~/.synthesis`); no file is shared. Use a separate home for experiments: `SYNTHESIS_HOME=/tmp/synthesis-try synth ...`.
+- **`compat.write_node_transcripts`** (default ON): the Rust session store also mirrors each session as a Node-format JSONL transcript under `projects/` of its own home. Node does not look there any more, so turn it off unless you copy the files over yourself.
+- **Keys.** Synthesis uses `SYNTHESIS_*` variables only (ADR-011). It never reads `ANTHROPIC_*`, `OPENAI_*`, `CLAUDE_CONFIG_DIR` or `CODEX_HOME`. Import from `~/.claude` / `~/.codex` takes an explicit path.
+- **Config and sessions.** Formats stay compatible in shape (no longer a cutover gate). Config layering is a golden-tested port (the snapshots use the renamed names, see tests/golden/README.md). Do not assume a session written by one side resumes cleanly on the other.
 - **Behaviour differences to expect.** Rust requires `--cwd`; sandbox defaults to `enforce` with network `deny` (the Node CLI had no OS sandbox); no plaintext `auth.json`.
 
 ## Cutover gates (design doc section 10, Phase 3)
@@ -26,4 +41,4 @@ Mark each with evidence (run link or output) before cutover. Node is already ret
 
 ## Rollback
 
-If you kept a Node install, to go back: remove the Rust install (docs/INSTALL.md), put the Node CLI first on PATH. `$NEMO_HOME` data written by Node is untouched by the Rust build; `nemo.db` and `sessions/` can be deleted safely.
+If you kept a Node install, to go back: remove the Rust install (docs/INSTALL.md), put the Node CLI first on PATH. Node's `~/.nemo` is untouched by Synthesis; `$SYNTHESIS_HOME/synthesis.db` and `sessions/` can be deleted safely.

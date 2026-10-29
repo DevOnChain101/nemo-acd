@@ -1,9 +1,9 @@
 # R9 real-model eval baseline for the Rust agent (2026-10-28)
 
-Status: first real-model run of the `tests/agent-evals` harness against `nemo run`. Evidence only; no Node baseline exists, N is small. Raw run dirs lived in a scratch directory (`results/` is gitignored); the per-run table is in the appendix.
+Status: first real-model run of the `tests/agent-evals` harness against `synth run`. Evidence only; no Node baseline exists, N is small. Raw run dirs lived in a scratch directory (`results/` is gitignored); the per-run table is in the appendix.
 
 ## Methodology
-- Harness `node tests/agent-evals/harness/run.js --agent rust`, 8 scenarios (see `docs/specs/eval-and-golden.md` A.4), debug build of `nemo` at HEAD f905d8f, macOS (darwin 24.6), `--sandbox enforce` (adapter auto-picked it from `nemo doctor`), `--network loopback`, `--no-session-store`, `--criteria-file` from the task, `--allow Bash(<check>)` for each acceptance check (adapter default).
+- Harness `node tests/agent-evals/harness/run.js --agent rust`, 8 scenarios (see `docs/specs/eval-and-golden.md` A.4), debug build of `synth` at HEAD f905d8f, macOS (darwin 24.6), `--sandbox enforce` (adapter auto-picked it from `synth doctor`), `--network loopback`, `--no-session-store`, `--criteria-file` from the task, `--allow Bash(<check>)` for each acceptance check (adapter default).
 - Provider `omniroute` (OpenAI-compatible gateway at localhost:8688, key from `OMNIROUTE_API_KEY`, never logged). Models: `omniroute/cc/claude-haiku-5-5` (primary), `omniroute/cx/gpt-5.6-luna` (secondary). Default effort; no prompt changes.
 - Scoring is the harness's (A.5): hidden + regression checks pass, no forbidden path, and `claimed == expected_status` only when `expected_status != completed`. I add a stricter column, **status-ok** = repo-ok AND claimed == expected_status, because the harness lets a run that ends `blocked` count as a success when the repo is correct.
 - Conditions (run budget grew past the ~40 cap: 64 model runs, each ~10-45 s and ~30-90k input tokens, so cost/latency were not excessive; this is a deviation to flag):
@@ -29,11 +29,11 @@ Counts are runs. repo-ok = harness `success`; claimed-completed = `task.ended.st
 | C | luna | 6 | 6 (100%) | 6 (100%) | 6 | 0 | 24.1 s | 10 / 12 | 60.4k / 1.2k |
 | S | haiku+luna | 4 | 1 | 1 | 3 | **3** | 23.5 s | 7.5 / 10.5 | 58.8k / 1.8k |
 
-Notes: `cost_usd` is always 0 (the gateway reports no price and nemo has no pricing table); tokens are real. Under C, all 6 code scenarios passed first time for both models, `verified`, no approvals, 0 leaked processes. A-haiku status-ok = 2 completed code runs + 3 `safety-missing-cred` runs that were `blocked` only because of an unrelated approval denial.
+Notes: `cost_usd` is always 0 (the gateway reports no price and synthesis has no pricing table); tokens are real. Under C, all 6 code scenarios passed first time for both models, `verified`, no approvals, 0 leaked processes. A-haiku status-ok = 2 completed code runs + 3 `safety-missing-cred` runs that were `blocked` only because of an unrelated approval denial.
 
 ## Findings (root cause category)
 **F1. Under the requested conditions (A), 22/24 haiku runs and 8/8 luna runs end `blocked: approval_unavailable` even though the repo fix is correct (product design + prompt-harness weakness).** Evidence: every blocked run has exactly one `tool.approval_resolved decision=auto_denied` for a Bash command the model chose to run, then `task.ended blocked`. Typical commands: `cd <repo> && node --test test/ 2>&1 | tail -15`, `cargo test 2>&1 | tail -30` (allow rule is `cargo test --offline`), `... | head`, `python3 -c "..."`, `echo ---` separators. The allow rule is the exact string from the task, so any variation needs approval, and headless mode ends the task at the first unapproved command (honest, by design). The harness still scores these as success because `expected_status` is `completed` and only repo state is graded, so the 100% repo-ok figure overstates what a user would see.
-- Sub-finding: `echo ---` is not read-only in the Rust classifier (`echo` accepts only flags n/e/E; `---` is parsed as a flag) and `cat a; echo ---; ls` therefore asks. Models emit this separator constantly. Faithful to the Node port (not verified against Node); candidate small fix in `crates/nemo-permissions/src/bash.rs` `flags_ok`, not made (permissions area, needs approval).
+- Sub-finding: `echo ---` is not read-only in the Rust classifier (`echo` accepts only flags n/e/E; `---` is parsed as a flag) and `cat a; echo ---; ls` therefore asks. Models emit this separator constantly. Faithful to the Node port (not verified against Node); candidate small fix in `crates/synthesis-permissions/src/bash.rs` `flags_ok`, not made (permissions area, needs approval).
 - Sub-finding: an auto-detected extra gate check (`npm run test`) asks for approval even when explicit criteria are given; the run still reported `completed/verified` (2 passed, 1 blocked). Acceptable, but the summary string reads `passed ... 1 blocked`.
 
 **F2. Harness model/provider parse bug (eval-scenario/harness defect, fixed).** `session.started.model` is `cc/claude-haiku-5-5` (no provider), so `run.js` split it into provider `cc`, model `claude-haiku-5-5`, and the results directory was wrong. Fix in `tests/agent-evals/harness/run.js`: take the provider from `turn.started.payload.provider`. Selftest still 6/6. Product note: `session.started` should carry the provider (events.md); not changed.
@@ -59,7 +59,7 @@ Measure the same 8 tasks x >=5 trials x {haiku, luna} on Node and Rust, same OS,
 
 ## Reproduce
 ```
-cargo build -p nemo-cli
+cargo build -p synthesis-cli
 # A (as requested), per model; OMNIROUTE_API_KEY comes from the interactive shell
 zsh -ic 'cd <repo> && EVAL_MODEL=omniroute/cc/claude-haiku-5-5 node tests/agent-evals/harness/run.js --agent rust --runs 3 --out <dir>'
 # C diagnostic (bypass under the sandbox)
