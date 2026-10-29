@@ -269,18 +269,34 @@ fn file_url_path(rest: &str) -> Option<String> {
     Some(path)
 }
 
-/// `file://` URI for OSC 8; `windows` gives `file:///C:/x` and `file://server/share/x`.
-pub fn file_uri(p: &Path, windows: bool) -> String {
-    let mut s = p.to_string_lossy().into_owned();
+/// A path as the target platform writes it: `C:\x`, `C:/x` or `\\server\share`.
+fn windows_style(s: &str) -> bool {
+    let b = s.as_bytes();
+    s.starts_with(r"\\")
+        || (b.len() >= 3
+            && b[0].is_ascii_alphabetic()
+            && b[1] == b':'
+            && matches!(b[2], b'\\' | b'/'))
+}
+
+/// `file://` URI for OSC 8 from the path text alone (so it is the same on every host): Windows
+/// paths become `file:///C:/x` and `file://server/share/x`, a `\\?\` prefix is dropped, only
+/// unsafe bytes are percent-encoded.
+pub fn file_uri(p: &Path) -> String {
+    let raw = p.to_string_lossy();
+    let raw = raw.strip_prefix(r"\\?\UNC\").map_or_else(
+        || raw.strip_prefix(r"\\?\").unwrap_or(&raw).to_string(),
+        |r| format!(r"\\{r}"),
+    );
+    let mut s = raw.clone();
     let mut host = String::new();
-    if windows {
-        s = s.replace('\\', "/");
+    if windows_style(&raw) {
+        s = raw.replace('\\', "/");
         if let Some(unc) = s.strip_prefix("//") {
             let (h, rest) = unc.split_once('/').unwrap_or((unc, ""));
-            let rest = format!("/{rest}");
             host = h.to_string();
-            s = rest;
-        } else if !s.starts_with('/') {
+            s = format!("/{rest}");
+        } else {
             s.insert(0, '/');
         }
     }
@@ -315,12 +331,7 @@ pub fn hyperlinks_enabled(env: &Env) -> bool {
 
 /// `line` (already encoded: only SGR escapes) with OSC 8 around its urls and existing paths. Width
 /// is untouched (OSC 8 has none) and the plain line, which the row cache compares, is not changed.
-pub fn hyperlink_line(
-    line: &str,
-    base: Option<&Path>,
-    home: Option<&Path>,
-    windows: bool,
-) -> String {
+pub fn hyperlink_line(line: &str, base: Option<&Path>, home: Option<&Path>) -> String {
     let chars: Vec<char> = strip_ansi(line).chars().collect();
     let mut spans: Vec<(usize, usize, String)> = url_spans(&chars)
         .into_iter()
@@ -332,7 +343,7 @@ pub fn hyperlink_line(
             continue;
         }
         if let Some(t) = existing_path(&raw, home, base) {
-            spans.push((a, b, file_uri(&t.path, windows)));
+            spans.push((a, b, file_uri(&t.path)));
         }
     }
     spans.retain(|s| s.2.chars().all(|c| c > ' ' && c != '\x7f'));
@@ -487,13 +498,19 @@ pub fn command_for(
         }
     }
     let s = |p: &Path| p.to_string_lossy().into_owned();
-    if let OpenTarget::Folder(p) | OpenTarget::RevealFile(p) = target
-        && (s(p).starts_with('-') || !p.is_absolute())
-    {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "only absolute paths are revealed",
-        ));
+    if let OpenTarget::Folder(p) | OpenTarget::RevealFile(p) = target {
+        // absolute by the rules of the platform being targeted, not of this host
+        let t = s(p);
+        let abs = match platform {
+            Platform::Windows => windows_style(&t) && !t.starts_with(r"\\?\"),
+            _ => t.starts_with('/'),
+        };
+        if !abs {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "only absolute paths are revealed",
+            ));
+        }
     }
     let root = PathBuf::from(env.get_nonempty("SystemRoot").unwrap_or(r"C:\Windows"));
     Ok(match (platform, target) {
@@ -654,8 +671,8 @@ mod tests {
         let d = td.path().to_path_buf();
         let f = d.join("probe.rs");
         std::fs::write(&f, "x").unwrap();
-        let f = std::fs::canonicalize(&f).unwrap(); // macOS /var -> /private/var
-        let d = std::fs::canonicalize(&d).unwrap();
+        let f = plain(std::fs::canonicalize(&f).unwrap()); // macOS /var -> /private/var, Windows \\?\
+        let d = plain(std::fs::canonicalize(&d).unwrap());
         let ep = |raw: &str| existing_path(raw, Some(&d), Some(&d));
         for suffix in [":12:3", ":12", "(12)", "(12,3)", ""] {
             let t = ep(&format!("{}{suffix}", f.display())).unwrap();
@@ -669,10 +686,7 @@ mod tests {
         assert_eq!(ep("-probe.rs"), None);
         assert_eq!(existing_path("relative/p.rs", None, None), None);
         assert_eq!(existing_path("~/x/y", None, None), None, "no home known");
-        let url = format!(
-            "file://{}",
-            file_uri(&f, false).trim_start_matches("file://")
-        );
+        let url = file_uri(&f);
         assert_eq!(ep(&url).unwrap().path, f, "file url, percent-decoded");
         assert_eq!(ep("file://elsewhere/etc/passwd"), None, "remote host");
         #[cfg(unix)]
@@ -703,9 +717,18 @@ mod tests {
             ["-R", "/a/b.txt"]
         );
         assert_eq!(command_for(Platform::Linux, &env, &f).unwrap().1, ["/a"]);
-        let (p, a) = command_for(Platform::Windows, &env, &f).unwrap();
+        // absolute is judged by the target platform: a POSIX path is no Windows path
+        assert!(command_for(Platform::Windows, &env, &f).is_err());
+        let wf = OpenTarget::RevealFile(r"C:\a\b.txt".into());
+        assert!(command_for(Platform::Linux, &env, &wf).is_err());
+        let (p, a) = command_for(Platform::Windows, &env, &wf).unwrap();
         assert_eq!(p, PathBuf::from(r"D:\Win").join("explorer.exe"));
-        assert_eq!(a, ["/select,/a/b.txt"]);
+        assert_eq!(a, [r"/select,C:\a\b.txt"]);
+        let unc = OpenTarget::Folder(r"\\srv\share\d".into());
+        assert_eq!(
+            command_for(Platform::Windows, &env, &unc).unwrap().1,
+            [r"/select,\\srv\share\d"]
+        );
         for bad in [
             "file:///etc/passwd",
             "javascript:x",
@@ -725,9 +748,10 @@ mod tests {
             command_for(Platform::MacOs, &env, &sp).unwrap().1,
             ["-R", "/a b/日本 語.txt"]
         );
+        let wsp = OpenTarget::RevealFile(r"C:\a b\日本 語.txt".into());
         assert_eq!(
-            command_for(Platform::Windows, &env, &sp).unwrap().1,
-            ["/select,/a b/日本 語.txt"]
+            command_for(Platform::Windows, &env, &wsp).unwrap().1,
+            [r"/select,C:\a b\日本 語.txt"]
         );
         for bad in ["-rf", "rel/x"] {
             let t = OpenTarget::RevealFile(bad.into());
@@ -756,8 +780,10 @@ mod tests {
                     vec!["-R".to_string(), name.to_string()]
                 )
             );
+            let win = format!("C:{}", name.replace('/', "\\"));
+            let d = OpenTarget::Folder(win.clone().into());
             let (_, a) = command_for(Platform::Windows, &env, &d).unwrap();
-            assert_eq!(a, [format!("/select,{name}")]);
+            assert_eq!(a, [format!("/select,{win}")]);
         }
         let app = OpenTarget::Folder("/a/x.app".into());
         assert_eq!(command_for(Platform::Linux, &env, &app).unwrap().1, ["/a"]);
@@ -821,15 +847,24 @@ mod tests {
     #[test]
     fn file_uris_are_percent_encoded_per_platform() {
         assert_eq!(
-            file_uri(Path::new("/a b/é#.txt"), false),
+            file_uri(Path::new("/a b/é#.txt")),
             "file:///a%20b/%C3%A9%23.txt"
         );
         assert_eq!(
-            file_uri(Path::new(r"C:\Users\me\a b.txt"), true),
+            file_uri(Path::new(r"C:\Users\me\a b.txt")),
             "file:///C:/Users/me/a%20b.txt"
         );
         assert_eq!(
-            file_uri(Path::new(r"\\srv\share\x.txt"), true),
+            file_uri(Path::new(r"\\?\C:\Users\a b\x.txt")),
+            "file:///C:/Users/a%20b/x.txt",
+            "verbatim prefix dropped"
+        );
+        assert_eq!(
+            file_uri(Path::new(r"\\?\UNC\srv\share\x.txt")),
+            "file://srv/share/x.txt"
+        );
+        assert_eq!(
+            file_uri(Path::new(r"\\srv\share\x.txt")),
             "file://srv/share/x.txt"
         );
     }
@@ -859,11 +894,11 @@ mod tests {
     #[test]
     fn osc8_wraps_links_without_changing_the_visible_text() {
         let td = tempfile::tempdir().unwrap();
-        let f = std::fs::canonicalize(td.path()).unwrap().join("a b.rs");
+        let f = plain(std::fs::canonicalize(td.path()).unwrap()).join("a b.rs");
         std::fs::write(&f, "x").unwrap();
         let base = f.parent().unwrap();
         let line = "\x1b[1mgo https://e.x/a?b=1. see \x1b[0m\x1b[4ma.rs:3\x1b[0m and /nope/x/y end";
-        let out = hyperlink_line(line, Some(base), None, false);
+        let out = hyperlink_line(line, Some(base), None);
         // nothing there for a.rs (the file is "a b.rs"), the url is wrapped, sgr is untouched
         assert_eq!(strip_osc8(&out), line);
         assert!(
@@ -873,8 +908,8 @@ mod tests {
         assert!(!out.contains("file://"), "{out:?}");
         assert_eq!(out.matches("\x1b]8;;\x1b\\").count(), 1);
         std::fs::write(base.join("a.rs"), "x").unwrap();
-        let out = hyperlink_line(line, Some(base), None, false);
-        let uri = file_uri(&base.join("a.rs"), false);
+        let out = hyperlink_line(line, Some(base), None);
+        let uri = file_uri(&base.join("a.rs"));
         assert!(
             out.contains(&format!("\x1b]8;;{uri}\x1b\\a.rs:3\x1b]8;;\x1b\\")),
             "{out:?}"
@@ -882,9 +917,9 @@ mod tests {
         assert_eq!(strip_osc8(&out), line);
         assert_eq!(width(&strip_osc8(&out)), width(&strip_ansi(line)));
         // a link at the very end of the line is closed
-        let out = hyperlink_line("https://e.x/z", None, None, false);
+        let out = hyperlink_line("https://e.x/z", None, None);
         assert!(out.ends_with("\x1b]8;;\x1b\\"), "{out:?}");
         // lines without links are returned as they are
-        assert_eq!(hyperlink_line("plain", None, None, false), "plain");
+        assert_eq!(hyperlink_line("plain", None, None), "plain");
     }
 }

@@ -516,7 +516,7 @@ pub fn run_interactive(mut o: Options, tty: Tty) -> io::Result<Exit> {
                 .map(std::path::PathBuf::from),
         );
         screen.set_linker(Some(Box::new(move |l| {
-            hyperlink_line(l, base.as_deref(), home.as_deref(), cfg!(windows))
+            hyperlink_line(l, base.as_deref(), home.as_deref())
         })));
     }
     screen.enter()?;
