@@ -90,3 +90,6 @@ lines sorted (`sort_lines`); compare as a set. Glob order depends on mtimes, so 
 - Real SDK transport, SSE parsing, retries, auth/credential resolution (`auth.js`, keychain/plaintext `auth.json`).
 - Windows/Linux outputs: everything here was captured on one platform (see `meta.json.platform`). Path-sensitive areas (config paths,
   permissions case-fold/`\`/UNC, Bash tool text in schemas) must be re-captured on win32/linux before being treated as the 3-OS spec.
+
+## Redesign rebaseline gate (docs/specs/tui-design.md §8.4)
+`SYNTHESIS_UPDATE_GOLDEN=redesign-p1 cargo test -p synthesis-tui-render --test golden -- --nocapture` rewrites only colour (`expected.ansi.json`, the colour keys of `theme-color-fns` and `bar-widths`) and the header rows of `frame` cases; any other change is REFUSED and the case keeps failing. Rewritten cases get `reviewed_by = "pending-owner-review (P1 2026-10-30)"`; cases in `golden_divergences.txt` are skipped. `node tools/golden-review-status.mjs` lists pending cases (it never fails), `node tools/golden-contact-sheet.mjs` writes the before/after sheet (`docs/research/tui-p1-contact-sheet.html`). Run the gate on goldens that match `HEAD`.

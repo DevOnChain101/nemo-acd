@@ -1,6 +1,6 @@
 # Spec: TUI redesign (brand theme, panel registry, /config) — draft 0.1
 
-Date 2026-10-29. Status: **draft, waiting for an owner decision** (see §11). Tags: `[fact file:line]` = read in the repo, `[assumption]` = not verified, `[derived]` = a value this spec adds that is not in the kit.
+Date 2026-10-29. Status: **accepted: the owner took all recommendations D1–D11 on 2026-10-30** (see §13). P1 is implemented; P2–P4 are not started. Tags: `[fact file:line]` = read in the repo, `[assumption]` = not verified, `[derived]` = a value this spec adds that is not in the kit.
 
 **Inputs:** `design/02-design-tokens/tokens.css`, the desktop and landing previews, and `design/01-brand/logo/png/synthesis-symbol-transparent-256.png`. The brand boards (`04`) were never copied into the repo (`design/README.md` "Not included"), so they were not used.
 
@@ -668,3 +668,30 @@ P2 and P3 change `app.rs`. Start them after the current `terminal.rs`, `e2e.rs` 
 - **F3:** Check how 16-colour terminals render braille, and the Windows conhost font.
 - **F4:** Golden `agent-welcome-empty-70x24/expected.txt` row 11 is wider than 70 columns. It looks like a leftover from the rename. Check whether `golden_divergences.txt` lists it.
 - **F5:** Apply the §12 changes and add this spec to `docs/specs/README.md`.
+
+## 13. Owner decisions (2026-10-30)
+
+The owner accepted every recommendation of §11. Recorded as decided:
+
+| | Decision |
+|---|---|
+| **D1** | Tokens merge into a new Context panel. Activity moves to the right. Topology stays, optional and off by default. |
+| **D2** | Defaults as in §11: on Session, MCP, Status, Context, Tasks; off Tools, Activity, Usage, Topology. |
+| **D3** | Braille logo art, generated offline and committed as a table. The inline image is optional, off by default, welcome screen only. |
+| **D4** | The kit palette plus the `[derived]` tokens of §3. |
+| **D5** | Add the light **Pearl** theme. No automatic detection yet (OSC 11 stays a P4 option). |
+| **D6** | The terminal background is never painted. |
+| **D7** | Borderless sections. Rounded frames only for the prompt, dialogs, pickers and `/config`. |
+| **D8** | One merged bottom bar, minimum size 40x12, Tab switches the views in narrow mode. |
+| **D9** | Motion, mouse capture and copy-on-select switches ship in P4. |
+| **D10** | The no-agent dashboard is restyled minimally (colours only) or retired as §11 recommends; P1 only recolours it. |
+| **D11** | `CLAUDE_MONITOR_COLOR` (`sgr.rs:30`) is renamed `SYNTHESIS_COLOR`. Only `SYNTHESIS_*` variables and the standard ones are read. |
+
+### P1 notes (2026-10-30)
+
+Choices made while implementing P1 that the spec left open:
+- Themes: Graphite (default), Midnight, High contrast, Mono, Pearl, plus the automatic `ansi16`. Selection follows the rule of §3 (Mono and Ansi16 colour modes override the user's theme).
+- Attributes (bold, dim, reverse) ride on the token colour: a theme lists the attribute of each token colour that needs one (Mono, High contrast), looked up when a colour is painted. Graphite, Midnight and Pearl use none.
+- P1 changes only colours and the header rows (mark, spaced wordmark, chips). Layout, panel chrome and chat text are P2 and P3. The welcome art shows only when the pane has the spare rows, so goldens with a small pane keep their text.
+- The theme comes from `synthesis.tui.theme` and `synthesis.tui.glyphs` in the USER settings file (read by the CLI), `NO_COLOR` and the colour mode always win.
+- Golden rebaseline: `SYNTHESIS_UPDATE_GOLDEN=redesign-p1` rewrites only `expected.ansi.json` and header rows, refuses anything else, and marks the case `reviewed_by = "pending-owner-review (P1 2026-10-30)"`. `node tools/golden-review-status.mjs` lists pending cases. Unlike §8.4 CI does not fail on pending cases; it only prints them.

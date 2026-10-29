@@ -11,6 +11,7 @@ Phase R1 deliverable (design doc §10 Phase 0, §14). Base: `../Synthesis_Soluti
 | [config.md](config.md) | files, layering, env vars, `$schema` rules, credential policy (user-managed API keys, ADR-011) | reviewed 0.1 |
 | [verification.md](verification.md) | `VerificationReport`, status rules, completion gate, self-correction, budgets | reviewed 0.1 |
 | [eval-and-golden.md](eval-and-golden.md) | eval harness, task manifest, 6+2 scenarios, scoring, golden capture plan | reviewed 0.1 |
+| [tui-design.md](tui-design.md) | TUI redesign: theme tokens, layout planner and panel registry, `/config`, logo; phases P1–P4 | accepted (owner decisions D1–D11, 2026-10-30); P1 implemented |
 
 Status values: draft → reviewed (product owner + one engineer) → frozen (changes need a `v` bump or an ADR).
 

@@ -1,6 +1,6 @@
 # Synthesis — Solution Concept & Technical Design
 
-> **Document status:** Proposed architecture · **Version:** 1.3 · **Date:** 2026-10-29  
+> **Document status:** Proposed architecture · **Version:** 1.5 · **Date:** 2026-10-30  
 > **Product:** Synthesis — Model-Agnostic Autonomous Coding Agent  
 > **Audience:** Product engineering, agent-runtime engineers, platform engineers, security and QA.
 
@@ -13,6 +13,7 @@
 | 1.2 | 2026-10-29 | Inter-agent messaging: in-session sub-agents and cross-session peers (§5.13, FR-14, ADR-012, roadmap R10, acceptance tests, risk); spec `docs/specs/messaging.md` |
 | 1.3 | 2026-10-29 | Long-term memory, draft (§5.5.1, FR-15, ADR-013, Phase 7, roadmap R11, acceptance tests, risk, open decision 13); spec `docs/specs/memory.md` |
 | 1.4 | 2026-10-29 | ADR-012 and ADR-013 accepted with all recommendations of the owner (messaging D9–D16, memory D1–D8); memory phase M0 (audit findings F1–F7) implemented |
+| 1.5 | 2026-10-30 | TUI redesign: FR-16, ADR-014 accepted with all recommendations of the owner (D1–D11); spec `docs/specs/tui-design.md`; phase P1 (theme tokens, header, logo) implemented |
 
 ---
 
@@ -103,6 +104,7 @@ Most coding chat workflows stop after producing a patch or command. The human mu
 | FR-13 | Remote execution and multi-agent task orchestration | P2 |
 | FR-14 | Inter-agent messaging: named/background sub-agents messaged and resumed in a session (`SendMessage`, `@agent`), and request/response between local sessions of the same user (§5.13) | P1 (in-session) / P2 (peers) |
 | FR-15 | Long-term memory: per-user, per-repository and per-agent-definition records learned across sessions (episodes, facts, preferences, lessons, skills) with provenance, searchable and retrieved within a budget; promotion to skills and `SYNTHESIS.md` only through owner-applied proposals (§5.5.1) | P1 |
+| FR-16 | Branded TUI: semantic theme tokens (kit palette) with truecolor/256/16/NO_COLOR fallbacks, logo mark and wordmark, a fixed panel registry with locked Workspace/Running/Chat/Sub-agents panels, reflow on hide/show, and a /config screen persisted in user settings only | P1 |
 
 ### 3.2 Non-functional requirements
 
@@ -626,6 +628,7 @@ The Session Manager can route a session to a remote worker running the same tool
 | ADR-011 | Model access uses API keys only; no subscription/OAuth login flows | Anthropic and OpenAI do not permit third-party coding agents to authenticate through consumer subscriptions; API keys are the supported path (the Node CLI already works this way). Users manage their own keys through `SYNTHESIS_*` environment variables (no other env prefix is ever read) or provider config substitution; Synthesis does not store credentials in a keychain and does not write them to disk. Bearer-style keys for Anthropic-compatible gateways remain API keys. Cost: users need billed API access and handle key hygiene themselves; no subscription-priced usage |
 | ADR-012 | **Status: Accepted (2026-10-29).** Inter-agent messaging without an orchestrator: in-session via an in-process per-session hub (named/background/resumable sub-agents, `SendMessage`, `@agent`); cross-session via a per-session local endpoint (Unix socket / Windows named pipe, NDJSON, mutual HMAC, same OS user only) answered by a read-only responder forked from the addressed agent's context; fully qualified `ws/sess/agent` addresses that never resolve by guessing. Amends ADR-009: messaging is allowed; planners and orchestrators stay deferred | Reuses tokio `net` and the session lock, with no TCP/HTTP server and no polling; the receiver's own policy decides what leaves it. Cost: per-OS endpoint code and a Windows ACL assumption to verify; same-user processes can impersonate a peer (sandbox R7 mitigates); queued in-session messages are lost on a crash; responder runs cost the receiver's tokens. Peers are off by default |
 | ADR-013 | **Status: Accepted (2026-10-29).** Long-term memory is a separate local SQLite store (`$SYNTHESIS_HOME/memory/memory.db`) of typed, scoped records with provenance and evidence-derived trust. Retrieval is FTS5/BM25 into a budgeted, frozen `<memory>` data block, with an on-demand `MemorySearch`. A bounded reflection loop runs on a small model, after deterministic episodes are written. Memory is data, never instructions or permission grants; skills and instruction files change only through owner-applied proposals (specs/memory.md) | Own lifecycle, migrations, export and deletion, apart from sessions; no new dependency (the bundled SQLite has FTS5/JSON1). Cost: one store shared by all repos (mitigated by scope filters, quarantine and backups); trust heuristics can misclassify; reflection spends tokens; the benefit is unproven until the R11 evaluation, and injection stays default-on only if that evaluation passes |
+| ADR-014 | **Status: Accepted (2026-10-30).** TUI theme is a set of semantic tokens chosen per render call (scoped thread-local); layout is a pure planner over a static panel registry; TUI preferences live only under `synthesis.tui` in the user settings file | Keeps the renderer deterministic and golden-testable, reuses the existing panel functions, needs no new dependency. Cost: one deliberate rebaseline of the render goldens gated by owner review, hidden per-call theme state, and a layout change for current users |
 
 ---
 
